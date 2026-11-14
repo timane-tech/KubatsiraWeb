@@ -815,6 +815,29 @@ const Dados = (() => {
     return { ok: true, msg };
   }
 
+  // ---------- Repor multa (anular uma remoção/redução feita por engano) ----------
+  async function reporMulta(prestacaoId) {
+    const rows = (await DB.consultar(SELECT_PREST + "WHERE p.id=?", [prestacaoId])).map(lerPrest);
+    if (!rows.length) return { ok: false, msg: "A prestação já não existe." };
+    const p = rows[0];
+    if (!p.multaAlteradaPor && p.multaCongelada == null)
+      return { ok: false, msg: "Esta prestação não tem multa alterada para repor." };
+    const hoje = Regras.hojeISO();
+    // Repor = a multa volta a ser calculada ao vivo (2%/dia): multa_congelada = NULL
+    const liveMulta = Regras.multa(p.valor, Regras.diasAtraso(p.vencimento, hoje));
+    const continuaPaga = p.valorPago + 0.005 >= Regras.arredondar(p.valor + liveMulta);
+    const comandos = [];
+    if (p.estado === "PAGO" && !continuaPaga) {
+      // Estava dada como paga só por causa da multa removida: reabre a prestação (e o empréstimo)
+      comandos.push({ sql: "UPDATE prestacoes SET multa_congelada=NULL, multa_original=NULL, multa_alterada_por=NULL, multa_alterada_em=NULL, status='PENDENTE', data_pagamento=NULL WHERE id=?", params: [prestacaoId] });
+      comandos.push({ sql: "UPDATE emprestimos SET status='APROVADO' WHERE id=? AND status='PAGO'", params: [p.emprestimoId] });
+    } else {
+      comandos.push({ sql: "UPDATE prestacoes SET multa_congelada=NULL, multa_original=NULL, multa_alterada_por=NULL, multa_alterada_em=NULL WHERE id=?", params: [prestacaoId] });
+    }
+    await DB.lote(comandos);
+    return { ok: true, msg: "Multa reposta. Voltou a ser calculada normalmente (2% por dia de atraso). A alteração vale em todos os dispositivos." };
+  }
+
   // ---------- Caixa: editar / ocultar / apagar ----------
   // Categorias livres (não ligadas a empréstimo/prestação): podem ser editadas e apagadas com segurança.
   const CAT_LIVRE = ["CAPITAL", "DESPESA", "AJUSTE", "LICENCA"];
@@ -985,7 +1008,7 @@ const Dados = (() => {
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, smsEnviadosListar,
-    alterarMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
+    alterarMulta, reporMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
     alterarVencimento, alterarDataDesembolso, reconciliar, iaPerguntar,
     porPagarDoCliente, emprestimosDoCliente,
     fotoPerfil, guardarFoto, removerFoto,

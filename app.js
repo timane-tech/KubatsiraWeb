@@ -545,8 +545,14 @@
       ${podeMulta ? `<button class="btn secundario" id="pg-multa" style="margin-top:10px">Perdoar / reduzir multa</button>` : ""}
       ${pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-venc" style="margin-top:10px">Alterar data de vencimento</button>` : ""}
       ${p.telefoneCliente && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-sms" style="margin-top:10px">${ic("sms", 16)} Enviar SMS de cobrança</button>` : ""}
+      ${pode("REMOVER_MULTA") && p.multaAlteradaPor ? `<div class="aviso-caixa" style="margin:12px 0 6px">A multa desta prestação foi alterada por <b>${esc(p.multaAlteradaPor)}</b>.</div><button class="btn" id="pg-repor">Repor a multa (anular remoção)</button>` : ""}
     `);
     if ($("pg-sms")) $("pg-sms").onclick = () => abrirSMS(p.telefoneCliente, mensagemCobranca(p));
+    if ($("pg-repor")) $("pg-repor").onclick = async () => {
+      if (!(await confirmar("Repor a multa", "A multa volta a ser calculada normalmente (2% por dia de atraso). Serve para anular uma remoção feita por engano. Vale em todos os dispositivos.", "Repor"))) return;
+      const r = await comErro(() => Dados.reporMulta(p.id));
+      fecharFolha(); toast(r.msg, !r.ok); if (r.ok && recarregar) recarregar();
+    };
     if (pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO") $("pg-venc").onclick = () => {
       abrirFolha(`<h3>Alterar vencimento</h3><div class="sub">${p.numero}ª prestação · ${esc(p.nomeCliente)} · vence ${R.data(p.vencimento)}</div>
         <div class="campo"><label>Nova data de vencimento</label><input id="vn-data" type="date" value="${p.vencimento}"></div>
@@ -822,7 +828,8 @@
     };
     $("folha").querySelectorAll("[data-pid]").forEach((b) => {
       const p = prest.find((x) => x.id == b.dataset.pid);
-      if (p.estado !== "PAGO" && pode("PAGAR_PRESTACAO")) b.onclick = () => abrirPrestacao(p, recarregar);
+      if ((p.estado !== "PAGO" && pode("PAGAR_PRESTACAO")) || (p.multaAlteradaPor && pode("REMOVER_MULTA")))
+        b.onclick = () => abrirPrestacao(p, recarregar);
     });
     if (pend && pode("APROVACOES")) ligarAprovacao(e, recarregar);
     if ($("e-anular")) $("e-anular").onclick = async () => {
