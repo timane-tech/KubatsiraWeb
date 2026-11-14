@@ -657,7 +657,11 @@
       </div>
       <div class="seccao-titulo">Gestão</div>
       ${pode("CAIXA") ? op("caixa", "💰", "Fluxo de Caixa", "Saldo, entradas e despesas") : ""}
+      ${pode("CAIXA") ? op("poupanca", "🐖", "Poupança de Clientes", "Cofres dos clientes") : ""}
       ${pode("UTILIZADORES") ? op("utilizadores", "🔑", "Utilizadores e Permissões", "") : ""}
+      ${pode("CAIXA") ? op("lixeira", "🗑️", "Lixeira", "Lançamentos e pedidos apagados") : ""}
+      ${pode("SMS_VER") ? op("sms", "✉️", "SMS enviados", "Cobranças e recados enviados") : ""}
+      ${S.user.perfil === "ADMIN" ? op("acessos", "🕘", "Acessos", "Quem entrou e quando") : ""}
       ${op("notificacoes", "🔔", "Notificações", "")}
       <div class="seccao-titulo">Conta</div>
       ${op("perfil", "✏️", "Editar o meu nome", "")}
@@ -671,6 +675,10 @@
 
   async function maisAcao(op) {
     if (op === "caixa") return verCaixa();
+    if (op === "poupanca") return verPoupanca();
+    if (op === "lixeira") return verLixeira();
+    if (op === "sms") return verSms();
+    if (op === "acessos") return verAcessos();
     if (op === "utilizadores") return verUtilizadores();
     if (op === "notificacoes") return verNotificacoes();
     if (op === "perfil") return formNome();
@@ -801,6 +809,164 @@
         <span class="meio"><span class="nome">${esc(n.titulo || "Notificação")}</span><span class="det" style="white-space:normal">${esc(n.mensagem || "")}</span>
           <span class="det" style="font-size:.74rem">${R.dataHora(n.data)}</span></span></div>`).join("") : vazio("🔔", "Sem notificações.");
     } catch (e) { c.innerHTML = vazio("🔔", "Sem notificações."); }
+  }
+
+  // ---------- Poupança de Clientes ----------
+  async function verPoupanca() {
+    cabecalho("Poupança de Clientes", "Cofres dos clientes");
+    const c = $("conteudo");
+    c.innerHTML = spinner;
+    try {
+      const lista = await Dados.poupancaSaldos(false);
+      const comSaldo = lista.filter((x) => x.saldo > 0.005);
+      const total = comSaldo.reduce((s, x) => s + x.saldo, 0);
+      const itens = lista.length ? lista.map((x) => `<button class="item" data-cid="${x.clienteId}">
+        <span class="avatar" style="background:${x.saldo > 0.005 ? "var(--navy)" : "var(--fundo)"};color:${x.saldo > 0.005 ? "#fff" : "var(--texto-suave)"}">${esc(R.iniciais(x.nome))}</span>
+        <span class="meio"><span class="nome">${esc(x.nome)}</span>
+          <span class="det">Depositado ${vmt(x.depositado)} · usado ${vmt(x.usado)}</span></span>
+        <span class="fim"><span class="mt" style="${x.saldo > 0.005 ? "" : "color:var(--texto-suave)"}">${vmt(x.saldo)}</span></span></button>`).join("")
+        : vazio("🐖", "Ainda não há poupança de clientes.");
+      c.innerHTML = `
+        <div class="kpis" style="grid-template-columns:1fr">
+          <div class="kpi destaque"><div class="rotulo">Total guardado nos cofres</div><div class="valor" style="font-size:1.5rem">${vmt(total)}</div></div>
+        </div>
+        <div class="seccao-titulo">Clientes (${comSaldo.length} com saldo)</div>${itens}`;
+      c.querySelectorAll("[data-cid]").forEach((b) => b.onclick = () => {
+        const x = lista.find((y) => y.clienteId == b.dataset.cid); abrirPoupancaCliente(x);
+      });
+    } catch (e) { c.innerHTML = erroEcra(e, verPoupanca); }
+  }
+
+  async function abrirPoupancaCliente(x) {
+    abrirFolha(`<h3>${esc(x.nome)}</h3><div class="sub">Poupança</div>${spinner}`);
+    let movs = [];
+    try { movs = await Dados.poupancaMovimentos(x.clienteId); } catch (e) {}
+    const linhas = movs.map((m) => {
+      const dep = m.tipo === "DEPOSITO";
+      return `<div class="item" style="cursor:default">
+        <span class="avatar" style="background:${dep ? "var(--verde-bg)" : "var(--laranja-bg)"};color:${dep ? "var(--verde)" : "var(--laranja)"}">${dep ? "＋" : "−"}</span>
+        <span class="meio"><span class="nome">${dep ? "Depósito" : "Uso"}</span><span class="det" style="white-space:normal">${esc(m.descricao)}</span>
+          <span class="det" style="font-size:.74rem">${R.dataHora(m.data)}</span></span>
+        <span class="fim"><span class="mt" style="color:${dep ? "var(--verde)" : "var(--laranja)"}">${dep ? "+" : "−"}${R.mt(m.valor)}</span></span></div>`;
+    }).join("");
+    abrirFolha(`<h3>${esc(x.nome)}</h3><div class="sub">Poupança do cliente</div>
+      <div class="linha-dados"><span class="r">Saldo atual</span><span class="v">${R.mt(x.saldo)}</span></div>
+      <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${R.mt(x.depositado)}</span></div>
+      <div class="linha-dados"><span class="r">Total usado</span><span class="v">${R.mt(x.usado)}</span></div>
+      <div class="seccao-titulo" style="margin-left:0">Movimentos</div>
+      ${linhas || `<p class="sub" style="color:var(--texto-suave)">Sem movimentos.</p>`}`);
+  }
+
+  // ---------- Lixeira ----------
+  async function verLixeira() {
+    cabecalho("Lixeira", "Lançamentos e pedidos apagados");
+    const c = $("conteudo");
+    let ativa = "caixa";
+    c.innerHTML = `<div class="cartao" style="display:flex;gap:8px;padding:8px">
+      <button class="btn" data-ab="caixa" style="margin:0;padding:10px">Lançamentos do caixa</button>
+      <button class="btn secundario" data-ab="pedidos" style="margin:0;padding:10px">Pedidos rejeitados</button></div><div id="lix-lista">${spinner}</div>`;
+    const carregar = async () => {
+      $("lix-lista").innerHTML = spinner;
+      try {
+        if (ativa === "caixa") {
+          const lista = await Dados.lixoCaixaListar();
+          if (!lista.length) { $("lix-lista").innerHTML = vazio("🗑️", "O lixo do caixa está vazio."); return; }
+          $("lix-lista").innerHTML = lista.map((m) => {
+            const entrada = m.tipo === "ENTRADA";
+            return `<div class="item" style="cursor:default;align-items:flex-start">
+              <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">🗑️</span>
+              <span class="meio"><span class="nome">#${m.caixaId} · ${esc(curto(m.categoria))}</span>
+                <span class="det" style="white-space:normal">${esc(m.justificativa || "")}</span>
+                <span class="det" style="font-size:.74rem">Apagado por ${esc(m.eliminadoPor || "—")} · ${R.dataHora(m.eliminadoEm)}${m.anulado ? " · pagamento anulado" : ""}</span>
+                <span style="display:flex;gap:8px;margin-top:8px">
+                  <button class="btn secundario" data-restaurar="${m.id}" data-anul="${m.anulado}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">↩ Restaurar</button>
+                  <button class="btn perigo" data-elim="${m.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">Eliminar</button>
+                </span></span>
+              <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></div>`;
+          }).join("") + `<button class="btn secundario" id="lix-esvaziar" style="margin-top:8px">Esvaziar lixo do caixa</button>`;
+          $("lix-lista").querySelectorAll("[data-restaurar]").forEach((b) => b.onclick = async () => {
+            if (!(await confirmar("Restaurar lançamento", "O lançamento volta ao caixa e o saldo é atualizado.", "Restaurar"))) return;
+            const r = await comErro(() => Dados.lixoCaixaRestaurar(Number(b.dataset.restaurar), b.dataset.anul === "true"));
+            toast(r.msg, !r.ok); if (r.ok) carregar();
+          });
+          $("lix-lista").querySelectorAll("[data-elim]").forEach((b) => b.onclick = async () => {
+            if (!(await confirmar("Eliminar de vez", "Remove o lançamento do lixo definitivamente.", "Eliminar", true))) return;
+            const r = await comErro(() => Dados.lixoCaixaEliminar(Number(b.dataset.elim)));
+            toast(r.msg, !r.ok); if (r.ok) carregar();
+          });
+          $("lix-esvaziar").onclick = async () => {
+            if (!(await confirmar("Esvaziar lixo", "Remove TODOS os lançamentos do lixo do caixa, definitivamente.", "Esvaziar", true))) return;
+            const r = await comErro(() => Dados.lixoCaixaEsvaziar()); toast(r.msg, !r.ok); carregar();
+          };
+        } else {
+          const lista = await Dados.rejeitadosListar();
+          if (!lista.length) { $("lix-lista").innerHTML = vazio("🗑️", "Não há pedidos rejeitados."); return; }
+          $("lix-lista").innerHTML = lista.map((e) => `<div class="item" style="cursor:default;align-items:flex-start">
+            <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
+            <span class="meio"><span class="nome">${esc(e.nomeCliente)} · #${e.id}</span>
+              <span class="det">${vmt(e.capital)} · pedido ${R.data(e.dataPedido)}</span>
+              <span class="det" style="font-size:.74rem">Rejeitado por ${esc(e.rejeitadoPor || "—")} · ${R.dataHora(e.rejeitadoEm)}</span>
+              <span style="display:flex;gap:8px;margin-top:8px">
+                <button class="btn secundario" data-rest="${e.id}" data-cli="${e.clienteId}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">↩ Restaurar</button>
+                <button class="btn perigo" data-del="${e.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">Eliminar</button>
+              </span></span></div>`).join("");
+          $("lix-lista").querySelectorAll("[data-rest]").forEach((b) => b.onclick = async () => {
+            if (!(await confirmar("Restaurar pedido", "O pedido volta a Aprovar pedidos.", "Restaurar"))) return;
+            const r = await comErro(() => Dados.rejeitadoRestaurar(Number(b.dataset.rest), Number(b.dataset.cli)));
+            toast(r.msg, !r.ok); if (r.ok) carregar();
+          });
+          $("lix-lista").querySelectorAll("[data-del]").forEach((b) => b.onclick = async () => {
+            if (!(await confirmar("Eliminar de vez", "Remove o pedido rejeitado definitivamente.", "Eliminar", true))) return;
+            const r = await comErro(() => Dados.rejeitadoEliminar(Number(b.dataset.del)));
+            toast(r.msg, !r.ok); if (r.ok) carregar();
+          });
+        }
+      } catch (e) { $("lix-lista").innerHTML = erroEcra(e, carregar); }
+    };
+    c.querySelectorAll("[data-ab]").forEach((b) => b.onclick = () => {
+      ativa = b.dataset.ab;
+      c.querySelectorAll("[data-ab]").forEach((x) => x.className = "btn " + (x.dataset.ab === ativa ? "" : "secundario"));
+      carregar();
+    });
+    carregar();
+  }
+
+  // ---------- SMS enviados ----------
+  async function verSms() {
+    cabecalho("SMS enviados", "Cobranças e recados");
+    const c = $("conteudo");
+    c.innerHTML = spinner;
+    try {
+      const lista = await Dados.smsEnviadosListar();
+      if (lista === null) { c.innerHTML = vazio("✉️", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); return; }
+      if (!lista.length) { c.innerHTML = vazio("✉️", "Ainda não há SMS enviados."); return; }
+      c.innerHTML = lista.map((s) => {
+        const ok = s.estado === "ENVIADO";
+        return `<div class="item" style="cursor:default;align-items:flex-start">
+          <span class="avatar" style="background:${ok ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${ok ? "var(--verde)" : "var(--vermelho)"}">✉️</span>
+          <span class="meio"><span class="nome">${esc(s.nome || s.telefone)}</span>
+            <span class="det" style="white-space:normal">${esc(s.texto)}</span>
+            <span class="det" style="font-size:.74rem">${esc(s.telefone)} · ${esc(s.quando || "")} · ${esc(s.estado || "")}</span></span></div>`;
+      }).join("");
+    } catch (e) { c.innerHTML = erroEcra(e, verSms); }
+  }
+
+  // ---------- Acessos ----------
+  async function verAcessos() {
+    cabecalho("Acessos", "Entradas e saídas");
+    const c = $("conteudo");
+    c.innerHTML = spinner;
+    try {
+      const lista = await Dados.acessosListar(100);
+      if (!lista.length) { c.innerHTML = vazio("🕘", "Sem registos de acesso."); return; }
+      const cor = { ENTRADA: "var(--verde)", SAIDA: "var(--texto-suave)", FALHADA: "var(--vermelho)", BLOQUEIO: "var(--vermelho)", CONTA_DESATIVADA: "var(--vermelho)" };
+      c.innerHTML = lista.map((a) => `<div class="item" style="cursor:default">
+        <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${a.dispositivo === "TELEMOVEL" ? "📱" : "💻"}</span>
+        <span class="meio"><span class="nome">${esc(a.utilizador || "—")}</span>
+          <span class="det">${esc(a.perfil || "")}${a.detalhe ? " · " + esc(a.detalhe) : ""}</span>
+          <span class="det" style="font-size:.74rem">${R.dataHora(a.dataHora)}</span></span>
+        <span class="fim"><span class="etiqueta e-neutro" style="color:${cor[a.evento] || "var(--texto-suave)"}">${esc(a.evento)}</span></span></div>`).join("");
+    } catch (e) { c.innerHTML = erroEcra(e, verAcessos); }
   }
 
   // ---------- Perfil ----------

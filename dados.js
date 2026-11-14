@@ -661,6 +661,105 @@ const Dados = (() => {
     } catch (e) { return []; }
   }
 
+  // ---------- Poupança de Clientes ----------
+  async function poupancaSaldos(soComSaldo) {
+    const rows = await DB.consultar(
+      "SELECT c.id, c.nome, COALESCE(u.telefone,'') AS telefone, " +
+      "COALESCE(SUM(p.valor) FILTER (WHERE p.tipo='DEPOSITO'),0) AS depositado, " +
+      "COALESCE(SUM(p.valor) FILTER (WHERE p.tipo<>'DEPOSITO'),0) AS usado, " +
+      "COALESCE(SUM(CASE WHEN p.tipo='DEPOSITO' THEN p.valor ELSE -p.valor END),0) AS saldo, " +
+      "MAX(p.data_movimento) AS ultimo " +
+      "FROM poupanca_clientes p JOIN clientes c ON c.id=p.cliente_id LEFT JOIN usuarios u ON u.id=c.usuario_id " +
+      "GROUP BY c.id, c.nome, u.telefone " +
+      (soComSaldo ? "HAVING COALESCE(SUM(CASE WHEN p.tipo='DEPOSITO' THEN p.valor ELSE -p.valor END),0) > 0.005 " : "") +
+      "ORDER BY saldo DESC, c.nome", []);
+    return rows.map((r) => ({ clienteId: Number(r.id), nome: r.nome, telefone: r.telefone,
+      depositado: Number(r.depositado), usado: Number(r.usado), saldo: Number(r.saldo), ultimo: r.ultimo }));
+  }
+
+  async function poupancaMovimentos(clienteId) {
+    return (await DB.consultar(
+      "SELECT tipo, valor, data_movimento, COALESCE(descricao,'') AS descricao, COALESCE(registado_por,'') AS registado_por " +
+      "FROM poupanca_clientes WHERE cliente_id=? ORDER BY data_movimento DESC, id DESC", [clienteId]))
+      .map((r) => ({ tipo: r.tipo, valor: Number(r.valor), data: r.data_movimento, descricao: r.descricao, registadoPor: r.registado_por }));
+  }
+
+  // ---------- Lixeira: lançamentos do caixa ----------
+  async function lixoCaixaListar() {
+    return (await DB.consultar(
+      "SELECT id, caixa_id, tipo, valor, justificativa, categoria, data_movimento, eliminado_por, eliminado_em, " +
+      "COALESCE(pagamento_anulado, FALSE)::text AS anulado FROM caixa_eliminados ORDER BY id DESC", []))
+      .map((r) => ({ id: Number(r.id), caixaId: Number(r.caixa_id), tipo: r.tipo, valor: Number(r.valor),
+        justificativa: r.justificativa, categoria: r.categoria, data: r.data_movimento,
+        eliminadoPor: r.eliminado_por, eliminadoEm: r.eliminado_em, anulado: r.anulado === "true" || r.anulado === "t" }));
+  }
+
+  async function lixoCaixaRestaurar(idLixo, anulado) {
+    if (anulado) return { ok: false, msg: "Este pagamento foi anulado (as prestações já não o contam), por isso não volta ao caixa." };
+    await DB.lote([
+      { sql: "INSERT INTO caixa (id, tipo, valor, justificativa, categoria, emprestimo_id, data_movimento, registado_por) " +
+             "SELECT caixa_id, tipo, valor, justificativa, categoria, emprestimo_id, data_movimento, registado_por FROM caixa_eliminados WHERE id=?", params: [idLixo] },
+      { sql: "DELETE FROM caixa_eliminados WHERE id=?", params: [idLixo] },
+    ]);
+    return { ok: true, msg: "Lançamento restaurado. O saldo foi atualizado." };
+  }
+
+  async function lixoCaixaEliminar(idLixo) {
+    const r = await DB.executar("DELETE FROM caixa_eliminados WHERE id=?", [idLixo]);
+    return r.afetadas >= 1 ? { ok: true, msg: "Lançamento eliminado de vez." } : { ok: false, msg: "Já não existe." };
+  }
+
+  async function lixoCaixaEsvaziar() {
+    const r = await DB.executar("DELETE FROM caixa_eliminados", []);
+    return { ok: true, msg: r.afetadas + " lançamento(s) eliminado(s) de vez." };
+  }
+
+  // ---------- Lixeira: pedidos rejeitados ----------
+  async function rejeitadosListar() {
+    return (await DB.consultar(
+      "SELECT e.id, e.cliente_id, c.nome, u.telefone, e.valor_solicitado, e.taxa_assistencia, e.valor_total, " +
+      "e.tipo_pagamento, e.data_solicitacao, e.data_aprovacao, e.bens_garantia, e.status, e.criado_por, e.rejeitado_em, e.processado_por " +
+      "FROM emprestimos e JOIN clientes c ON c.id=e.cliente_id JOIN usuarios u ON u.id=c.usuario_id " +
+      "WHERE e.status='REJEITADO' ORDER BY e.rejeitado_em DESC NULLS LAST, e.id DESC", []))
+      .map((r) => { const e = lerEmp(r); e.rejeitadoEm = r.rejeitado_em; e.rejeitadoPor = r.processado_por; return e; });
+  }
+
+  async function rejeitadoRestaurar(id, clienteId) {
+    const pend = await DB.consultar("SELECT id FROM emprestimos WHERE cliente_id=? AND status='PENDENTE' LIMIT 1", [clienteId]);
+    if (pend.length) return { ok: false, msg: "Este cliente já tem outro pedido pendente (nº " + pend[0].id + ")." };
+    const r = await DB.executar("UPDATE emprestimos SET status='PENDENTE', rejeitado_em=NULL, processado_por=NULL WHERE id=? AND status='REJEITADO'", [id]);
+    return r.afetadas === 1 ? { ok: true, msg: "Pedido nº " + id + " restaurado: voltou a Aprovar pedidos." } : { ok: false, msg: "Não foi possível restaurar." };
+  }
+
+  async function rejeitadoEliminar(id) {
+    const r = await DB.executar(
+      "DELETE FROM emprestimos WHERE id=? AND status='REJEITADO' " +
+      "AND NOT EXISTS (SELECT 1 FROM prestacoes WHERE emprestimo_id=?) AND NOT EXISTS (SELECT 1 FROM caixa WHERE emprestimo_id=?)", [id, id, id]);
+    return r.afetadas === 1 ? { ok: true, msg: "Pedido nº " + id + " eliminado de vez." } : { ok: false, msg: "Não foi possível eliminar este pedido." };
+  }
+
+  // ---------- Acessos (registo de entradas) ----------
+  async function acessosListar(limite) {
+    return (await DB.consultar(
+      "SELECT id, data_hora, COALESCE(utilizador,'') AS utilizador, COALESCE(perfil,'') AS perfil, evento, " +
+      "COALESCE(dispositivo,'') AS dispositivo, COALESCE(aparelho,'') AS aparelho, COALESCE(detalhe,'') AS detalhe " +
+      "FROM registo_acessos ORDER BY id DESC LIMIT ?", [limite || 100]))
+      .map((r) => ({ id: Number(r.id), dataHora: r.data_hora, utilizador: r.utilizador, perfil: r.perfil,
+        evento: r.evento, dispositivo: r.dispositivo, aparelho: r.aparelho, detalhe: r.detalhe }));
+  }
+
+  // ---------- SMS enviados (só leitura; a tabela existe apenas na base real) ----------
+  async function smsEnviadosListar() {
+    try {
+      return (await DB.consultar(
+        "SELECT COALESCE(nome,'') AS nome, telefone, data_movimento_sms AS quando, COALESCE(texto,'') AS texto, " +
+        "COALESCE(estado,'') AS estado, COALESCE(valor,0) AS valor FROM (" +
+        "SELECT nome, telefone, to_char(enviado_em,'DD/MM HH24:MI') AS data_movimento_sms, texto, estado, valor, enviado_em, id " +
+        "FROM sms_cobranca WHERE enviado_em IS NOT NULL) t ORDER BY enviado_em DESC NULLS LAST, id DESC LIMIT 100", []))
+        .map((r) => ({ nome: r.nome, telefone: r.telefone, quando: r.quando, texto: r.texto, estado: r.estado, valor: Number(r.valor) }));
+    } catch (e) { return null; }   // null = tabela não existe nesta base
+  }
+
   return {
     autenticar, idAdminPrincipal, balanco, cobrancasPrevistas, topClientes,
     listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo,
@@ -669,5 +768,9 @@ const Dados = (() => {
     pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,
     registarCaixa, listarUtilizadores, criarUtilizador, atualizarUtilizador, eliminarUtilizador,
     alterarSenha, alterarNome, listarNotificacoes,
+    poupancaSaldos, poupancaMovimentos,
+    lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar,
+    rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
+    acessosListar, smsEnviadosListar,
   };
 })();
