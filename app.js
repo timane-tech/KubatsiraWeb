@@ -795,7 +795,7 @@
     const c = $("conteudo");
     c.innerHTML = spinner;
     try {
-      const lista = await Dados.listarNotificacoes(S.user.id);
+      const lista = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
       c.innerHTML = lista.length ? lista.map((n) => `<div class="item" style="cursor:default">
         <span class="avatar" style="background:var(--fundo);color:var(--navy)">🔔</span>
         <span class="meio"><span class="nome">${esc(n.titulo || "Notificação")}</span><span class="det" style="white-space:normal">${esc(n.mensagem || "")}</span>

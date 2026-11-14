@@ -651,11 +651,13 @@ const Dados = (() => {
   }
 
   // ---------- Notificações ----------
-  async function listarNotificacoes(usuarioId) {
+  async function listarNotificacoes(usuarioId, perfil) {
     try {
       return (await DB.consultar(
-        "SELECT id, titulo, mensagem, lida, data_criacao, tipo FROM notificacoes WHERE usuario_id=? OR usuario_id IS NULL ORDER BY id DESC LIMIT 50", [usuarioId]))
-        .map((r) => ({ id: Number(r.id), titulo: r.titulo, mensagem: r.mensagem, lida: r.lida === "true" || r.lida === "t", data: r.data_criacao, tipo: r.tipo }));
+        "SELECT id, tipo, titulo, mensagem, de_nome, para_perfil, criada_em FROM notificacoes " +
+        "WHERE para_usuario_id = ? OR para_perfil = ? OR (para_usuario_id IS NULL AND para_perfil IS NULL) " +
+        "ORDER BY id DESC LIMIT 50", [usuarioId, perfil]))
+        .map((r) => ({ id: Number(r.id), titulo: r.titulo, mensagem: r.mensagem, autor: r.de_nome, data: r.criada_em, tipo: r.tipo }));
     } catch (e) { return []; }
   }
 
