@@ -1,0 +1,7 @@
+# Nada de segredos aqui: o código de ligação (KUB1.) é introduzido em cada aparelho, não fica no código.
+# Ficheiros locais a não publicar:
+*.log
+.DS_Store
+Thumbs.db
+ligacao-*.txt
+*-SECRETO*

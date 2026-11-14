@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <title>Kubatsira Microcrédito</title>
+  <meta name="description" content="Gestão de microcrédito Kubatsira">
+  <meta name="theme-color" content="#1f3a5f">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Kubatsira">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Ecrã: Ligar (setup) -->
+  <section id="ecra-ligar" class="ecra"></section>
+  <!-- Ecrã: Entrar (login) -->
+  <section id="ecra-login" class="ecra"></section>
+  <!-- Ecrã principal (com cabeçalho + conteúdo + barra inferior) -->
+  <section id="ecra-app" class="ecra">
+    <header class="cabecalho" id="cabecalho"></header>
+    <main class="conteudo" id="conteudo"></main>
+    <nav class="barra-inferior" id="barra-inferior"></nav>
+  </section>
+
+  <!-- Diálogo / folha deslizante -->
+  <div class="fundo-escuro" id="fundo-escuro">
+    <div class="folha" id="folha"></div>
+  </div>
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script src="regras.js"></script>
+  <script src="db.js"></script>
+  <script src="dados.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
