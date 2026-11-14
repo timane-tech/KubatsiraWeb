@@ -1,0 +1,219 @@
+# -*- coding: utf-8 -*-
+"""
+Gateway de SMS de cobrança do Kubatsira (corre no GitHub Actions, 3x/dia).
+
+Lê a base Neon (prestações que vencem hoje ou em atraso), compõe a mesma mensagem da app Android,
+evita duplicados (tabela sms_cobranca, UNIQUE dia+turno+cliente), envia pela API da Africa's Talking
+e regista o envio. NÃO precisa de telemóvel.
+
+Variáveis de ambiente (vêm dos GitHub Secrets — nunca ficam no código):
+  NEON_URL      postgresql://...  (base REAL)
+  AT_USERNAME   utilizador da Africa's Talking (use "sandbox" para testes)
+  AT_API_KEY    chave da API
+  AT_FROM       (opcional) sender ID / shortcode registado (ex.: "Kubatsira")
+  AT_ENV        (opcional) "sandbox" para o ambiente de testes; senão produção
+  TURNO         (opcional) 0=08h, 1=12h, 2=14h; por omissão calcula pela hora (UTC+2)
+  DRY_RUN       (opcional) "1" = só mostra quem receberia e o texto; não envia nem grava
+"""
+import os, sys, json, datetime, decimal, urllib.request, urllib.parse, urllib.error
+
+NEON_URL = os.environ.get("NEON_URL", "").strip()
+AT_USERNAME = os.environ.get("AT_USERNAME", "").strip()
+AT_API_KEY = os.environ.get("AT_API_KEY", "").strip()
+AT_FROM = os.environ.get("AT_FROM", "").strip()
+AT_ENV = os.environ.get("AT_ENV", "").strip().lower()
+DRY_RUN = os.environ.get("DRY_RUN", "").strip() == "1"
+
+MARCA = "Kubatsira Microcredito"
+MULTA_DIA = decimal.Decimal("0.02")
+
+def q2(v):
+    return decimal.Decimal(str(v)).quantize(decimal.Decimal("0.01"), rounding=decimal.ROUND_HALF_UP)
+
+def mt(v):
+    v = q2(v)
+    neg = v < 0
+    inteiro, _, cent = str(abs(v)).partition(".")
+    cent = (cent + "00")[:2]
+    # separador de milhares com espaço
+    grupos = []
+    while len(inteiro) > 3:
+        grupos.insert(0, inteiro[-3:]); inteiro = inteiro[:-3]
+    grupos.insert(0, inteiro)
+    return ("-" if neg else "") + " ".join(grupos) + "," + cent + " MT"
+
+# ---------- Neon (SQL over HTTP) ----------
+def neon_host():
+    import urllib.parse as up
+    return up.urlparse(NEON_URL).hostname
+
+def neon(sql, params=None):
+    host = neon_host()
+    body = json.dumps({"query": sql, "params": [None if p is None else str(p) for p in (params or [])]}).encode("utf-8")
+    req = urllib.request.Request("https://" + host + "/sql", data=body, method="POST")
+    req.add_header("Content-Type", "application/json")
+    req.add_header("Neon-Connection-String", NEON_URL)
+    req.add_header("Neon-Raw-Text-Output", "true")
+    req.add_header("Neon-Array-Mode", "true")
+    with urllib.request.urlopen(req, timeout=30) as r:
+        j = json.loads(r.read().decode("utf-8"))
+    cols = [f["name"] for f in j.get("fields", [])]
+    return [dict(zip(cols, row)) for row in j.get("rows", [])]
+
+# ---------- Datas / multa ----------
+HOJE = datetime.date.today()
+def d(s):
+    return datetime.date.fromisoformat(s[:10]) if s else None
+def dias_atraso(venc):
+    return max(0, (HOJE - venc).days) if venc else 0
+def multa_prest(p):
+    if p["multa_congelada"] is not None:
+        return q2(p["multa_congelada"])
+    return q2(decimal.Decimal(p["valor"]) * MULTA_DIA * dias_atraso(p["venc"]))
+def em_falta(p):
+    if p["status"] == "PAGO":
+        return decimal.Decimal("0.00")
+    return max(decimal.Decimal("0.00"), q2(decimal.Decimal(p["valor"]) + multa_prest(p) - decimal.Decimal(p["pago"])))
+
+# ---------- Carregar prestações ----------
+JA_COBERTA = "(p.multa_congelada IS NOT NULL AND COALESCE(p.valor_pago,0)+0.005 >= p.valor_esperado + p.multa_congelada)"
+SELECT = ("SELECT p.id, p.emprestimo_id, p.numero_prestacao, p.data_vencimento, p.valor_esperado, p.valor_pago, "
+          "p.multa_congelada, p.status, c.id AS cliente_id, c.nome, u.telefone "
+          "FROM prestacoes p JOIN emprestimos e ON e.id=p.emprestimo_id "
+          "JOIN clientes c ON c.id=e.cliente_id JOIN usuarios u ON u.id=c.usuario_id ")
+
+def carregar(cond):
+    out = []
+    for r in neon(SELECT + cond):
+        out.append({
+            "id": int(r["id"]), "emp": int(r["emprestimo_id"]), "numero": int(r["numero_prestacao"]),
+            "venc": d(r["data_vencimento"]), "valor": r["valor_esperado"], "pago": r["valor_pago"] or "0",
+            "multa_congelada": r["multa_congelada"], "status": r["status"],
+            "cliente_id": int(r["cliente_id"]), "nome": (r["nome"] or "").strip(), "tel": (r["telefone"] or "").strip(),
+        })
+    return out
+
+# ---------- Mensagem (fiel à app Android) ----------
+def mensagem(prest, divida_total):
+    prest = sorted(prest, key=lambda p: (p["venc"] or HOJE, p["numero"]))
+    total = decimal.Decimal("0.00"); multas = decimal.Decimal("0.00")
+    atraso = False; linhas = []; n = 0
+    for p in prest:
+        n += 1
+        m = multa_prest(p); falta = em_falta(p); dd = dias_atraso(p["venc"])
+        total += falta; multas += m
+        if dd > 0: atraso = True
+        if n > 3: continue
+        linha = f"- {p['numero']}a prest. (emp. {p['emp']}), "
+        if dd > 0: linha += f"venceu {p['venc'].strftime('%d/%m')} ({dd} dia{'s' if dd != 1 else ''} atraso)"
+        elif p["venc"] == HOJE: linha += "vence HOJE"
+        else: linha += f"vence {p['venc'].strftime('%d/%m')}"
+        linha += ": " + mt(falta)
+        if m > 0: linha += " c/ multa " + mt(m)
+        linhas.append(linha)
+    if n > 3: linhas.append(f"- e mais {n-3} valor(es) em atraso")
+    qt = len(prest)
+    txt = f"Caro(a) {prest[0]['nome']},\n{MARCA} informa que tem {'1 prestacao' if qt==1 else str(qt)+' prestacoes'} em divida:\n"
+    txt += "\n".join(linhas) + "\n"
+    txt += "TOTAL A PAGAR: " + mt(total)
+    if multas > 0: txt += " (inclui multas de " + mt(multas) + ")"
+    txt += "\n"
+    if divida_total > total + decimal.Decimal("0.5"):
+        txt += "Divida total (com prestacoes por vencer): " + mt(divida_total) + "\n"
+    txt += "Regularize o pagamento o mais breve possivel. Obrigado." if atraso else "Obrigado."
+    return txt
+
+# ---------- Telefone ----------
+def telefone_internacional(tel):
+    t = "".join(ch for ch in tel if ch.isdigit())
+    if not t: return None
+    if t.startswith("258"): return "+" + t
+    return "+258" + t
+
+# ---------- Africa's Talking ----------
+def enviar_at(para, texto):
+    host = "api.sandbox.africastalking.com" if AT_ENV == "sandbox" else "api.africastalking.com"
+    dados = {"username": AT_USERNAME, "to": para, "message": texto}
+    if AT_FROM: dados["from"] = AT_FROM
+    req = urllib.request.Request("https://" + host + "/version1/messaging",
+                                 data=urllib.parse.urlencode(dados).encode("utf-8"), method="POST")
+    req.add_header("apiKey", AT_API_KEY)
+    req.add_header("Accept", "application/json")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            j = json.loads(r.read().decode("utf-8"))
+        rec = j.get("SMSMessageData", {}).get("Recipients", [])
+        if rec and rec[0].get("status") == "Success":
+            return True, rec[0].get("status", "")
+        return False, (rec[0].get("status") if rec else j.get("SMSMessageData", {}).get("Message", "sem resposta"))
+    except urllib.error.HTTPError as e:
+        return False, "HTTP %s: %s" % (e.code, e.read().decode("utf-8", "replace")[:150])
+    except Exception as e:
+        return False, str(e)[:150]
+
+# ---------- Registo em sms_cobranca (evita duplicados) ----------
+def reservar(cliente_id, turno, nome, tel, valor, texto, agora):
+    # ON CONFLICT DO NOTHING: se já há linha para (dia,turno,cliente), não envia outra vez
+    r = neon(
+        "INSERT INTO sms_cobranca (dia, turno, cliente_id, nome, telefone, valor, texto, enviado_em, enviado_por, automatico, estado) "
+        "VALUES (?::date, ?::smallint, ?::int, ?, ?, ?::numeric, ?, ?::timestamp, 'gateway', TRUE, 'A_ENVIAR') "
+        "ON CONFLICT (dia, turno, cliente_id) DO NOTHING RETURNING id",
+        [HOJE.isoformat(), turno, cliente_id, nome, tel, str(q2(valor)), texto, agora])
+    return int(r[0]["id"]) if r else None
+
+def marcar(id_sms, estado, erro=None):
+    neon("UPDATE sms_cobranca SET estado=?, erro=? WHERE id=?", [estado, erro, id_sms])
+
+# ---------- Principal ----------
+def turno_atual():
+    if os.environ.get("TURNO", "").strip() != "":
+        return int(os.environ["TURNO"])
+    h = (datetime.datetime.utcnow().hour + 2) % 24   # Moçambique = UTC+2
+    return 0 if h < 11 else (1 if h < 13 else 2)
+
+def main():
+    if not NEON_URL:
+        print("Falta NEON_URL."); sys.exit(1)
+    if not DRY_RUN and (not AT_USERNAME or not AT_API_KEY):
+        print("Faltam AT_USERNAME/AT_API_KEY."); sys.exit(1)
+    turno = turno_atual()
+    agora = datetime.datetime.now().replace(microsecond=0).isoformat(sep=" ")
+    print("Turno %s · dia %s · %s" % (turno, HOJE, "DRY_RUN" if DRY_RUN else "envio real"))
+
+    # Prestações que vencem hoje ou em atraso (candidatas a cobrança)
+    cobrancas = carregar("WHERE p.status='PENDENTE' AND e.status='APROVADO' AND p.data_vencimento <= '%s' AND NOT %s "
+                         "ORDER BY p.data_vencimento, c.nome" % (HOJE.isoformat(), JA_COBERTA))
+    # Dívida total por cliente (todas as prestações por pagar, mesmo as por vencer)
+    todas = carregar("WHERE p.status='PENDENTE' AND e.status='APROVADO' AND NOT %s" % JA_COBERTA)
+    divida = {}
+    for p in todas:
+        divida[p["cliente_id"]] = divida.get(p["cliente_id"], decimal.Decimal("0.00")) + em_falta(p)
+
+    # Agrupar por cliente
+    por_cliente = {}
+    for p in cobrancas:
+        por_cliente.setdefault(p["cliente_id"], []).append(p)
+
+    enviados = falhados = pulados = 0
+    for cid, prest in por_cliente.items():
+        nome = prest[0]["nome"]; tel = telefone_internacional(prest[0]["tel"])
+        total_cliente = sum((em_falta(p) for p in prest), decimal.Decimal("0.00"))
+        texto = mensagem(prest, divida.get(cid, total_cliente))
+        if not tel:
+            print("  SEM TELEFONE: %s" % nome); continue
+        if DRY_RUN:
+            print("\n--- %s (%s) ---\n%s" % (nome, tel, texto)); enviados += 1; continue
+        id_sms = reservar(cid, turno, nome, tel, total_cliente, texto, agora)
+        if id_sms is None:
+            pulados += 1; continue   # já recebeu neste turno
+        ok, info = enviar_at(tel, texto)
+        if ok:
+            marcar(id_sms, "ENVIADO"); enviados += 1; print("  OK  %s" % nome)
+        else:
+            marcar(id_sms, "FALHOU", str(info)[:200]); falhados += 1; print("  FALHOU %s: %s" % (nome, info))
+
+    print("\nResumo: %d enviado(s), %d falhado(s), %d ja tinham recebido." % (enviados, falhados, pulados))
+
+if __name__ == "__main__":
+    main()

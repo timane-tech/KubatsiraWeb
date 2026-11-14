@@ -1,0 +1,35 @@
+name: SMS de cobranca Kubatsira
+
+on:
+  schedule:
+    # 08:00, 12:00 e 14:00 em Mocambique (UTC+2) = 06:00, 10:00, 12:00 UTC
+    - cron: "0 6,10,12 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "So simular (nao envia SMS)"
+        type: boolean
+        default: false
+
+# Evita corridas sobrepostas
+concurrency:
+  group: sms-cobranca
+  cancel-in-progress: false
+
+jobs:
+  enviar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Enviar SMS de cobranca
+        env:
+          NEON_URL: ${{ secrets.NEON_URL }}
+          AT_USERNAME: ${{ secrets.AT_USERNAME }}
+          AT_API_KEY: ${{ secrets.AT_API_KEY }}
+          AT_FROM: ${{ secrets.AT_FROM }}
+          AT_ENV: ${{ secrets.AT_ENV }}
+          DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '' }}
+        run: python scripts/enviar_sms.py
