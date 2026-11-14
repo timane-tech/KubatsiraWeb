@@ -820,6 +820,108 @@ const Dados = (() => {
   }
   function nomeSessao() { return Dados._nome || "Sistema"; }
 
+  // ---------- Alterar vencimento de uma prestação ----------
+  async function alterarVencimento(prestacaoId, novaDataISO, nomeCliente, numero) {
+    if (!novaDataISO) return { ok: false, msg: "Escolha uma data." };
+    const r = await DB.executar("UPDATE prestacoes SET data_vencimento=? WHERE id=? AND status='PENDENTE'", [novaDataISO, prestacaoId]);
+    return r.afetadas === 1
+      ? { ok: true, msg: "A " + numero + "ª prestação de " + nomeCliente + " passou a vencer em " + Regras.data(novaDataISO) + "." }
+      : { ok: false, msg: "Não foi possível alterar (a prestação pode já estar paga)." };
+  }
+
+  // ---------- Alterar data de desembolso de um empréstimo ----------
+  async function alterarDataDesembolso(emp, novaDataISO, quem, moverPrestacoes) {
+    if (emp.estado !== "APROVADO" && emp.estado !== "PAGO")
+      return { ok: false, msg: "Só é possível alterar a data de desembolso de um empréstimo aprovado." };
+    const hoje = Regras.hojeISO();
+    if (Regras.diasEntre(hoje, novaDataISO) > 0) return { ok: false, msg: "A data de desembolso não pode ser depois de hoje." };
+    if (novaDataISO === emp.dataAprovacao) return { ok: false, msg: "O desembolso já tem a data " + Regras.data(novaDataISO) + "." };
+    const chk = (await DB.consultar(
+      "SELECT COUNT(*) AS n, COUNT(reconciliado_em) AS rec FROM caixa WHERE emprestimo_id=? AND tipo='SAIDA'", [emp.id]))[0];
+    if (Number(chk.n) === 0) return { ok: false, msg: "Não foi encontrado o desembolso deste empréstimo no caixa." };
+    if (Number(chk.rec) > 0) return { ok: false, msg: "O desembolso já foi reconciliado, por isso a data não pode ser alterada." };
+
+    const diff = emp.dataAprovacao ? Regras.diasEntre(emp.dataAprovacao, novaDataISO) : 0;
+    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const comandos = [];
+    if (emp.dataPedido && Regras.diasEntre(novaDataISO, emp.dataPedido) > 0)
+      comandos.push({ sql: "UPDATE emprestimos SET data_aprovacao=?, data_solicitacao=? WHERE id=?", params: [novaDataISO, novaDataISO, emp.id] });
+    else
+      comandos.push({ sql: "UPDATE emprestimos SET data_aprovacao=? WHERE id=?", params: [novaDataISO, emp.id] });
+    if (moverPrestacoes && diff !== 0)
+      comandos.push({ sql: "UPDATE prestacoes SET data_vencimento = data_vencimento + ?::int WHERE emprestimo_id=?", params: [diff, emp.id] });
+    comandos.push({
+      sql: "UPDATE caixa SET justificativa = justificativa || ' [data corrigida: antes ' || to_char(data_movimento,'DD/MM/YYYY') || ']', " +
+           "data_movimento = ?::date + data_movimento::time, editado_por=?, editado_em=?::timestamp WHERE emprestimo_id=? AND tipo='SAIDA'",
+      params: [novaDataISO, quem, agora, emp.id],
+    });
+    await DB.lote(comandos);
+    let msg = "Data de desembolso do empréstimo nº " + emp.id + " alterada para " + Regras.data(novaDataISO) + ".";
+    if (moverPrestacoes && diff !== 0) msg += " As prestações andaram " + Math.abs(diff) + " dia(s) " + (diff < 0 ? "para trás." : "para a frente.");
+    else msg += " As prestações não mudaram.";
+    return { ok: true, msg };
+  }
+
+  // ---------- Reconciliar o caixa ----------
+  async function reconciliar(contado, observacao, registarAjuste, quem) {
+    contado = Regras.arredondar(contado);
+    if (contado < 0) return { ok: false, msg: "Indique o valor contado." };
+    const sistema = (await saldoCaixa()).saldo;
+    const diferenca = Regras.arredondar(contado - sistema);
+    const obs = (observacao || "").trim();
+    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const hoje = Regras.hojeISO();
+    const comandos = [];
+    if (registarAjuste && Math.abs(diferenca) > 0.005) {
+      const desc = "Ajuste de reconciliação (" + (diferenca > 0 ? "sobra" : "falta") + ")" + (obs ? " - " + obs : "");
+      comandos.push({
+        sql: "WITH ajuste AS (INSERT INTO caixa (tipo, valor, justificativa, categoria, registado_por, data_movimento) " +
+             "VALUES (?, ?::numeric, ?, 'AJUSTE', ?, ?::timestamp) RETURNING id) " +
+             "INSERT INTO caixa_reconciliacoes (data_referencia, saldo_sistema, saldo_contado, diferenca, ajuste_caixa_id, observacao, feito_por, feito_em) " +
+             "SELECT ?::date, ?::numeric, ?::numeric, ?::numeric, ajuste.id, ?, ?, ?::timestamp FROM ajuste",
+        params: [diferenca > 0 ? "ENTRADA" : "SAIDA", Math.abs(diferenca), desc.substring(0, 255), quem, agora,
+                 hoje, sistema, contado, diferenca, obs, quem, agora],
+      });
+    } else {
+      comandos.push({
+        sql: "INSERT INTO caixa_reconciliacoes (data_referencia, saldo_sistema, saldo_contado, diferenca, ajuste_caixa_id, observacao, feito_por, feito_em) " +
+             "VALUES (?::date, ?::numeric, ?::numeric, ?::numeric, NULL, ?, ?, ?::timestamp)",
+        params: [hoje, sistema, contado, diferenca, obs, quem, agora],
+      });
+    }
+    comandos.push({ sql: "UPDATE caixa SET reconciliado_em=? WHERE reconciliado_em IS NULL", params: [agora] });
+    await DB.lote(comandos);
+    let msg = "Reconciliação registada. Saldo do sistema " + Regras.mt(sistema) + ", contado " + Regras.mt(contado) + ".";
+    if (Math.abs(diferenca) > 0.005) msg += " Diferença: " + (diferenca > 0 ? "sobra " : "falta ") + Regras.mt(Math.abs(diferenca)) + (registarAjuste ? " (ajuste registado)." : ".");
+    else msg += " Sem diferença. ✔";
+    return { ok: true, msg };
+  }
+
+  // ---------- Assistente de IA (Gemini) ----------
+  const MODELOS_IA = ["gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"];
+  async function iaPerguntar(contexto, historico, pergunta) {
+    const chave = DB.chaveGemini();
+    if (!chave) return { texto: "O assistente de IA não está configurado (falta a chave no código de ligação).", online: false };
+    const contents = (historico || []).map((m) => ({ role: m.user ? "user" : "model", parts: [{ text: m.texto }] }));
+    contents.push({ role: "user", parts: [{ text: pergunta }] });
+    const body = JSON.stringify({
+      system_instruction: { parts: [{ text: contexto }] },
+      contents, generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+    });
+    for (const modelo of MODELOS_IA) {
+      try {
+        const resp = await fetch("https://generativelanguage.googleapis.com/v1beta/models/" + modelo + ":generateContent?key=" + encodeURIComponent(chave),
+          { method: "POST", headers: { "Content-Type": "application/json" }, body });
+        if (!resp.ok) continue;
+        const j = await resp.json();
+        const t = (((j.candidates || [])[0] || {}).content || {}).parts;
+        const texto = t ? t.map((p) => p.text || "").join("") : "";
+        if (texto.trim()) return { texto: texto.trim(), online: true };
+      } catch (e) { /* tenta o próximo modelo */ }
+    }
+    return { texto: "Não consegui falar com o serviço de IA (sem Internet ou sem acesso ao modelo). Tente de novo.", online: false };
+  }
+
   // ---------- SMS enviados (só leitura; a tabela existe apenas na base real) ----------
   async function smsEnviadosListar() {
     try {
@@ -845,6 +947,7 @@ const Dados = (() => {
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, smsEnviadosListar,
     alterarMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
+    alterarVencimento, alterarDataDesembolso, reconciliar, iaPerguntar,
     _nome: "",
   };
 })();

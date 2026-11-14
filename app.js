@@ -16,6 +16,8 @@
     ["APROVACOES", "Aprovar Pedidos", true], ["UTILIZADORES", "Utilizadores e Permissões", true],
     ["PAGAR_PRESTACAO", "Registar pagamentos", true], ["REMOVER_MULTA", "Remover / reduzir multas", true],
     ["ELIMINAR_CLIENTE", "Eliminar clientes", true], ["ANULAR_EMPRESTIMO", "Anular empréstimos", true],
+    ["CAIXA_EDITAR", "Editar / apagar no caixa", true], ["CAIXA_OCULTAR", "Ocultar operações do caixa", true],
+    ["CAIXA_RECONCILIAR", "Reconciliar o caixa", true],
     ["EXPORTAR", "Exportar relatórios", false], ["SMS_VER", "Ver SMS enviados", false],
   ];
   const RESERVADAS = new Set(["UTILIZADORES"]);
@@ -227,9 +229,21 @@
     });
   }
 
+  function animarLogo() {
+    try {
+      const o = document.createElement("div");
+      o.className = "logo-anim";
+      o.innerHTML = '<div class="circ"><img src="icons/icon-192.png" alt=""></div>';
+      document.body.appendChild(o);
+      setTimeout(() => o.remove(), 660);
+    } catch (e) {}
+  }
+
   function navegar(aba) {
+    const mudou = S.ecra !== aba;
     S.ecra = aba;
     [...$("barra-inferior").children].forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
+    if (mudou) animarLogo();
     window.scrollTo(0, 0);
     if (aba === "inicio") verInicio();
     else if (aba === "cobrancas") verCobrancas();
@@ -400,7 +414,20 @@
         <button class="btn" id="pg-btn">Registar pagamento</button>` :
         (p.estado === "PAGO" ? `<p class="sub" style="text-align:center;margin-top:14px">Prestação paga.</p>` : "")}
       ${podeMulta ? `<button class="btn secundario" id="pg-multa" style="margin-top:10px">Perdoar / reduzir multa</button>` : ""}
+      ${pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-venc" style="margin-top:10px">Alterar data de vencimento</button>` : ""}
     `);
+    if (pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO") $("pg-venc").onclick = () => {
+      abrirFolha(`<h3>Alterar vencimento</h3><div class="sub">${p.numero}ª prestação · ${esc(p.nomeCliente)} · vence ${R.data(p.vencimento)}</div>
+        <div class="campo"><label>Nova data de vencimento</label><input id="vn-data" type="date" value="${p.vencimento}"></div>
+        <div class="erro-msg" id="vn-erro"></div><button class="btn" id="vn-ok">Guardar</button>`);
+      $("vn-ok").onclick = async () => {
+        $("vn-ok").disabled = true;
+        try { const r = await Dados.alterarVencimento(p.id, $("vn-data").value, p.nomeCliente, p.numero);
+          if (!r.ok) { $("vn-erro").textContent = r.msg; $("vn-ok").disabled = false; return; }
+          fecharFolha(); toast(r.msg); if (recarregar) recarregar();
+        } catch (e) { $("vn-erro").textContent = e.message; $("vn-ok").disabled = false; }
+      };
+    };
     if (podeMulta) $("pg-multa").onclick = () => {
       abrirFolha(`<h3>Multa de ${esc(p.nomeCliente)}</h3><div class="sub">${p.numero}ª prestação · multa atual ${R.mt(multa)}</div>
         <div class="campo"><label>Nova multa (0 para perdoar tudo)</label><input id="mu-valor" type="number" inputmode="decimal" step="0.01" value="0" max="${multa.toFixed(2)}"></div>
@@ -636,8 +663,23 @@
       ${e.bensGarantia ? `<div class="linha-dados"><span class="r">Garantia</span><span class="v">${esc(e.bensGarantia)}</span></div>` : ""}
       ${e.emFalta > 0 ? `<div class="linha-dados"><span class="r">Em falta</span><span class="v" style="color:var(--vermelho)">${vmt(e.emFalta)}</span></div>` : ""}
       ${pend ? aprovarBloco(e) : (prest.length ? `<div class="seccao-titulo" style="margin-left:0">Prestações</div>${prestHtml}` : "")}
-      ${!pend && pode("ANULAR_EMPRESTIMO") && e.estado === "APROVADO" && e.jaPago === 0 ? `<button class="btn perigo" id="e-anular" style="margin-top:14px">Anular empréstimo</button>` : ""}
+      ${!pend && pode("ANULAR_EMPRESTIMO") && (e.estado === "APROVADO" || e.estado === "PAGO") && e.dataAprovacao ? `<button class="btn secundario" id="e-desemb" style="margin-top:14px">Alterar data de desembolso</button>` : ""}
+      ${!pend && pode("ANULAR_EMPRESTIMO") && e.estado === "APROVADO" && e.jaPago === 0 ? `<button class="btn perigo" id="e-anular" style="margin-top:10px">Anular empréstimo</button>` : ""}
     `);
+    if ($("e-desemb")) $("e-desemb").onclick = () => {
+      abrirFolha(`<h3>Data de desembolso</h3><div class="sub">Empréstimo #${e.id} · ${esc(e.nomeCliente)} · atual ${R.data(e.dataAprovacao)}</div>
+        <div class="campo"><label>Nova data de desembolso</label><input id="dd-data" type="date" value="${e.dataAprovacao}" max="${R.hojeISO()}"></div>
+        <label style="display:flex;align-items:center;gap:10px;font-size:.9rem;margin-bottom:12px">
+          <input type="checkbox" id="dd-mover" checked style="width:auto;transform:scale(1.2)"> Mover também as datas das prestações</label>
+        <div class="erro-msg" id="dd-erro"></div><button class="btn" id="dd-ok">Guardar</button>`);
+      $("dd-ok").onclick = async () => {
+        $("dd-ok").disabled = true;
+        try { const r = await Dados.alterarDataDesembolso(e, $("dd-data").value, nomeRegisto(), $("dd-mover").checked);
+          if (!r.ok) { $("dd-erro").textContent = r.msg; $("dd-ok").disabled = false; return; }
+          fecharFolha(); toast(r.msg); if (recarregar) recarregar();
+        } catch (err) { $("dd-erro").textContent = err.message; $("dd-ok").disabled = false; }
+      };
+    };
     $("folha").querySelectorAll("[data-pid]").forEach((b) => {
       const p = prest.find((x) => x.id == b.dataset.pid);
       if (p.estado !== "PAGO" && pode("PAGAR_PRESTACAO")) b.onclick = () => abrirPrestacao(p, recarregar);
@@ -733,6 +775,7 @@
       ${pode("CAIXA") ? op("lixeira", "🗑️", "Lixeira", "Lançamentos e pedidos apagados") : ""}
       ${pode("SMS_VER") ? op("sms", "✉️", "SMS enviados", "Cobranças e recados enviados") : ""}
       ${S.user.perfil === "ADMIN" ? op("acessos", "🕘", "Acessos", "Quem entrou e quando") : ""}
+      ${op("assistente", "🤖", "Assistente", "Perguntas sobre o negócio")}
       ${op("notificacoes", "🔔", "Notificações", "")}
       <div class="seccao-titulo">Conta</div>
       ${op("perfil", "✏️", "Editar o meu nome", "")}
@@ -750,6 +793,7 @@
     if (op === "lixeira") return verLixeira();
     if (op === "sms") return verSms();
     if (op === "acessos") return verAcessos();
+    if (op === "assistente") return verAssistente();
     if (op === "utilizadores") return verUtilizadores();
     if (op === "notificacoes") return verNotificacoes();
     if (op === "perfil") return formNome();
@@ -787,12 +831,39 @@
           <div class="kpi"><div class="rotulo">Entradas</div><div class="valor" style="color:var(--verde)">${vmt(s.entradas)}</div></div>
           <div class="kpi"><div class="rotulo">Saídas</div><div class="valor" style="color:var(--vermelho)">${vmt(s.saidas)}</div></div>
         </div>
-        ${pode("EXPORTAR") ? `<button class="btn secundario" id="cx-pdf" style="margin-bottom:8px">📄 Exportar PDF</button>` : ""}
+        <div class="btn-linha" style="margin-bottom:8px">
+          ${pode("EXPORTAR") ? `<button class="btn secundario" id="cx-pdf">📄 PDF</button>` : ""}
+          ${pode("CAIXA_RECONCILIAR") ? `<button class="btn secundario" id="cx-rec">⚖️ Reconciliar</button>` : ""}
+        </div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div class="seccao-titulo">Movimentos</div>
           ${pode("CAIXA_OCULTAR") ? `<label style="font-size:.78rem;color:var(--texto-suave)"><input type="checkbox" id="cx-oc" ${caixaVerOcultos ? "checked" : ""}> ver ocultos</label>` : ""}
         </div>${lista || vazio("💰", "Sem movimentos.")}`;
       if ($("cx-oc")) $("cx-oc").onchange = (e) => { caixaVerOcultos = e.target.checked; verCaixa(); };
+      if ($("cx-rec")) $("cx-rec").onclick = () => {
+        abrirFolha(`<h3>Reconciliar o caixa</h3><div class="sub">Saldo do sistema: ${R.mt(s.saldo)}</div>
+          <div class="campo"><label>Dinheiro contado (MT)</label><input id="rc-contado" type="number" inputmode="decimal" value="${s.saldo.toFixed(2)}"></div>
+          <div class="campo"><label>Observação (opcional)</label><input id="rc-obs" placeholder="ex.: contagem do fim do dia"></div>
+          <label style="display:flex;align-items:center;gap:10px;font-size:.9rem;margin-bottom:6px">
+            <input type="checkbox" id="rc-ajuste" checked style="width:auto;transform:scale(1.2)"> Registar a diferença como ajuste no caixa</label>
+          <div id="rc-dif" class="sub" style="margin:8px 0"></div>
+          <div class="erro-msg" id="rc-erro"></div><button class="btn" id="rc-ok">Reconciliar</button>`);
+        const mostrarDif = () => {
+          const cont = parseFloat($("rc-contado").value);
+          if (isNaN(cont)) { $("rc-dif").textContent = ""; return; }
+          const d = R.arredondar(cont - s.saldo);
+          $("rc-dif").innerHTML = Math.abs(d) < 0.005 ? "Sem diferença ✔"
+            : `<b style="color:${d > 0 ? "var(--verde)" : "var(--vermelho)"}">${d > 0 ? "Sobra" : "Falta"} ${R.mt(Math.abs(d))}</b>`;
+        };
+        $("rc-contado").oninput = mostrarDif; mostrarDif();
+        $("rc-ok").onclick = async () => {
+          $("rc-ok").disabled = true;
+          try { const r = await Dados.reconciliar(parseFloat($("rc-contado").value), $("rc-obs").value, $("rc-ajuste").checked, nomeRegisto());
+            if (!r.ok) { $("rc-erro").textContent = r.msg; $("rc-ok").disabled = false; return; }
+            fecharFolha(); toast(r.msg); verCaixa();
+          } catch (e) { $("rc-erro").textContent = e.message; $("rc-ok").disabled = false; }
+        };
+      };
       if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa",
         ["Data", "Tipo", "Categoria", "Descrição", "Valor (MT)"],
         movs.map((m) => [R.dataHora(m.dataMovimento), m.tipo, curto(m.categoria), m.justificativa || "", (m.tipo === "ENTRADA" ? "+" : "-") + R.mt(m.valor)]),
@@ -1085,6 +1156,75 @@
           <span class="det" style="font-size:.74rem">${R.dataHora(a.dataHora)}</span></span>
         <span class="fim"><span class="etiqueta e-neutro" style="color:${cor[a.evento] || "var(--texto-suave)"}">${esc(a.evento)}</span></span></div>`).join("");
     } catch (e) { c.innerHTML = erroEcra(e, verAcessos); }
+  }
+
+  // ---------- Assistente de IA ----------
+  let iaHist = [];
+  async function montarContextoIA() {
+    const nome = S.user.nome || S.user.utilizador;
+    let ctx = "És o assistente virtual do Kubatsira Microcrédito, uma empresa de microcrédito em Moçambique. " +
+      "Falas com " + nome + " (" + perfilNome(S.user.perfil) + "). Responde em português de Moçambique, de forma curta, clara e educada. " +
+      "Regras do produto: juros de 30% sobre o capital; multa de 2% do valor da prestação por cada dia de atraso; " +
+      "modalidades: 6 prestações de 5 em 5 dias, ou prestação única aos 30 dias. Valores em Meticais (MT).\n\n";
+    try {
+      if (pode("BALANCO")) {
+        const ind = await Dados.balanco();
+        const s = await Dados.saldoCaixa();
+        ctx += "Dados atuais da empresa:\n" +
+          "- Capital investido: " + R.mt(ind.capitalInvestido) + "\n" +
+          "- Total a receber: " + R.mt(ind.totalAReceber) + " (em atraso: " + R.mt(ind.emAtraso) + ")\n" +
+          "- Margem de juros esperada: " + R.mt(ind.margemLucro) + "\n" +
+          "- Saldo em caixa: " + R.mt(s.saldo) + "\n" +
+          "- Empréstimos: " + ind.emCurso + " em curso, " + ind.pagos + " pagos, " + ind.pendentes + " pendentes\n" +
+          "- Prestações: " + ind.prestacoesAtrasadas + " em atraso, " + ind.prestacoesNoPrazo + " no prazo\n";
+      } else {
+        const cob = await Dados.listarPorPagar();
+        ctx += "Há " + cob.length + " prestações por cobrar. NÃO reveles valores financeiros globais da empresa a um agente.\n";
+      }
+    } catch (e) { ctx += "(Não foi possível carregar os números atuais.)\n"; }
+    return ctx;
+  }
+
+  function markdownLeve(t) {
+    return esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\*(.+?)\*/g, "<i>$1</i>").replace(/\n/g, "<br>");
+  }
+
+  async function verAssistente() {
+    cabecalho("Assistente", "Perguntas sobre o negócio");
+    const c = $("conteudo");
+    c.innerHTML = `<div id="ia-chat" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px"></div>
+      <div style="position:sticky;bottom:calc(var(--barra) + env(safe-area-inset-bottom));background:var(--fundo);padding:8px 0">
+        <div style="display:flex;gap:8px">
+          <input id="ia-in" placeholder="Escreva a sua pergunta…" style="flex:1;padding:12px 14px;border:1.5px solid var(--borda);border-radius:12px;font-size:1rem">
+          <button class="btn" id="ia-send" style="width:auto;margin:0;padding:12px 18px">➤</button>
+        </div></div>`;
+    const chat = $("ia-chat");
+    const bolha = (texto, meu) => {
+      const d = el(`<div style="max-width:85%;padding:11px 14px;border-radius:16px;font-size:.92rem;${meu
+        ? "align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:4px"
+        : "align-self:flex-start;background:var(--cartao);border:1px solid var(--borda);border-bottom-left-radius:4px"}">${meu ? esc(texto) : markdownLeve(texto)}</div>`);
+      chat.appendChild(d); window.scrollTo(0, document.body.scrollHeight); return d;
+    };
+    if (!iaHist.length) bolha("Olá! Sou o assistente do Kubatsira. Pergunte-me sobre cobranças, clientes, o balanço ou as regras do crédito.", false);
+    else iaHist.forEach((m) => bolha(m.texto, m.user));
+
+    let contexto = null;
+    const enviar = async () => {
+      const q = $("ia-in").value.trim();
+      if (!q) return;
+      $("ia-in").value = ""; $("ia-send").disabled = true;
+      bolha(q, true); iaHist.push({ user: true, texto: q });
+      const pensar = bolha("…", false);
+      try {
+        if (!contexto) contexto = await montarContextoIA();
+        const r = await Dados.iaPerguntar(contexto, iaHist.slice(0, -1), q);
+        pensar.innerHTML = markdownLeve(r.texto);
+        iaHist.push({ user: false, texto: r.texto });
+      } catch (e) { pensar.innerHTML = esc("Erro: " + e.message); }
+      $("ia-send").disabled = false; window.scrollTo(0, document.body.scrollHeight);
+    };
+    $("ia-send").onclick = enviar;
+    $("ia-in").onkeydown = (e) => { if (e.key === "Enter") enviar(); };
   }
 
   // ---------- Perfil ----------
