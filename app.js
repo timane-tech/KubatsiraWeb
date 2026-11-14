@@ -90,6 +90,51 @@
   }
   const R = Regras;
 
+  // ---------- Ícones SVG (linha, herdam a cor do texto) ----------
+  const ICONES = {
+    inicio: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>',
+    cobrancas: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6"/><path d="M9 16h6"/>',
+    clientes: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    credito: '<rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/>',
+    mais: '<circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/>',
+    caixa: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+    poupanca: '<path d="M19 5c-1.5 0-2.7 1-3 2.3A8.9 8.9 0 0 0 12 6.5C7 6.5 3 9.4 3 13c0 1.9 1.1 3.6 2.8 4.8L5 21h3l.8-2.1c1 .2 2.1.3 3.2.3s2.2-.1 3.2-.3L16 21h3l-.8-3.2c1.2-.8 2-1.9 2.4-3.1H22v-4h-1.3A5.3 5.3 0 0 0 19 8.3V5z"/><circle cx="8.5" cy="12" r=".9" fill="currentColor" stroke="none"/>',
+    utilizadores: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 3 3L22 7l-3-3z"/>',
+    lixeira: '<path d="M3 6h18"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>',
+    sms: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/>',
+    acessos: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    assistente: '<rect x="4" y="8" width="16" height="12" rx="2"/><path d="M12 4v4"/><circle cx="12" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="9" cy="14" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="14" r="1.1" fill="currentColor" stroke="none"/><path d="M2 14h2"/><path d="M20 14h2"/>',
+    notificacoes: '<path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+    perfil: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    senha: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    biometria: '<path d="M5.3 11a7 7 0 0 1 11-5.6"/><path d="M4 15s.6-1.6.6-3.2"/><path d="M8.6 8.6a5 5 0 0 1 7.4 4.4c0 1.8.3 3 .3 3"/><path d="M12 11a1 1 0 0 0-1 1c0 2.2.6 4.2.6 4.2"/><path d="M19.8 12c0-.3.1-.7.1-1"/>',
+    ligacao: '<path d="M9 7V2"/><path d="M15 7V2"/><path d="M6 7h12v3a6 6 0 0 1-12 0z"/><path d="M12 16v6"/>',
+    sobre: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="8" r=".6" fill="currentColor" stroke="none"/>',
+    sair: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+    olho: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>',
+    olhoff: '<path d="M9.9 4.2A10.9 10.9 0 0 1 12 4c6.5 0 10 7 10 7a18 18 0 0 1-3 3.6"/><path d="M6.6 6.6A18 18 0 0 0 2 12s3.5 7 10 7a10.9 10.9 0 0 0 4.4-.9"/><path d="M3 3l18 18"/>',
+    mais_add: '<path d="M12 5v14"/><path d="M5 12h14"/>',
+    pdf: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h4"/>',
+    reconciliar: '<path d="M12 3v18"/><path d="M5 7h14"/><path d="m5 7-3 6a3 3 0 0 0 6 0z"/><path d="m19 7 3 6a3 3 0 0 1-6 0z"/><path d="M7 21h10"/>',
+    pesquisa: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/>',
+    entrada: '<path d="M12 5v14"/><path d="m19 12-7 7-7-7"/>',
+    saida: '<path d="M12 19V5"/><path d="m5 12 7-7 7 7"/>',
+    restaurar: '<path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 2.6-6.4L3 9"/>',
+    enviar: '<path d="m22 2-7 20-4-9-9-4z"/><path d="M22 2 11 13"/>',
+    alerta: '<path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r=".6" fill="currentColor" stroke="none"/>',
+    ok: '<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+    check: '<path d="M5 13l4 4L19 7"/>',
+    estrela: '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9 6.8 19.1l1-5.8L3.5 9.2l5.9-.9z" fill="currentColor" stroke="none"/>',
+    telemovel: '<rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/>',
+    computador: '<rect x="2" y="4" width="20" height="12" rx="2"/><path d="M8 20h8"/><path d="M12 16v4"/>',
+  };
+  function ic(nome, tam) {
+    const p = ICONES[nome];
+    if (!p) return "";
+    const s = tam || 22;
+    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;display:inline-block">${p}</svg>`;
+  }
+
   // Valor eventualmente oculto (modo privado)
   const vmt = (v) => (S.ocultar ? "••••" : R.mt(v));
 
@@ -122,7 +167,7 @@
   }
 
   const spinner = '<div class="carregar"><div class="spinner"></div>A carregar…</div>';
-  const vazio = (ic, txt) => `<div class="vazio"><span class="ic">${ic}</span>${esc(txt)}</div>`;
+  const vazio = (nome, txt) => `<div class="vazio"><span class="ic" style="color:var(--borda)">${ic(nome, 46)}</span>${esc(txt)}</div>`;
 
   async function comErro(fn) {
     try { return await fn(); }
@@ -153,7 +198,7 @@
           <div class="erro-msg" id="lig-erro"></div>
           <button class="btn" id="lig-btn">Ligar</button>
           <div class="aviso-caixa" style="margin-bottom:0">
-            ⚠️ Use esta ligação apenas no seu próprio telemóvel/computador, protegido pelo código de desbloqueio.
+            ${ic("alerta", 15)} Use esta ligação apenas no seu próprio telemóvel/computador, protegido pelo código de desbloqueio.
             O código dá acesso aos dados dos clientes.
           </div>
         </div>
@@ -247,18 +292,18 @@
   // Navegação
   // ============================================================
   const ABAS = [
-    { id: "inicio", ic: "🏠", rot: "Início", perm: null },
-    { id: "cobrancas", ic: "📋", rot: "Cobranças", perm: "COBRANCAS" },
-    { id: "clientes", ic: "👥", rot: "Clientes", perm: "CLIENTES" },
-    { id: "emprestimos", ic: "💳", rot: "Crédito", perm: null },
-    { id: "mais", ic: "⋯", rot: "Mais", perm: null },
+    { id: "inicio", ic: "inicio", rot: "Início", perm: null },
+    { id: "cobrancas", ic: "cobrancas", rot: "Cobranças", perm: "COBRANCAS" },
+    { id: "clientes", ic: "clientes", rot: "Clientes", perm: "CLIENTES" },
+    { id: "emprestimos", ic: "credito", rot: "Crédito", perm: null },
+    { id: "mais", ic: "mais", rot: "Mais", perm: null },
   ];
 
   function construirBarra() {
     const b = $("barra-inferior");
     b.innerHTML = "";
     ABAS.forEach((a) => {
-      const btn = el(`<button data-aba="${a.id}"><span class="ic">${a.ic}</span><span>${a.rot}</span></button>`);
+      const btn = el(`<button data-aba="${a.id}"><span class="ic">${ic(a.ic, 23)}</span><span>${a.rot}</span></button>`);
       btn.onclick = () => navegar(a.id);
       b.appendChild(btn);
     });
@@ -295,7 +340,7 @@
         ${sub ? `<div class="sub">${esc(sub)}</div>` : ""}
       </div>
       ${acoes || ""}
-      <button class="icone" id="cb-olho" title="Mostrar/ocultar valores">${S.ocultar ? "🙈" : "👁️"}</button>
+      <button class="icone" id="cb-olho" title="Mostrar/ocultar valores">${ic(S.ocultar ? "olhoff" : "olho", 20)}</button>
       <div class="avatar">${esc(ini)}</div>`;
     $("cb-olho").onclick = async () => {
       if (S.ocultar && Bio.ativa(S.user.id)) {   // vai revelar: pede Face ID/Touch ID
@@ -369,7 +414,7 @@
         <div class="cartao">${barras}</div>
         <div class="seccao-titulo">Maiores clientes</div>
         <div class="cartao">${topHtml}</div>
-        ${pode("EXPORTAR") ? `<button class="btn secundario" id="bal-pdf" style="margin-top:4px">📄 Exportar Balanço (PDF)</button>` : ""}`;
+        ${pode("EXPORTAR") ? `<button class="btn secundario" id="bal-pdf" style="margin-top:4px">${ic("pdf", 16)} Exportar Balanço (PDF)</button>` : ""}`;
       if ($("bal-pdf")) $("bal-pdf").onclick = () => exportarPDF("Balanço Geral",
         ["Indicador", "Valor"],
         [["Capital investido", R.mt(ind.capitalInvestido)], ["Total a receber", R.mt(ind.totalAReceber)],
@@ -387,8 +432,8 @@
     mostrar("ecra-app");
     cabecalho("Cobranças", "Prestações do dia e em atraso");
     const c = $("conteudo");
-    c.innerHTML = `<div class="pesquisa"><span class="lupa">🔎</span><input id="cob-f" placeholder="Procurar cliente…"></div>
-      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cob-pdf" style="margin-bottom:10px">📄 Exportar PDF</button>` : ""}
+    c.innerHTML = `<div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cob-f" placeholder="Procurar cliente…"></div>
+      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cob-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
       <div id="cob-lista">${spinner}</div>`;
     let todas = [];
     try { todas = await Dados.listarPorPagar(); }
@@ -401,7 +446,7 @@
     const render = (f) => {
       f = (f || "").toLowerCase();
       const lista = todas.filter((p) => !f || p.nomeCliente.toLowerCase().includes(f));
-      if (!lista.length) { $("cob-lista").innerHTML = vazio("✅", todas.length ? "Nenhum resultado." : "Não há prestações por cobrar. Bom trabalho!"); return; }
+      if (!lista.length) { $("cob-lista").innerHTML = vazio("ok", todas.length ? "Nenhum resultado." : "Não há prestações por cobrar. Bom trabalho!"); return; }
       let totalHoje = 0, totalAtraso = 0;
       const itens = lista.map((p) => {
         const falta = R.emFalta(p, hoje);
@@ -456,7 +501,7 @@
         (p.estado === "PAGO" ? `<p class="sub" style="text-align:center;margin-top:14px">Prestação paga.</p>` : "")}
       ${podeMulta ? `<button class="btn secundario" id="pg-multa" style="margin-top:10px">Perdoar / reduzir multa</button>` : ""}
       ${pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-venc" style="margin-top:10px">Alterar data de vencimento</button>` : ""}
-      ${p.telefoneCliente && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-sms" style="margin-top:10px">✉️ Enviar SMS de cobrança</button>` : ""}
+      ${p.telefoneCliente && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-sms" style="margin-top:10px">${ic("sms", 16)} Enviar SMS de cobrança</button>` : ""}
     `);
     if ($("pg-sms")) $("pg-sms").onclick = () => abrirSMS(p.telefoneCliente, mensagemCobranca(p));
     if (pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO") $("pg-venc").onclick = () => {
@@ -507,12 +552,12 @@
   // ============================================================
   async function verClientes() {
     mostrar("ecra-app");
-    const acao = pode("CLIENTES") ? `<button class="icone" id="cl-novo" title="Novo cliente">＋</button>` : "";
+    const acao = pode("CLIENTES") ? `<button class="icone" id="cl-novo" title="Novo cliente">${ic("mais_add", 20)}</button>` : "";
     cabecalho("Clientes", "", acao);
     if ($("cl-novo")) $("cl-novo").onclick = () => formCliente(null);
     const c = $("conteudo");
-    c.innerHTML = `<div class="pesquisa"><span class="lupa">🔎</span><input id="cl-f" placeholder="Procurar por nome, telefone ou local…"></div>
-      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cl-pdf" style="margin-bottom:10px">📄 Exportar PDF</button>` : ""}
+    c.innerHTML = `<div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cl-f" placeholder="Procurar por nome, telefone ou local…"></div>
+      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cl-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
       <div id="cl-lista">${spinner}</div>`;
     let timer, ultima = [];
     if ($("cl-pdf")) $("cl-pdf").onclick = () => exportarPDF("Clientes",
@@ -524,7 +569,7 @@
       try {
         const lista = await Dados.listarClientes(f);
         ultima = lista;
-        if (!lista.length) { $("cl-lista").innerHTML = vazio("👥", "Nenhum cliente encontrado."); return; }
+        if (!lista.length) { $("cl-lista").innerHTML = vazio("clientes", "Nenhum cliente encontrado."); return; }
         $("cl-lista").innerHTML = lista.map((cl) => {
           const atraso = cl.prestacoesEmAtraso > 0;
           return `<button class="item" data-cid="${cl.id}">
@@ -552,7 +597,7 @@
       <button class="item" data-eid="${e.id}">
         <span class="meio"><span class="nome">#${e.id} · ${vmt(e.capital)}</span>
           <span class="det">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)} · ${e.prestacoesPagas}/${e.totalPrestacoes} pagas</span></span>
-        <span class="fim"><span class="mt">${e.emFalta > 0 ? vmt(e.emFalta) : "✓"}</span></span></button>`).join("")
+        <span class="fim"><span class="mt">${e.emFalta > 0 ? vmt(e.emFalta) : `<span style="color:var(--verde)">${ic("check", 18)}</span>`}</span></span></button>`).join("")
       : `<p class="sub" style="color:var(--texto-suave)">Sem empréstimos.</p>`;
     abrirFolha(`
       <h3>${esc(cl.nome)}</h3><div class="sub">${esc(cl.classificacao || "Cliente")}</div>
@@ -638,7 +683,7 @@
     let ativa = abas[0][0];
     c.innerHTML = `<div class="cartao" style="display:flex;gap:8px;padding:8px">${abas.map(([id, r]) =>
       `<button class="btn ${id === ativa ? "" : "secundario"}" data-ab="${id}" style="margin:0;padding:10px">${r}</button>`).join("")}</div>
-      ${pode("EXPORTAR") ? `<button class="btn secundario" id="emp-pdf" style="margin-bottom:10px">📄 Exportar PDF</button>` : ""}
+      ${pode("EXPORTAR") ? `<button class="btn secundario" id="emp-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
       <div id="emp-lista">${spinner}</div>`;
     let fonte = [];
     if ($("emp-pdf")) $("emp-pdf").onclick = () => exportarPDF("Empréstimos",
@@ -650,12 +695,12 @@
       try {
         if (ativa === "pendentes") {
           fonte = await Dados.listarPendentes();
-          if (!fonte.length) { $("emp-lista").innerHTML = vazio("✅", "Não há pedidos à espera de aprovação."); return; }
+          if (!fonte.length) { $("emp-lista").innerHTML = vazio("ok", "Não há pedidos à espera de aprovação."); return; }
           $("emp-lista").innerHTML = fonte.map((e) => itemEmp(e, true)).join("");
         } else {
           fonte = await Dados.listarEmprestimos();
           if (!pode("TODOS_EMPRESTIMOS")) fonte = fonte.filter((e) => e.estado === "APROVADO");
-          if (!fonte.length) { $("emp-lista").innerHTML = vazio("💳", "Nenhum empréstimo."); return; }
+          if (!fonte.length) { $("emp-lista").innerHTML = vazio("credito", "Nenhum empréstimo."); return; }
           $("emp-lista").innerHTML = fonte.map((e) => itemEmp(e, false)).join("");
         }
         $("emp-lista").querySelectorAll("[data-eid]").forEach((b) => b.onclick = () =>
@@ -677,7 +722,7 @@
       <span class="meio"><span class="nome">${esc(e.nomeCliente)} · #${e.id}</span>
         <span class="det">${vmt(e.capital)} · ${e.modalidade === "PARCELADO" ? "6 prest." : "única"}${pend ? " · pedido " + R.data(e.dataPedido) : ""}</span>
         <span class="etiqueta ${cls}">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></span>
-      <span class="fim"><span class="mt">${e.estado === "PENDENTE" ? "" : (e.emFalta > 0 ? vmt(e.emFalta) : "✓")}</span></span></button>`;
+      <span class="fim"><span class="mt">${e.estado === "PENDENTE" ? "" : (e.emFalta > 0 ? vmt(e.emFalta) : `<span style="color:var(--verde)">${ic("check", 18)}</span>`)}</span></span></button>`;
   }
 
   async function abrirEmprestimo(e, recarregar) {
@@ -692,7 +737,7 @@
         <span class="meio"><span class="nome">${p.numero}ª · ${R.data(p.vencimento)}</span>
           <span class="det">${R.mt(p.valor)}${p.multaCongelada || R.diasAtraso(p.vencimento, hoje) > 0 ? " + multa " + R.mt(R.multaPrestacao(p, hoje)) : ""}</span>
           <span class="etiqueta ${cls}">${R.situacaoPrestacao(p)}</span></span>
-        <span class="fim"><span class="mt">${p.estado === "PAGO" ? "✓" : vmt(falta)}</span></span></button>`;
+        <span class="fim"><span class="mt">${p.estado === "PAGO" ? `<span style="color:var(--verde)">${ic("check", 18)}</span>` : vmt(falta)}</span></span></button>`;
     }).join("");
     const pend = e.estado === "PENDENTE";
     abrirFolha(`
@@ -806,7 +851,7 @@
     const c = $("conteudo");
     const bioDisp = await Bio.disponivel();
     const bioOn = Bio.ativa(S.user.id);
-    const op = (id, ic, t, sub) => `<button class="item" data-op="${id}"><span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic}</span><span class="meio"><span class="nome">${t}</span>${sub ? `<span class="det">${sub}</span>` : ""}</span></button>`;
+    const op = (id, nome, t, sub) => `<button class="item" data-op="${id}"><span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic(nome, 20)}</span><span class="meio"><span class="nome">${t}</span>${sub ? `<span class="det">${sub}</span>` : ""}</span></button>`;
     c.innerHTML = `
       <div class="cartao" style="display:flex;align-items:center;gap:14px">
         <div class="avatar" style="width:54px;height:54px;background:var(--navy)">${esc(R.iniciais(S.user.nome || S.user.utilizador))}</div>
@@ -814,22 +859,22 @@
           <div class="det" style="color:var(--texto-suave)">${perfilNome(S.user.perfil)}${S.user.principal ? " principal" : ""}</div></div>
       </div>
       <div class="seccao-titulo">Gestão</div>
-      ${pode("CAIXA") ? op("caixa", "💰", "Fluxo de Caixa", "Saldo, entradas e despesas") : ""}
-      ${pode("CAIXA") ? op("poupanca", "🐖", "Poupança de Clientes", "Cofres dos clientes") : ""}
-      ${pode("UTILIZADORES") ? op("utilizadores", "🔑", "Utilizadores e Permissões", "") : ""}
-      ${pode("CAIXA") ? op("lixeira", "🗑️", "Lixeira", "Lançamentos e pedidos apagados") : ""}
-      ${pode("SMS_VER") ? op("sms", "✉️", "SMS enviados", "Cobranças e recados enviados") : ""}
-      ${S.user.perfil === "ADMIN" ? op("acessos", "🕘", "Acessos", "Quem entrou e quando") : ""}
-      ${op("assistente", "🤖", "Assistente", "Perguntas sobre o negócio")}
-      ${op("notificacoes", "🔔", "Notificações", "")}
+      ${pode("CAIXA") ? op("caixa", "caixa", "Fluxo de Caixa", "Saldo, entradas e despesas") : ""}
+      ${pode("CAIXA") ? op("poupanca", "poupanca", "Poupança de Clientes", "Cofres dos clientes") : ""}
+      ${pode("UTILIZADORES") ? op("utilizadores", "utilizadores", "Utilizadores e Permissões", "") : ""}
+      ${pode("CAIXA") ? op("lixeira", "lixeira", "Lixeira", "Lançamentos e pedidos apagados") : ""}
+      ${pode("SMS_VER") ? op("sms", "sms", "SMS enviados", "Cobranças e recados enviados") : ""}
+      ${S.user.perfil === "ADMIN" ? op("acessos", "acessos", "Acessos", "Quem entrou e quando") : ""}
+      ${op("assistente", "assistente", "Assistente", "Perguntas sobre o negócio")}
+      ${op("notificacoes", "notificacoes", "Notificações", "")}
       <div class="seccao-titulo">Conta</div>
-      ${op("perfil", "✏️", "Editar o meu nome", "")}
-      ${op("senha", "🔒", "Alterar a minha senha", "")}
-      ${bioDisp ? op("biometria", bioOn ? "🔓" : "👆", bioOn ? "Desativar Face ID / Touch ID" : "Ativar Face ID / Touch ID", bioOn ? "Pede a biometria para mostrar valores" : "Proteger a app com biometria") : ""}
+      ${op("perfil", "perfil", "Editar o meu nome", "")}
+      ${op("senha", "senha", "Alterar a minha senha", "")}
+      ${bioDisp ? op("biometria", "biometria", bioOn ? "Desativar Face ID / Touch ID" : "Ativar Face ID / Touch ID", bioOn ? "Pede a biometria para mostrar valores" : "Proteger a app com biometria") : ""}
       <div class="seccao-titulo">Sistema</div>
-      ${op("ligacao", "🔌", "Trocar de ligação", DB.servidorAtual() || "")}
-      ${op("sobre", "ℹ️", "Sobre a aplicação", "")}
-      ${op("sair", "🚪", "Terminar sessão", "")}`;
+      ${op("ligacao", "ligacao", "Trocar de ligação", DB.servidorAtual() || "")}
+      ${op("sobre", "sobre", "Sobre a aplicação", "")}
+      ${op("sair", "sair", "Terminar sessão", "")}`;
     c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => maisAcao(b.dataset.op));
   }
 
@@ -865,7 +910,7 @@
   // ---------- Caixa ----------
   let caixaVerOcultos = false;
   async function verCaixa() {
-    cabecalho("Fluxo de Caixa", "", `<button class="icone" id="cx-novo" title="Novo lançamento">＋</button>`);
+    cabecalho("Fluxo de Caixa", "", `<button class="icone" id="cx-novo" title="Novo lançamento">${ic("mais_add", 20)}</button>`);
     $("cx-novo").onclick = () => formCaixa();
     const c = $("conteudo");
     c.innerHTML = spinner;
@@ -875,7 +920,7 @@
       const lista = movs.map((m) => {
         const entrada = m.tipo === "ENTRADA";
         return `<button class="item" data-mid="${m.id}" style="${gere ? "" : "cursor:default"};${m.oculto ? "opacity:.55" : ""}">
-          <span class="avatar" style="background:${entrada ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "↓" : "↑"}</span>
+          <span class="avatar" style="background:${entrada ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${ic(entrada ? "entrada" : "saida", 18)}</span>
           <span class="meio"><span class="nome">${esc(curto(m.categoria))}${m.oculto ? " · oculto" : ""}</span><span class="det">${esc(m.justificativa || "")}</span>
             <span class="det" style="font-size:.75rem">${R.dataHora(m.dataMovimento)}</span></span>
           <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></button>`;
@@ -889,13 +934,13 @@
           <div class="kpi"><div class="rotulo">Saídas</div><div class="valor" style="color:var(--vermelho)">${vmt(s.saidas)}</div></div>
         </div>
         <div class="btn-linha" style="margin-bottom:8px">
-          ${pode("EXPORTAR") ? `<button class="btn secundario" id="cx-pdf">📄 PDF</button>` : ""}
-          ${pode("CAIXA_RECONCILIAR") ? `<button class="btn secundario" id="cx-rec">⚖️ Reconciliar</button>` : ""}
+          ${pode("EXPORTAR") ? `<button class="btn secundario" id="cx-pdf">${ic("pdf", 16)} PDF</button>` : ""}
+          ${pode("CAIXA_RECONCILIAR") ? `<button class="btn secundario" id="cx-rec">${ic("reconciliar", 16)} Reconciliar</button>` : ""}
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div class="seccao-titulo">Movimentos</div>
           ${pode("CAIXA_OCULTAR") ? `<label style="font-size:.78rem;color:var(--texto-suave)"><input type="checkbox" id="cx-oc" ${caixaVerOcultos ? "checked" : ""}> ver ocultos</label>` : ""}
-        </div>${lista || vazio("💰", "Sem movimentos.")}`;
+        </div>${lista || vazio("caixa", "Sem movimentos.")}`;
       if ($("cx-oc")) $("cx-oc").onchange = (e) => { caixaVerOcultos = e.target.checked; verCaixa(); };
       if ($("cx-rec")) $("cx-rec").onclick = () => {
         abrirFolha(`<h3>Reconciliar o caixa</h3><div class="sub">Saldo do sistema: ${R.mt(s.saldo)}</div>
@@ -909,7 +954,7 @@
           const cont = parseFloat($("rc-contado").value);
           if (isNaN(cont)) { $("rc-dif").textContent = ""; return; }
           const d = R.arredondar(cont - s.saldo);
-          $("rc-dif").innerHTML = Math.abs(d) < 0.005 ? "Sem diferença ✔"
+          $("rc-dif").innerHTML = Math.abs(d) < 0.005 ? `<span style="color:var(--verde)">${ic("check", 15)} Sem diferença</span>`
             : `<b style="color:${d > 0 ? "var(--verde)" : "var(--vermelho)"}">${d > 0 ? "Sobra" : "Falta"} ${R.mt(Math.abs(d))}</b>`;
         };
         $("rc-contado").oninput = mostrarDif; mostrarDif();
@@ -986,7 +1031,7 @@
 
   // ---------- Utilizadores ----------
   async function verUtilizadores() {
-    cabecalho("Utilizadores", "", `<button class="icone" id="u-novo" title="Novo utilizador">＋</button>`);
+    cabecalho("Utilizadores", "", `<button class="icone" id="u-novo" title="Novo utilizador">${ic("mais_add", 20)}</button>`);
     $("u-novo").onclick = () => formUtilizador(null);
     const c = $("conteudo");
     c.innerHTML = spinner;
@@ -994,7 +1039,7 @@
       const lista = await Dados.listarUtilizadores();
       c.innerHTML = lista.map((u) => `<button class="item" data-uid="${u.id}">
         <span class="avatar">${esc(R.iniciais(u.nome || u.utilizador))}</span>
-        <span class="meio"><span class="nome">${esc(u.nome || u.utilizador)}${u.principal ? " ⭐" : ""}</span>
+        <span class="meio"><span class="nome">${esc(u.nome || u.utilizador)}${u.principal ? ` <span style="color:var(--laranja)">${ic("estrela", 13)}</span>` : ""}</span>
           <span class="det">${esc(u.utilizador)} · ${perfilNome(u.perfil)}</span>
           <span class="etiqueta ${u.ativo ? "e-ok" : "e-atraso"}">${u.ativo ? "Ativo" : "Desativado"}</span></span></button>`).join("");
       c.querySelectorAll("[data-uid]").forEach((b) => b.onclick = () => formUtilizador(lista.find((x) => x.id == b.dataset.uid)));
@@ -1051,10 +1096,10 @@
     try {
       const lista = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
       c.innerHTML = lista.length ? lista.map((n) => `<div class="item" style="cursor:default">
-        <span class="avatar" style="background:var(--fundo);color:var(--navy)">🔔</span>
+        <span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic("notificacoes", 18)}</span>
         <span class="meio"><span class="nome">${esc(n.titulo || "Notificação")}</span><span class="det" style="white-space:normal">${esc(n.mensagem || "")}</span>
-          <span class="det" style="font-size:.74rem">${R.dataHora(n.data)}</span></span></div>`).join("") : vazio("🔔", "Sem notificações.");
-    } catch (e) { c.innerHTML = vazio("🔔", "Sem notificações."); }
+          <span class="det" style="font-size:.74rem">${R.dataHora(n.data)}</span></span></div>`).join("") : vazio("notificacoes", "Sem notificações.");
+    } catch (e) { c.innerHTML = vazio("notificacoes", "Sem notificações."); }
   }
 
   // ---------- Poupança de Clientes ----------
@@ -1071,7 +1116,7 @@
         <span class="meio"><span class="nome">${esc(x.nome)}</span>
           <span class="det">Depositado ${vmt(x.depositado)} · usado ${vmt(x.usado)}</span></span>
         <span class="fim"><span class="mt" style="${x.saldo > 0.005 ? "" : "color:var(--texto-suave)"}">${vmt(x.saldo)}</span></span></button>`).join("")
-        : vazio("🐖", "Ainda não há poupança de clientes.");
+        : vazio("poupanca", "Ainda não há poupança de clientes.");
       c.innerHTML = `
         <div class="kpis" style="grid-template-columns:1fr">
           <div class="kpi destaque"><div class="rotulo">Total guardado nos cofres</div><div class="valor" style="font-size:1.5rem">${vmt(total)}</div></div>
@@ -1090,7 +1135,7 @@
     const linhas = movs.map((m) => {
       const dep = m.tipo === "DEPOSITO";
       return `<div class="item" style="cursor:default">
-        <span class="avatar" style="background:${dep ? "var(--verde-bg)" : "var(--laranja-bg)"};color:${dep ? "var(--verde)" : "var(--laranja)"}">${dep ? "＋" : "−"}</span>
+        <span class="avatar" style="background:${dep ? "var(--verde-bg)" : "var(--laranja-bg)"};color:${dep ? "var(--verde)" : "var(--laranja)"}">${ic(dep ? "entrada" : "saida", 18)}</span>
         <span class="meio"><span class="nome">${dep ? "Depósito" : "Uso"}</span><span class="det" style="white-space:normal">${esc(m.descricao)}</span>
           <span class="det" style="font-size:.74rem">${R.dataHora(m.data)}</span></span>
         <span class="fim"><span class="mt" style="color:${dep ? "var(--verde)" : "var(--laranja)"}">${dep ? "+" : "−"}${R.mt(m.valor)}</span></span></div>`;
@@ -1116,16 +1161,16 @@
       try {
         if (ativa === "caixa") {
           const lista = await Dados.lixoCaixaListar();
-          if (!lista.length) { $("lix-lista").innerHTML = vazio("🗑️", "O lixo do caixa está vazio."); return; }
+          if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", "O lixo do caixa está vazio."); return; }
           $("lix-lista").innerHTML = lista.map((m) => {
             const entrada = m.tipo === "ENTRADA";
             return `<div class="item" style="cursor:default;align-items:flex-start">
-              <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">🗑️</span>
+              <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${ic("lixeira", 18)}</span>
               <span class="meio"><span class="nome">#${m.caixaId} · ${esc(curto(m.categoria))}</span>
                 <span class="det" style="white-space:normal">${esc(m.justificativa || "")}</span>
                 <span class="det" style="font-size:.74rem">Apagado por ${esc(m.eliminadoPor || "—")} · ${R.dataHora(m.eliminadoEm)}${m.anulado ? " · pagamento anulado" : ""}</span>
                 <span style="display:flex;gap:8px;margin-top:8px">
-                  <button class="btn secundario" data-restaurar="${m.id}" data-anul="${m.anulado}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">↩ Restaurar</button>
+                  <button class="btn secundario" data-restaurar="${m.id}" data-anul="${m.anulado}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">${ic("restaurar", 15)} Restaurar</button>
                   <button class="btn perigo" data-elim="${m.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">Eliminar</button>
                 </span></span>
               <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></div>`;
@@ -1146,14 +1191,14 @@
           };
         } else {
           const lista = await Dados.rejeitadosListar();
-          if (!lista.length) { $("lix-lista").innerHTML = vazio("🗑️", "Não há pedidos rejeitados."); return; }
+          if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", "Não há pedidos rejeitados."); return; }
           $("lix-lista").innerHTML = lista.map((e) => `<div class="item" style="cursor:default;align-items:flex-start">
             <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
             <span class="meio"><span class="nome">${esc(e.nomeCliente)} · #${e.id}</span>
               <span class="det">${vmt(e.capital)} · pedido ${R.data(e.dataPedido)}</span>
               <span class="det" style="font-size:.74rem">Rejeitado por ${esc(e.rejeitadoPor || "—")} · ${R.dataHora(e.rejeitadoEm)}</span>
               <span style="display:flex;gap:8px;margin-top:8px">
-                <button class="btn secundario" data-rest="${e.id}" data-cli="${e.clienteId}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">↩ Restaurar</button>
+                <button class="btn secundario" data-rest="${e.id}" data-cli="${e.clienteId}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">${ic("restaurar", 15)} Restaurar</button>
                 <button class="btn perigo" data-del="${e.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">Eliminar</button>
               </span></span></div>`).join("");
           $("lix-lista").querySelectorAll("[data-rest]").forEach((b) => b.onclick = async () => {
@@ -1184,12 +1229,12 @@
     c.innerHTML = spinner;
     try {
       const lista = await Dados.smsEnviadosListar();
-      if (lista === null) { c.innerHTML = vazio("✉️", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); return; }
-      if (!lista.length) { c.innerHTML = vazio("✉️", "Ainda não há SMS enviados."); return; }
+      if (lista === null) { c.innerHTML = vazio("sms", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); return; }
+      if (!lista.length) { c.innerHTML = vazio("sms", "Ainda não há SMS enviados."); return; }
       c.innerHTML = lista.map((s) => {
         const ok = s.estado === "ENVIADO";
         return `<div class="item" style="cursor:default;align-items:flex-start">
-          <span class="avatar" style="background:${ok ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${ok ? "var(--verde)" : "var(--vermelho)"}">✉️</span>
+          <span class="avatar" style="background:${ok ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${ok ? "var(--verde)" : "var(--vermelho)"}">${ic("sms", 18)}</span>
           <span class="meio"><span class="nome">${esc(s.nome || s.telefone)}</span>
             <span class="det" style="white-space:normal">${esc(s.texto)}</span>
             <span class="det" style="font-size:.74rem">${esc(s.telefone)} · ${esc(s.quando || "")} · ${esc(s.estado || "")}</span></span></div>`;
@@ -1204,10 +1249,10 @@
     c.innerHTML = spinner;
     try {
       const lista = await Dados.acessosListar(100);
-      if (!lista.length) { c.innerHTML = vazio("🕘", "Sem registos de acesso."); return; }
+      if (!lista.length) { c.innerHTML = vazio("acessos", "Sem registos de acesso."); return; }
       const cor = { ENTRADA: "var(--verde)", SAIDA: "var(--texto-suave)", FALHADA: "var(--vermelho)", BLOQUEIO: "var(--vermelho)", CONTA_DESATIVADA: "var(--vermelho)" };
       c.innerHTML = lista.map((a) => `<div class="item" style="cursor:default">
-        <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${a.dispositivo === "TELEMOVEL" ? "📱" : "💻"}</span>
+        <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${ic(a.dispositivo === "TELEMOVEL" ? "telemovel" : "computador", 18)}</span>
         <span class="meio"><span class="nome">${esc(a.utilizador || "—")}</span>
           <span class="det">${esc(a.perfil || "")}${a.detalhe ? " · " + esc(a.detalhe) : ""}</span>
           <span class="det" style="font-size:.74rem">${R.dataHora(a.dataHora)}</span></span>
@@ -1253,7 +1298,7 @@
       <div style="position:sticky;bottom:calc(var(--barra) + env(safe-area-inset-bottom));background:var(--fundo);padding:8px 0">
         <div style="display:flex;gap:8px">
           <input id="ia-in" placeholder="Escreva a sua pergunta…" style="flex:1;padding:12px 14px;border:1.5px solid var(--borda);border-radius:12px;font-size:1rem">
-          <button class="btn" id="ia-send" style="width:auto;margin:0;padding:12px 18px">➤</button>
+          <button class="btn" id="ia-send" style="width:auto;margin:0;padding:12px 16px">${ic("enviar", 18)}</button>
         </div></div>`;
     const chat = $("ia-chat");
     const bolha = (texto, meu) => {
@@ -1349,7 +1394,7 @@
   const curto = (cat) => ({ PRESTACAO: "Pagamento", DESEMBOLSO: "Desembolso", CAPITAL: "Entrada de capital", DESPESA: "Despesa", POUPANCA: "Poupança" }[cat] || cat || "Movimento");
   function erroEcra(e, retry) {
     window.__retry = retry;
-    return `<div class="vazio"><span class="ic">⚠️</span>${esc(e.message || "Erro ao carregar.")}<br><br>
+    return `<div class="vazio"><span class="ic" style="color:var(--laranja)">${ic("alerta", 44)}</span>${esc(e.message || "Erro ao carregar.")}<br><br>
       <button class="btn secundario" style="max-width:220px;margin:14px auto 0" onclick="window.__retry&&window.__retry()">Tentar de novo</button></div>`;
   }
 
