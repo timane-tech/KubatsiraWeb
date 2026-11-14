@@ -434,7 +434,7 @@
          ["Em atraso", R.mt(ind.emAtraso)], ["Margem (juros)", R.mt(ind.margemLucro)],
          ["Empréstimos em curso", String(ind.emCurso)], ["Pagos", String(ind.pagos)],
          ["Pendentes", String(ind.pendentes)], ["Prestações em atraso", String(ind.prestacoesAtrasadas)]],
-        []);`;
+        []);
     } catch (e) { c.innerHTML = erroEcra(e, verInicio); }
   }
 
