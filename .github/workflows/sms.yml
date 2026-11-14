@@ -1,9 +1,10 @@
 name: SMS de cobranca Kubatsira
 
 on:
-  schedule:
-    # 08:00, 12:00 e 14:00 em Mocambique (UTC+2) = 06:00, 10:00, 12:00 UTC
-    - cron: "0 6,10,12 * * *"
+  # HORARIO AUTOMATICO DESLIGADO (o gateway paga por SMS). Para o ligar, tira o "#"
+  # das 2 linhas seguintes. Enquanto desligado, so corre a mao em Actions -> Run workflow.
+  # schedule:
+  #   - cron: "0 6,10,12 * * *"   # 08:00, 12:00, 14:00 em Mocambique (UTC+2)
   workflow_dispatch:
     inputs:
       dry_run:
