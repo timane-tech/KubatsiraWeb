@@ -65,9 +65,9 @@ novo código de acesso, eliminar, ficha com empréstimos e poupança), Emprésti
 novo pedido com simulação), Fluxo de Caixa (saldo + movimentos + entradas/despesas), Utilizadores e Permissões,
 Notificações, alterar nome/senha, ocultar valores, trocar de ligação.
 
-**Não incluídas (são do Android, não existem num browser):**
-- Enviar SMS pelo SIM do telemóvel (e o SMS automático em segundo plano).
-- Entrada por impressão digital (Android Keystore).
-- Trabalhos automáticos em segundo plano.
+**Equivalentes no iPhone (feitos de outra forma):**
+- **SMS de cobrança:** a app abre a app *Mensagens* já preenchida (nº + texto) e o utilizador carrega em Enviar (usa o SIM). Não é automático nem em segundo plano.
+- **Face ID / Touch ID:** via WebAuthn (padrão da Apple). Ativa-se em *Mais → Ativar Face ID / Touch ID*; passa a pedir a biometria para mostrar valores.
 
-A app web pode **ver** os SMS enviados (a lista está na base), mas o envio continua a ser feito pelo telemóvel Android.
+**Mesmo assim impossível num browser (iOS):**
+- **SMS automático / em segundo plano** (envio sem o utilizador, a horas marcadas). O iOS não deixa um site correr em segundo plano. Substituto: ao abrir, a app mostra as cobranças do dia para enviar com 1 toque cada.

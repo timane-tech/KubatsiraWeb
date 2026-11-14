@@ -46,6 +46,41 @@
   }
   const pode = (c) => S.perms.has(c);
 
+  // ---------- Biometria (Face ID / Touch ID) via WebAuthn ----------
+  const Bio = {
+    async disponivel() {
+      try { return !!window.PublicKeyCredential && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(); }
+      catch (e) { return false; }
+    },
+    chave(uid) { return "kub_bio_" + uid; },
+    ativa(uid) { try { return !!localStorage.getItem(this.chave(uid)); } catch (e) { return false; } },
+    async registar(uid, nome) {
+      const cred = await navigator.credentials.create({ publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rp: { name: "Kubatsira", id: location.hostname },
+        user: { id: new TextEncoder().encode(String(uid)), name: nome || ("user" + uid), displayName: nome || ("user" + uid) },
+        pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
+        authenticatorSelection: { authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred" },
+        timeout: 60000, attestation: "none",
+      } });
+      const id = btoa(String.fromCharCode.apply(null, new Uint8Array(cred.rawId)));
+      localStorage.setItem(this.chave(uid), id);
+      return true;
+    },
+    async verificar(uid) {
+      const id = localStorage.getItem(this.chave(uid));
+      if (!id) return false;
+      const rawId = Uint8Array.from(atob(id), (c) => c.charCodeAt(0));
+      await navigator.credentials.get({ publicKey: {
+        challenge: crypto.getRandomValues(new Uint8Array(32)),
+        rpId: location.hostname, timeout: 60000, userVerification: "required",
+        allowCredentials: [{ type: "public-key", id: rawId, transports: ["internal"] }],
+      } });
+      return true;
+    },
+    desativar(uid) { try { localStorage.removeItem(this.chave(uid)); } catch (e) {} },
+  };
+
   // ---------- Utilitários DOM ----------
   const $ = (id) => document.getElementById(id);
   const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
@@ -262,7 +297,13 @@
       ${acoes || ""}
       <button class="icone" id="cb-olho" title="Mostrar/ocultar valores">${S.ocultar ? "🙈" : "👁️"}</button>
       <div class="avatar">${esc(ini)}</div>`;
-    $("cb-olho").onclick = () => { S.ocultar = !S.ocultar; navegar(S.ecra); };
+    $("cb-olho").onclick = async () => {
+      if (S.ocultar && Bio.ativa(S.user.id)) {   // vai revelar: pede Face ID/Touch ID
+        try { await Bio.verificar(S.user.id); }
+        catch (e) { toast("Não foi possível confirmar a identidade.", true); return; }
+      }
+      S.ocultar = !S.ocultar; navegar(S.ecra);
+    };
   }
 
   // Donut SVG (gráfico de estado). segs = [{rotulo, valor, cor}]. Identidade por legenda, não só por cor.
@@ -415,7 +456,9 @@
         (p.estado === "PAGO" ? `<p class="sub" style="text-align:center;margin-top:14px">Prestação paga.</p>` : "")}
       ${podeMulta ? `<button class="btn secundario" id="pg-multa" style="margin-top:10px">Perdoar / reduzir multa</button>` : ""}
       ${pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-venc" style="margin-top:10px">Alterar data de vencimento</button>` : ""}
+      ${p.telefoneCliente && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-sms" style="margin-top:10px">✉️ Enviar SMS de cobrança</button>` : ""}
     `);
+    if ($("pg-sms")) $("pg-sms").onclick = () => abrirSMS(p.telefoneCliente, mensagemCobranca(p));
     if (pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO") $("pg-venc").onclick = () => {
       abrirFolha(`<h3>Alterar vencimento</h3><div class="sub">${p.numero}ª prestação · ${esc(p.nomeCliente)} · vence ${R.data(p.vencimento)}</div>
         <div class="campo"><label>Nova data de vencimento</label><input id="vn-data" type="date" value="${p.vencimento}"></div>
@@ -761,6 +804,8 @@
     mostrar("ecra-app");
     cabecalho("Mais", "");
     const c = $("conteudo");
+    const bioDisp = await Bio.disponivel();
+    const bioOn = Bio.ativa(S.user.id);
     const op = (id, ic, t, sub) => `<button class="item" data-op="${id}"><span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic}</span><span class="meio"><span class="nome">${t}</span>${sub ? `<span class="det">${sub}</span>` : ""}</span></button>`;
     c.innerHTML = `
       <div class="cartao" style="display:flex;align-items:center;gap:14px">
@@ -780,6 +825,7 @@
       <div class="seccao-titulo">Conta</div>
       ${op("perfil", "✏️", "Editar o meu nome", "")}
       ${op("senha", "🔒", "Alterar a minha senha", "")}
+      ${bioDisp ? op("biometria", bioOn ? "🔓" : "👆", bioOn ? "Desativar Face ID / Touch ID" : "Ativar Face ID / Touch ID", bioOn ? "Pede a biometria para mostrar valores" : "Proteger a app com biometria") : ""}
       <div class="seccao-titulo">Sistema</div>
       ${op("ligacao", "🔌", "Trocar de ligação", DB.servidorAtual() || "")}
       ${op("sobre", "ℹ️", "Sobre a aplicação", "")}
@@ -798,6 +844,17 @@
     if (op === "notificacoes") return verNotificacoes();
     if (op === "perfil") return formNome();
     if (op === "senha") return formSenha();
+    if (op === "biometria") {
+      if (Bio.ativa(S.user.id)) {
+        if (await confirmar("Desativar biometria", "Deixa de pedir Face ID / Touch ID para mostrar valores.", "Desativar", true)) {
+          Bio.desativar(S.user.id); toast("Biometria desativada."); verMais();
+        }
+      } else {
+        try { await Bio.registar(S.user.id, S.user.nome || S.user.utilizador); toast("Face ID / Touch ID ativado."); verMais(); }
+        catch (e) { toast("Não foi possível ativar a biometria neste aparelho.", true); }
+      }
+      return;
+    }
     if (op === "sobre") return verSobre();
     if (op === "ligacao") {
       if (await confirmar("Trocar de ligação", "Vai sair e apagar a ligação deste aparelho.", "Trocar", true)) { DB.apagar(); verLigar(); }
@@ -1268,6 +1325,27 @@
   const primeiroNome = (n) => (n || "").trim().split(/\s+/)[0] || "";
   const perfilNome = (p) => p === "ADMIN" ? "Administrador" : p === "AGENTE" ? "Agente" : "Cliente";
   const nomeRegisto = () => S.user.nome || S.user.utilizador;
+  const ehApple = () => /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
+
+  // Abre a app de Mensagens já preenchida (usa o SIM do telemóvel; o utilizador carrega em Enviar).
+  function abrirSMS(tel, texto) {
+    const num = (tel || "").replace(/\s/g, "");
+    if (!num) { toast("Este cliente não tem telefone.", true); return; }
+    const sep = ehApple() ? "&" : "?";
+    window.location.href = `sms:${num}${sep}body=${encodeURIComponent(texto)}`;
+  }
+
+  // Texto da cobrança (como na app Android: nome, nº do empréstimo, vencimento, atraso e valor com multa).
+  function mensagemCobranca(p) {
+    const hoje = R.hojeISO();
+    const atraso = R.diasAtraso(p.vencimento, hoje);
+    const falta = R.emFalta(p, hoje);
+    let m = `Kubatsira: Ola ${primeiroNome(p.nomeCliente)}, `;
+    if (atraso > 0) m += `a sua ${p.numero}a prestacao (emprestimo #${p.emprestimoId}) venceu em ${R.data(p.vencimento)} e tem ${atraso} dia(s) de atraso. `;
+    else m += `a sua ${p.numero}a prestacao (emprestimo #${p.emprestimoId}) vence em ${R.data(p.vencimento)}. `;
+    m += `Valor a pagar: ${R.mt(falta)}${p.multaCongelada || atraso > 0 ? " (inclui multa)" : ""}. Por favor regularize. Obrigado.`;
+    return m;
+  }
   const curto = (cat) => ({ PRESTACAO: "Pagamento", DESEMBOLSO: "Desembolso", CAPITAL: "Entrada de capital", DESPESA: "Despesa", POUPANCA: "Poupança" }[cat] || cat || "Movimento");
   function erroEcra(e, retry) {
     window.__retry = retry;
