@@ -36,6 +36,30 @@
   <!-- Toast -->
   <div class="toast" id="toast"></div>
 
+  <!-- Apanha-erros: se a app não carregar (ecrã branco), mostra a mensagem em vez de branco -->
+  <script>
+    window.__err = [];
+    window.addEventListener("error", function (e) {
+      window.__err.push((e.message || "erro") + "  (" + ((e.filename || "").split("/").pop()) + ":" + (e.lineno || "?") + ")");
+    });
+    window.addEventListener("unhandledrejection", function (e) {
+      window.__err.push("Promise: " + ((e.reason && e.reason.message) || e.reason || "erro"));
+    });
+    window.addEventListener("load", function () {
+      setTimeout(function () {
+        if (!document.querySelector(".ecra.ativo")) {
+          document.body.innerHTML =
+            '<div style="padding:26px 20px;font-family:-apple-system,system-ui,sans-serif;color:#1c2430">' +
+            '<h2 style="color:#c0392b;margin:0 0 10px">A app não abriu</h2>' +
+            '<p style="color:#5e6b7e">' + (window.__err.length ? "Erro detetado:" : "Não apanhei um erro de JavaScript — pode ser a cache antiga. Feche e volte a abrir, ou remova o ícone e adicione de novo.") + '</p>' +
+            (window.__err.length ? '<pre style="white-space:pre-wrap;background:#fdecea;border:1px solid #f3c6c1;border-radius:10px;padding:12px;font-size:13px;color:#a4211f">' + window.__err.join("\n") + '</pre>' : '') +
+            '<p style="color:#5e6b7e;font-size:13px">Versão: <b>' + (window.KUB_VER || "?") + '</b></p></div>';
+        }
+      }, 1800);
+    });
+  </script>
+  <script>window.KUB_VER = "12";</script>
+
   <script src="regras.js"></script>
   <script src="db.js"></script>
   <script src="dados.js"></script>
