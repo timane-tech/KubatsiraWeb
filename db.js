@@ -120,7 +120,9 @@ const DB = (() => {
         const resp = await fetch(ponto, {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
+            // text/plain (não application/json) para o browser NÃO exigir autorização CORS do Content-Type:
+            // o endpoint do Neon lê o JSON na mesma, mas só autoriza os cabeçalhos Neon-* no preflight.
+            "Content-Type": "text/plain;charset=UTF-8",
             "Neon-Connection-String": endereco,
             "Neon-Raw-Text-Output": "true",
             "Neon-Array-Mode": "true",
