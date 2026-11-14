@@ -276,11 +276,12 @@
     S.user = user;
     S.perms = calcularPerms(user);
     Dados._nome = user.nome || user.utilizador;   // autor dos registos de edição
-    S.ocultar = true;   // modo privado ao entrar, como na app
-    if (user.perfil === "CLIENTE") { $("l-erro").textContent = "Este painel é para a equipa. Use a app do cliente."; $("l-btn").disabled = false; S.user = null; return; }
+    S.cliente = user.perfil === "CLIENTE";
+    S.ocultar = !S.cliente;   // o cliente vê sempre os seus valores; a equipa entra em modo privado
     mostrar("ecra-app");
     construirBarra();
-    navegar(pode("BALANCO") ? "inicio" : (pode("COBRANCAS") ? "cobrancas" : "clientes"));
+    if (S.cliente) navegar("inicio");
+    else navegar(pode("BALANCO") ? "inicio" : (pode("COBRANCAS") ? "cobrancas" : "clientes"));
   }
 
   function sair() {
@@ -299,10 +300,16 @@
     { id: "mais", ic: "mais", rot: "Mais", perm: null },
   ];
 
+  const ABAS_CLIENTE = [
+    { id: "inicio", ic: "inicio", rot: "Início" },
+    { id: "pedir", ic: "credito", rot: "Pedir crédito" },
+    { id: "mais", ic: "mais", rot: "Mais" },
+  ];
+
   function construirBarra() {
     const b = $("barra-inferior");
     b.innerHTML = "";
-    ABAS.forEach((a) => {
+    (S.cliente ? ABAS_CLIENTE : ABAS).forEach((a) => {
       const btn = el(`<button data-aba="${a.id}"><span class="ic">${ic(a.ic, 23)}</span><span>${a.rot}</span></button>`);
       btn.onclick = () => navegar(a.id);
       b.appendChild(btn);
@@ -325,6 +332,12 @@
     [...$("barra-inferior").children].forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
     if (mudou) animarLogo();
     window.scrollTo(0, 0);
+    if (S.cliente) {
+      if (aba === "inicio") verClienteInicio();
+      else if (aba === "pedir") verClientePedir();
+      else if (aba === "mais") verClienteMais();
+      return;
+    }
     if (aba === "inicio") verInicio();
     else if (aba === "cobrancas") verCobrancas();
     else if (aba === "clientes") verClientes();
@@ -1489,6 +1502,116 @@
     window.__retry = retry;
     return `<div class="vazio"><span class="ic" style="color:var(--laranja)">${ic("alerta", 44)}</span>${esc(e.message || "Erro ao carregar.")}<br><br>
       <button class="btn secundario" style="max-width:220px;margin:14px auto 0" onclick="window.__retry&&window.__retry()">Tentar de novo</button></div>`;
+  }
+
+  // ============================================================
+  // PAINEL DO CLIENTE (só vê os seus próprios dados)
+  // ============================================================
+  async function verClienteInicio() {
+    cabecalho("Olá, " + primeiroNome(S.user.nome || S.user.utilizador), "Cliente");
+    const c = $("conteudo");
+    c.innerHTML = spinner;
+    try {
+      const [porPagar, meus] = await Promise.all([
+        Dados.porPagarDoCliente(S.user.clienteId), Dados.emprestimosDoCliente(S.user.clienteId)]);
+      const hoje = R.hojeISO();
+      let divida = 0, multas = 0, atrasadas = 0, proxima = null;
+      for (const p of porPagar) {
+        divida += R.emFalta(p, hoje); multas += R.multaPrestacao(p, hoje);
+        if (R.diasAtraso(p.vencimento, hoje) > 0) atrasadas++;
+        if (!proxima) proxima = p;
+      }
+      divida = R.arredondar(divida); multas = R.arredondar(multas);
+      let aviso = "";
+      if (atrasadas > 0)
+        aviso = `<div class="aviso-caixa" style="background:var(--vermelho-bg);color:var(--vermelho);border-color:#f3c6c1">${ic("alerta", 15)} Tem <b>${atrasadas} prestação(ões) em atraso</b>. A multa já vai em <b>${R.mt(multas)}</b> e aumenta 2% por dia. Pague o quanto antes.</div>`;
+      else if (proxima && proxima.vencimento === hoje)
+        aviso = `<div class="aviso-caixa">A sua <b>${proxima.numero}ª prestação vence hoje</b>: ${R.mt(R.emFalta(proxima, hoje))}.</div>`;
+      else if (divida <= 0.005)
+        aviso = `<div class="aviso-caixa" style="background:var(--verde-bg);color:var(--verde);border-color:#bfe6cf">${ic("check", 15)} Não tem dívidas. Pode pedir um novo crédito.</div>`;
+      const meusHtml = meus.length ? meus.map((e) => `<button class="item" data-eid="${e.id}">
+        <span class="avatar">${ic("credito", 20)}</span>
+        <span class="meio"><span class="nome">Empréstimo nº ${e.id} · ${R.mt(e.capital)}</span>
+          <span class="det">${e.totalPrestacoes ? e.prestacoesPagas + "/" + e.totalPrestacoes + " prestações pagas" : "Pedido em " + R.data(e.dataPedido)}</span>
+          <span class="etiqueta ${e.prestacoesEmAtraso > 0 ? "e-atraso" : e.estado === "PAGO" ? "e-ok" : e.estado === "PENDENTE" ? "e-aviso" : "e-neutro"}">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></span>
+        <span class="fim"><span class="mt">${e.emFalta > 0 ? "Falta " + R.mt(e.emFalta) : ""}</span></span></button>`).join("")
+        : vazio("credito", 'Ainda não tem empréstimos. Toque em "Pedir crédito" para fazer o primeiro pedido.');
+      c.innerHTML = `
+        <div class="kpis">
+          <div class="kpi destaque"><div class="rotulo">Em dívida</div><div class="valor">${R.mt(divida)}</div></div>
+          <div class="kpi"><div class="rotulo">Próxima prestação</div><div class="valor" style="font-size:1rem">${proxima ? R.data(proxima.vencimento) : "—"}</div></div>
+          <div class="kpi ${atrasadas > 0 ? "alerta" : ""}"><div class="rotulo">Em atraso</div><div class="valor">${atrasadas}</div></div>
+          <div class="kpi"><div class="rotulo">Empréstimos</div><div class="valor">${meus.length}</div></div>
+        </div>
+        ${aviso}
+        <div class="seccao-titulo">Os meus empréstimos</div>${meusHtml}`;
+      c.querySelectorAll("[data-eid]").forEach((b) => b.onclick = () =>
+        abrirEmprestimo(meus.find((x) => x.id == b.dataset.eid), verClienteInicio));
+    } catch (e) { c.innerHTML = erroEcra(e, verClienteInicio); }
+  }
+
+  async function verClientePedir() {
+    cabecalho("Pedir crédito", "");
+    const c = $("conteudo");
+    c.innerHTML = spinner;
+    try {
+      const [porPagar, meus] = await Promise.all([
+        Dados.porPagarDoCliente(S.user.clienteId), Dados.emprestimosDoCliente(S.user.clienteId)]);
+      const pendente = meus.find((e) => e.estado === "PENDENTE");
+      let motivo = null;
+      if (pendente) motivo = "Já tem um pedido (nº " + pendente.id + ") à espera de aprovação. Aguarde a decisão do Administrador.";
+      else if (porPagar.length) motivo = "Ainda tem prestações por pagar. Só pode pedir um novo crédito depois de pagar toda a dívida.";
+      if (motivo) { c.innerHTML = vazio("alerta", motivo); return; }
+      c.innerHTML = `
+        <div class="cartao">
+          <h3>Novo pedido de crédito</h3>
+          <div class="campo"><label>Valor (MT)</label><input id="pd-valor" type="number" inputmode="decimal" placeholder="1000 a 35000"></div>
+          <div class="campo"><label>Modalidade</label>
+            <select id="pd-mod"><option value="PARCELADO">6 prestações (5 em 5 dias)</option><option value="UNICO">Prestação única (30 dias)</option></select></div>
+          <div class="campo"><label>Bens dados como garantia</label><textarea id="pd-garantia" rows="2" placeholder="ex.: Geleira, televisor"></textarea></div>
+          <div id="pd-sim" class="cartao" style="display:none;background:var(--fundo)"></div>
+          <div class="erro-msg" id="pd-erro"></div>
+          <button class="btn" id="pd-btn">Enviar pedido</button>
+        </div>
+        <p class="sub" style="color:var(--texto-suave);text-align:center">O pedido fica à espera da aprovação do Administrador.</p>`;
+      const simular = () => {
+        const v = parseFloat($("pd-valor").value); const sim = $("pd-sim");
+        if (!v || v < 1000) { sim.style.display = "none"; return; }
+        const total = R.totalAPagar(v);
+        sim.style.display = "block";
+        sim.innerHTML = `<div class="linha-dados"><span class="r">Total a pagar (c/ 30%)</span><span class="v">${R.mt(total)}</span></div>
+          <div class="linha-dados"><span class="r">${$("pd-mod").value === "PARCELADO" ? "6 prestações de" : "1 pagamento de"}</span><span class="v">${R.mt($("pd-mod").value === "PARCELADO" ? R.arredondar(total / 6) : total)}</span></div>`;
+      };
+      $("pd-valor").oninput = simular; $("pd-mod").onchange = simular;
+      $("pd-btn").onclick = async () => {
+        $("pd-btn").disabled = true;
+        try {
+          const r = await Dados.pedirEmprestimo(S.user.clienteId, parseFloat($("pd-valor").value), $("pd-mod").value, $("pd-garantia").value, S.user.nome || S.user.utilizador);
+          if (!r.ok) { $("pd-erro").textContent = r.msg; $("pd-btn").disabled = false; return; }
+          toast(r.msg); navegar("inicio");
+        } catch (e) { $("pd-erro").textContent = e.message; $("pd-btn").disabled = false; }
+      };
+    } catch (e) { c.innerHTML = erroEcra(e, verClientePedir); }
+  }
+
+  async function verClienteMais() {
+    cabecalho("Mais", "");
+    const c = $("conteudo");
+    const op = (id, nome, t, sub) => `<button class="item" data-op="${id}"><span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic(nome, 20)}</span><span class="meio"><span class="nome">${t}</span>${sub ? `<span class="det">${sub}</span>` : ""}</span></button>`;
+    const bioDisp = await Bio.disponivel(); const bioOn = Bio.ativa(S.user.id);
+    c.innerHTML = `
+      <div class="cartao" style="display:flex;align-items:center;gap:14px">
+        <div class="avatar" style="width:54px;height:54px;background:var(--navy)">${esc(R.iniciais(S.user.nome || S.user.utilizador))}</div>
+        <div><div style="font-weight:800;font-size:1.1rem">${esc(S.user.nome || S.user.utilizador)}</div>
+          <div class="det" style="color:var(--texto-suave)">Cliente · ${esc(S.user.utilizador)}</div></div>
+      </div>
+      <div class="seccao-titulo">Conta</div>
+      ${op("senha", "senha", "Alterar a minha senha", "")}
+      ${bioDisp ? op("biometria", "biometria", bioOn ? "Desativar Face ID / Touch ID" : "Ativar Face ID / Touch ID", "") : ""}
+      <div class="seccao-titulo">Sistema</div>
+      ${op("sobre", "sobre", "Sobre a aplicação", "")}
+      ${op("sair", "sair", "Terminar sessão", "")}`;
+    c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => maisAcao(b.dataset.op));
   }
 
   // ---------- Exportar PDF ----------

@@ -100,6 +100,29 @@ const Dados = (() => {
   const listarPorEmprestimo = async (empId) =>
     (await DB.consultar(SELECT_PREST + "WHERE p.emprestimo_id = ? ORDER BY p.numero_prestacao", [empId])).map(lerPrest);
 
+  // ---------- Dados de UM cliente (painel do cliente) ----------
+  const porPagarDoCliente = async (clienteId) =>
+    (await DB.consultar(SELECT_PREST +
+      "WHERE p.status='PENDENTE' AND e.status='APROVADO' AND c.id=? ORDER BY p.data_vencimento", [clienteId])).map(lerPrest);
+
+  async function emprestimosDoCliente(clienteId) {
+    const lista = (await DB.consultar(SELECT_EMP + "WHERE e.cliente_id=? ORDER BY e.id DESC", [clienteId])).map(lerEmp);
+    if (!lista.length) return lista;
+    const ids = lista.map((e) => e.id);
+    const porId = new Map(lista.map((e) => [e.id, e]));
+    const hoje = Regras.hojeISO();
+    const prest = (await DB.consultar(SELECT_PREST +
+      "WHERE p.emprestimo_id = ANY(?::int[]) ORDER BY p.emprestimo_id, p.numero_prestacao", ["{" + ids.join(",") + "}"])).map(lerPrest);
+    for (const p of prest) {
+      const e = porId.get(p.emprestimoId); if (!e) continue;
+      e.totalPrestacoes++;
+      if (p.estado === "PAGO") { e.prestacoesPagas++; e.jaPago += p.valorPago; }
+      else { e.emFalta += Regras.emFalta(p, hoje); if (Regras.diasAtraso(p.vencimento, hoje) > 0) e.prestacoesEmAtraso++; }
+    }
+    for (const e of lista) { e.emFalta = Regras.arredondar(e.emFalta); e.jaPago = Regras.arredondar(e.jaPago); }
+    return lista;
+  }
+
   // ---------- Balanço (Administrador) ----------
   async function balanco() {
     const r = (await DB.consultar(
@@ -948,6 +971,7 @@ const Dados = (() => {
     acessosListar, smsEnviadosListar,
     alterarMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
     alterarVencimento, alterarDataDesembolso, reconciliar, iaPerguntar,
+    porPagarDoCliente, emprestimosDoCliente,
     _nome: "",
   };
 })();
