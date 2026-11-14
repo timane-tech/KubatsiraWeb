@@ -457,12 +457,15 @@
         const sit = R.situacaoPrestacao(p);
         const cls = atraso > 0 ? "e-atraso" : p.vencimento === hoje ? "e-aviso" : "e-neutro";
         const detAtraso = atraso > 0 ? ` · ${atraso} dia${atraso > 1 ? "s" : ""} de atraso` : "";
-        return `<button class="item" data-pid="${p.id}">
-          <span class="avatar">${esc(R.iniciais(p.nomeCliente))}</span>
-          <span class="meio"><span class="nome">${esc(p.nomeCliente)}</span>
+        return `<div class="item" style="gap:10px">
+          <span class="avatar" data-pid="${p.id}">${esc(R.iniciais(p.nomeCliente))}</span>
+          <span class="meio" data-pid="${p.id}" style="cursor:pointer"><span class="nome">${esc(p.nomeCliente)}</span>
             <span class="det">${p.numero}ª prest. · vence ${R.data(p.vencimento)}${detAtraso}</span>
             <span class="etiqueta ${cls}">${sit}</span></span>
-          <span class="fim"><span class="mt">${vmt(falta)}</span></span></button>`;
+          <span class="fim" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+            <span class="mt">${vmt(falta)}</span>
+            ${p.telefoneCliente ? `<button class="btn secundario" data-sms="${p.clienteId}" title="Enviar SMS" style="padding:6px 10px;width:auto;margin:0">${ic("sms", 15)}</button>` : ""}
+          </span></div>`;
       }).join("");
       $("cob-lista").innerHTML =
         `<div class="cartao" style="display:flex;justify-content:space-around;text-align:center">
@@ -471,6 +474,14 @@
          </div>` + itens;
       $("cob-lista").querySelectorAll("[data-pid]").forEach((b) =>
         b.onclick = () => abrirPrestacao(todas.find((x) => x.id == b.dataset.pid), verCobrancas));
+      $("cob-lista").querySelectorAll("[data-sms]").forEach((b) => b.onclick = (ev) => {
+        ev.stopPropagation();
+        const cid = Number(b.dataset.sms);
+        const ps = todas.filter((x) => x.clienteId === cid);
+        if (!ps.length) return;
+        const total = ps.reduce((s, p) => s + R.emFalta(p, hoje), 0);
+        abrirSMS(ps[0].telefoneCliente, mensagemCobrancaGrupo(ps, total));
+      });
     };
     render("");
     $("cob-f").oninput = (e) => render(e.target.value);
