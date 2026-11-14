@@ -3,17 +3,19 @@
   --navy-700: #16304f;
   --navy-300: #3f5f86;
   --accent: #2f80ed;
-  --verde: #1b8f5a;
-  --verde-bg: #e7f6ee;
-  --vermelho: #c0392b;
-  --vermelho-bg: #fdecea;
-  --laranja: #c77700;
-  --laranja-bg: #fff4e0;
-  --fundo: #f3f5f9;
+  --accent-bg: #e8f1fd;
+  --verde: #1e9a55;
+  --verde-bg: #def5e6;
+  --vermelho: #c62828;
+  --vermelho-bg: #fde6e6;
+  --laranja: #b26a00;
+  --laranja-bg: #fff0d6;
+  --roxo: #6e3cb4;
+  --fundo: #f2f4f8;
   --cartao: #ffffff;
   --texto: #1c2430;
-  --texto-suave: #5e6b7e;
-  --borda: #e3e8f0;
+  --texto-suave: #6e7887;
+  --borda: #e6eaf0;
   --sombra: 0 1px 3px rgba(20, 40, 70, .08), 0 6px 20px rgba(20, 40, 70, .06);
   --raio: 16px;
   --barra: 64px;
@@ -130,8 +132,9 @@ body {
   color: var(--texto-suave); font-size: .68rem; font-weight: 600;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
-.barra-inferior button .ic { font-size: 1.3rem; line-height: 1; }
-.barra-inferior button.ativo { color: var(--navy); }
+.barra-inferior button .ic { line-height: 1; padding: 5px 16px; border-radius: 16px; transition: background .15s, color .15s; display: inline-flex; }
+.barra-inferior button.ativo { color: var(--accent); }
+.barra-inferior button.ativo .ic { background: var(--accent-bg); color: var(--accent); }
 .barra-inferior.escondida { display: none; }
 
 /* ---------- Formulários ---------- */

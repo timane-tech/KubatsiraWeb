@@ -280,6 +280,7 @@
     S.ocultar = !S.cliente;   // o cliente vê sempre os seus valores; a equipa entra em modo privado
     mostrar("ecra-app");
     construirBarra();
+    Dados.fotoPerfil(user.id).then((f) => { S.user.foto = f || ""; const a = $("cb-avatar"); if (a && f) pintarAvatar(a, f); }).catch(() => {});
     if (S.cliente) navegar("inicio");
     else navegar(pode("BALANCO") ? "inicio" : (pode("COBRANCAS") ? "cobrancas" : "clientes"));
   }
@@ -306,10 +307,25 @@
     { id: "mais", ic: "mais", rot: "Mais" },
   ];
 
+  function tabsBarra() {
+    if (S.cliente) return ABAS_CLIENTE;
+    // Igual ao Android: Início · Prestações · Clientes · Caixa (ou Crédito) · Mais
+    const quarta = pode("CAIXA")
+      ? { id: "caixa", ic: "caixa", rot: "Caixa" }
+      : { id: "emprestimos", ic: "credito", rot: "Crédito" };
+    return [
+      { id: "inicio", ic: "inicio", rot: "Início" },
+      { id: "cobrancas", ic: "cobrancas", rot: "Prestações" },
+      { id: "clientes", ic: "clientes", rot: "Clientes" },
+      quarta,
+      { id: "mais", ic: "mais", rot: "Mais" },
+    ];
+  }
+
   function construirBarra() {
     const b = $("barra-inferior");
     b.innerHTML = "";
-    (S.cliente ? ABAS_CLIENTE : ABAS).forEach((a) => {
+    tabsBarra().forEach((a) => {
       const btn = el(`<button data-aba="${a.id}"><span class="ic">${ic(a.ic, 23)}</span><span>${a.rot}</span></button>`);
       btn.onclick = () => navegar(a.id);
       b.appendChild(btn);
@@ -341,6 +357,7 @@
     if (aba === "inicio") verInicio();
     else if (aba === "cobrancas") verCobrancas();
     else if (aba === "clientes") verClientes();
+    else if (aba === "caixa") verCaixa();
     else if (aba === "emprestimos") verEmprestimos();
     else if (aba === "mais") verMais();
   }
@@ -354,7 +371,7 @@
       </div>
       ${acoes || ""}
       <button class="icone" id="cb-olho" title="Mostrar/ocultar valores">${ic(S.ocultar ? "olhoff" : "olho", 20)}</button>
-      <div class="avatar">${esc(ini)}</div>`;
+      <div class="avatar" id="cb-avatar"${S.user.foto ? ` style="background-image:url('data:image/jpeg;base64,${S.user.foto}');background-size:cover;background-position:center;color:transparent"` : ""}>${esc(ini)}</div>`;
     $("cb-olho").onclick = async () => {
       if (S.ocultar && Bio.ativa(S.user.id)) {   // vai revelar: pede Face ID/Touch ID
         try { await Bio.verificar(S.user.id); }
@@ -894,26 +911,25 @@
           <div class="det" style="color:var(--texto-suave)">${perfilNome(S.user.perfil)}${S.user.principal ? " principal" : ""}</div></div>
       </div>
       <div class="seccao-titulo">Gestão</div>
-      ${pode("CAIXA") ? op("caixa", "caixa", "Fluxo de Caixa", "Saldo, entradas e despesas") : ""}
+      ${op("emprestimos", "credito", "Empréstimos", "Todos, aprovar e novo pedido")}
+      ${op("caixa", "caixa", "Fluxo de Caixa", "Saldo, entradas e despesas")}
       ${pode("CAIXA") ? op("poupanca", "poupanca", "Poupança de Clientes", "Cofres dos clientes") : ""}
       ${pode("UTILIZADORES") ? op("utilizadores", "utilizadores", "Utilizadores e Permissões", "") : ""}
       ${pode("CAIXA") ? op("lixeira", "lixeira", "Lixeira", "Lançamentos e pedidos apagados") : ""}
       ${pode("SMS_VER") ? op("sms", "sms", "SMS enviados", "Cobranças e recados enviados") : ""}
       ${S.user.perfil === "ADMIN" ? op("acessos", "acessos", "Acessos", "Quem entrou e quando") : ""}
-      ${op("assistente", "assistente", "Assistente", "Perguntas sobre o negócio")}
+      ${op("assistente", "assistente", "Assistente (IA)", "Perguntas sobre o negócio")}
       ${op("notificacoes", "notificacoes", "Notificações", "")}
       <div class="seccao-titulo">Conta</div>
-      ${op("perfil", "perfil", "Editar o meu nome", "")}
-      ${op("senha", "senha", "Alterar a minha senha", "")}
-      ${bioDisp ? op("biometria", "biometria", bioOn ? "Desativar Face ID / Touch ID" : "Ativar Face ID / Touch ID", bioOn ? "Pede a biometria para mostrar valores" : "Proteger a app com biometria") : ""}
-      <div class="seccao-titulo">Sistema</div>
-      ${op("ligacao", "ligacao", "Trocar de ligação", DB.servidorAtual() || "")}
+      ${op("config", "perfil", "Configurações", "Foto, nome, senha, segurança")}
       ${op("sobre", "sobre", "Sobre a aplicação", "")}
       ${op("sair", "sair", "Terminar sessão", "")}`;
     c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => maisAcao(b.dataset.op));
   }
 
   async function maisAcao(op) {
+    if (op === "config") return verConfiguracoes();
+    if (op === "emprestimos") return verEmprestimos();
     if (op === "caixa") return verCaixa();
     if (op === "poupanca") return verPoupanca();
     if (op === "lixeira") return verLixeira();
@@ -1371,6 +1387,90 @@
     $("ia-in").onkeydown = (e) => { if (e.key === "Enter") enviar(); };
   }
 
+  // ---------- Configurações (A minha conta) ----------
+  async function verConfiguracoes() {
+    cabecalho("Configurações", "A minha conta e preferências");
+    const c = $("conteudo");
+    c.innerHTML = spinner;
+    const bioDisp = await Bio.disponivel();
+    const bioOn = Bio.ativa(S.user.id);
+    c.innerHTML = `
+      <div class="cartao">
+        <div class="seccao-titulo" style="margin:0 0 12px">A minha conta</div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <div class="avatar" id="cfg-avatar" style="width:76px;height:76px;font-size:1.5rem;background:var(--navy)">${esc(R.iniciais(S.user.nome || S.user.utilizador))}</div>
+          <div style="flex:1">
+            <div style="font-weight:800;font-size:1.1rem">${esc(S.user.nome || S.user.utilizador)}</div>
+            <div class="det" style="color:var(--texto-suave)">${perfilNome(S.user.perfil)}${S.user.principal ? " principal" : ""} · ${esc(S.user.utilizador)}</div>
+          </div>
+        </div>
+        <div class="btn-linha" style="margin-top:14px">
+          <button class="btn secundario" id="cfg-foto">Escolher foto</button>
+          <button class="btn secundario" id="cfg-remfoto">Remover</button>
+        </div>
+      </div>
+      <div class="cartao">
+        <div class="seccao-titulo" style="margin:0 0 10px">Nome a mostrar</div>
+        <div class="campo" style="margin:0"><input id="cfg-nome" value="${esc(S.user.nome || "")}"></div>
+        <button class="btn secundario" id="cfg-gnome" style="margin-top:10px">Guardar nome</button>
+      </div>
+      <div class="cartao">
+        <div class="seccao-titulo" style="margin:0 0 10px">Alterar senha</div>
+        <div class="campo"><label>Senha atual</label><input id="cfg-sat" type="password"></div>
+        <div class="campo"><label>Nova senha</label><input id="cfg-snova" type="password"></div>
+        <div class="erro-msg" id="cfg-serro"></div>
+        <button class="btn secundario" id="cfg-gsenha">Alterar senha</button>
+      </div>
+      ${bioDisp ? `<div class="cartao">
+        <div class="seccao-titulo" style="margin:0 0 10px">Segurança</div>
+        <label style="display:flex;align-items:center;justify-content:space-between;font-size:.95rem">
+          <span>Entrar / mostrar valores com Face ID / Touch ID</span>
+          <input type="checkbox" id="cfg-bio" ${bioOn ? "checked" : ""} style="width:auto;transform:scale(1.4)">
+        </label></div>` : ""}
+      <div class="cartao">
+        <div class="seccao-titulo" style="margin:0 0 10px">Sistema</div>
+        <div class="linha-dados"><span class="r">Servidor</span><span class="v" style="font-size:.78rem">${esc(DB.servidorAtual() || "—")}</span></div>
+        <div class="linha-dados"><span class="r">Versão</span><span class="v">${window.KUB_VER || "—"}</span></div>
+        <button class="btn secundario" id="cfg-ligacao" style="margin-top:12px">Trocar de ligação</button>
+      </div>`;
+    pintarAvatar($("cfg-avatar"), S.user.foto);
+
+    $("cfg-foto").onclick = () => escolherFoto(async (b64) => {
+      try {
+        await Dados.guardarFoto(S.user.id, b64);
+        S.user.foto = b64; pintarAvatar($("cfg-avatar"), b64); pintarAvatar($("cb-avatar"), b64);
+        toast("Foto de perfil atualizada.");
+      } catch (e) { toast(e.message, true); }
+    });
+    $("cfg-remfoto").onclick = async () => {
+      if (!S.user.foto) { toast("Não há foto para remover."); return; }
+      if (!(await confirmar("Remover foto", "A foto de perfil será removida.", "Remover", true))) return;
+      try { await Dados.removerFoto(S.user.id); S.user.foto = ""; pintarAvatar($("cfg-avatar"), ""); pintarAvatar($("cb-avatar"), ""); toast("Foto removida."); }
+      catch (e) { toast(e.message, true); }
+    };
+    $("cfg-gnome").onclick = async () => {
+      const r = await comErro(() => Dados.alterarNome(S.user.id, $("cfg-nome").value));
+      S.user.nome = $("cfg-nome").value.trim(); toast(r.msg); cabecalho("Configurações", "A minha conta e preferências"); pintarAvatar($("cb-avatar"), S.user.foto);
+    };
+    $("cfg-gsenha").onclick = async () => {
+      $("cfg-gsenha").disabled = true;
+      try {
+        const r = await Dados.alterarSenha(S.user.id, $("cfg-sat").value, $("cfg-snova").value);
+        if (!r.ok) { $("cfg-serro").textContent = r.msg; $("cfg-gsenha").disabled = false; return; }
+        $("cfg-sat").value = ""; $("cfg-snova").value = ""; $("cfg-gsenha").disabled = false; toast(r.msg);
+      } catch (e) { $("cfg-serro").textContent = e.message; $("cfg-gsenha").disabled = false; }
+    };
+    if ($("cfg-bio")) $("cfg-bio").onchange = async (e) => {
+      if (e.target.checked) {
+        try { await Bio.registar(S.user.id, S.user.nome || S.user.utilizador); toast("Face ID / Touch ID ativado."); }
+        catch (err) { e.target.checked = false; toast("Não foi possível ativar a biometria.", true); }
+      } else { Bio.desativar(S.user.id); toast("Biometria desativada."); }
+    };
+    $("cfg-ligacao").onclick = async () => {
+      if (await confirmar("Trocar de ligação", "Vai sair e apagar a ligação deste aparelho.", "Trocar", true)) { DB.apagar(); verLigar(); }
+    };
+  }
+
   // ---------- Perfil ----------
   function formNome() {
     abrirFolha(`<h3>O meu nome</h3>
@@ -1505,6 +1605,46 @@
     return m;
   }
   const curto = (cat) => ({ PRESTACAO: "Pagamento", DESEMBOLSO: "Desembolso", CAPITAL: "Entrada de capital", DESPESA: "Despesa", POUPANCA: "Poupança" }[cat] || cat || "Movimento");
+
+  // Pinta um elemento .avatar com a foto (base64 JPEG) ou deixa as iniciais.
+  function pintarAvatar(elem, foto) {
+    if (!elem) return;
+    if (foto) {
+      elem.style.backgroundImage = "url('data:image/jpeg;base64," + foto + "')";
+      elem.style.backgroundSize = "cover"; elem.style.backgroundPosition = "center"; elem.style.color = "transparent";
+    } else { elem.style.backgroundImage = ""; elem.style.color = ""; }
+  }
+
+  // Avatar HTML com foto (se houver) ou iniciais. Para o utilizador atual usa S.user.foto.
+  function avatarFoto(nome, foto, extra) {
+    const ini = esc(R.iniciais(nome));
+    if (foto) return `<div class="avatar" style="${extra || ""};background-image:url('data:image/jpeg;base64,${foto}');background-size:cover;background-position:center;color:transparent">${ini}</div>`;
+    return `<div class="avatar" style="${extra || ""}">${ini}</div>`;
+  }
+
+  // Abre o seletor de imagem, recorta ao centro e reduz para 256px JPEG (base64).
+  function escolherFoto(aoPronto) {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "image/*";
+    inp.onchange = () => {
+      const file = inp.files && inp.files[0]; if (!file) return;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const s = 256, canvas = document.createElement("canvas");
+          canvas.width = s; canvas.height = s;
+          const ctx = canvas.getContext("2d");
+          const min = Math.min(img.width, img.height);
+          ctx.drawImage(img, (img.width - min) / 2, (img.height - min) / 2, min, min, 0, 0, s, s);
+          aoPronto(canvas.toDataURL("image/jpeg", 0.82).split(",")[1]);
+        } catch (e) { toast("Não foi possível processar a imagem.", true); }
+        URL.revokeObjectURL(img.src);
+      };
+      img.onerror = () => toast("Imagem inválida.", true);
+      img.src = URL.createObjectURL(file);
+    };
+    inp.click();
+  }
   function erroEcra(e, retry) {
     window.__retry = retry;
     return `<div class="vazio"><span class="ic" style="color:var(--laranja)">${ic("alerta", 44)}</span>${esc(e.message || "Erro ao carregar.")}<br><br>
@@ -1613,9 +1753,7 @@
           <div class="det" style="color:var(--texto-suave)">Cliente · ${esc(S.user.utilizador)}</div></div>
       </div>
       <div class="seccao-titulo">Conta</div>
-      ${op("perfil", "perfil", "Editar o meu nome", "")}
-      ${op("senha", "senha", "Alterar a minha senha", "")}
-      ${bioDisp ? op("biometria", "biometria", bioOn ? "Desativar Face ID / Touch ID" : "Ativar Face ID / Touch ID", "") : ""}
+      ${op("config", "perfil", "Configurações", "Foto, nome, senha, segurança")}
       ${op("assistente", "assistente", "Assistente", "Perguntas sobre o seu crédito")}
       <div class="seccao-titulo">Sistema</div>
       ${op("sobre", "sobre", "Sobre a aplicação", "")}

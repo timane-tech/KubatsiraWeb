@@ -668,6 +668,22 @@ const Dados = (() => {
     return r.afetadas === 1 ? { ok: true, msg: "Senha alterada." } : { ok: false, msg: "A senha atual não está correta." };
   }
 
+  // ---------- Foto de perfil (coluna usuarios.foto = JPEG em base64) ----------
+  async function fotoPerfil(id) {
+    try {
+      const r = await DB.consultar("SELECT COALESCE(foto,'') AS foto FROM usuarios WHERE id=?", [id]);
+      return r.length ? r[0].foto : "";
+    } catch (e) { return ""; }
+  }
+  async function guardarFoto(id, base64) {
+    await DB.executar("UPDATE usuarios SET foto=? WHERE id=?", [base64, id]);
+    return { ok: true, msg: "Foto de perfil atualizada." };
+  }
+  async function removerFoto(id) {
+    await DB.executar("UPDATE usuarios SET foto=NULL WHERE id=?", [id]);
+    return { ok: true, msg: "Foto removida." };
+  }
+
   async function alterarNome(id, nome) {
     await DB.executar("UPDATE usuarios SET nome_exibicao=? WHERE id=?", [(nome || "").trim(), id]);
     return { ok: true, msg: "Nome atualizado." };
@@ -972,6 +988,7 @@ const Dados = (() => {
     alterarMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
     alterarVencimento, alterarDataDesembolso, reconciliar, iaPerguntar,
     porPagarDoCliente, emprestimosDoCliente,
+    fotoPerfil, guardarFoto, removerFoto,
     _nome: "",
   };
 })();
