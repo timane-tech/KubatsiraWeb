@@ -748,6 +748,78 @@ const Dados = (() => {
         evento: r.evento, dispositivo: r.dispositivo, aparelho: r.aparelho, detalhe: r.detalhe }));
   }
 
+  // ---------- Multa de uma prestação (remover / reduzir) ----------
+  async function alterarMulta(prestacaoId, novaMulta, quem) {
+    const rows = (await DB.consultar(SELECT_PREST + "WHERE p.id=?", [prestacaoId])).map(lerPrest);
+    if (!rows.length) return { ok: false, msg: "A prestação já não existe." };
+    const p = rows[0];
+    if (p.estado === "PAGO") return { ok: false, msg: "Esta prestação já está paga." };
+    const hoje = Regras.hojeISO();
+    const atual = Regras.multaPrestacao(p, hoje);
+    novaMulta = Regras.arredondar(novaMulta);
+    if (novaMulta < 0 || novaMulta > atual + 0.004)
+      return { ok: false, msg: "A nova multa tem de estar entre 0 e " + Regras.mt(atual) + "." };
+    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const ficaPaga = p.valorPago + 0.005 >= Regras.arredondar(p.valor + novaMulta);
+    const comandos = [{
+      sql: "UPDATE prestacoes SET multa_congelada=?, multa_original=?, multa_alterada_por=?, multa_alterada_em=?" +
+           (ficaPaga ? ", status='PAGO', data_pagamento=COALESCE(data_pagamento, ?)" : "") + " WHERE id=?",
+      params: ficaPaga ? [novaMulta, atual, quem, agora, hoje, prestacaoId] : [novaMulta, atual, quem, agora, prestacaoId],
+    }];
+    if (ficaPaga) comandos.push({
+      sql: "UPDATE emprestimos SET status='PAGO' WHERE id=? AND status='APROVADO' AND NOT EXISTS (SELECT 1 FROM prestacoes WHERE emprestimo_id=? AND status<>'PAGO' AND id<>?)",
+      params: [p.emprestimoId, p.emprestimoId, prestacaoId],
+    });
+    await DB.lote(comandos);
+    let msg = novaMulta === 0 ? "Multa removida (era " + Regras.mt(atual) + ")." : "Multa reduzida de " + Regras.mt(atual) + " para " + Regras.mt(novaMulta) + ".";
+    if (ficaPaga) msg += " Com o que o cliente já tinha pago, esta prestação ficou paga.";
+    return { ok: true, msg };
+  }
+
+  // ---------- Caixa: editar / ocultar / apagar ----------
+  // Categorias livres (não ligadas a empréstimo/prestação): podem ser editadas e apagadas com segurança.
+  const CAT_LIVRE = ["CAPITAL", "DESPESA", "AJUSTE", "LICENCA"];
+  const ehLivre = (cat) => CAT_LIVRE.includes(cat);
+
+  async function caixaEditar(id, tipo, valor, justificativa) {
+    valor = Regras.arredondar(valor);
+    if (tipo !== "ENTRADA" && tipo !== "SAIDA") return { ok: false, msg: "Tipo inválido." };
+    if (valor <= 0) return { ok: false, msg: "Indique um valor válido." };
+    if (!justificativa || justificativa.trim().length < 3) return { ok: false, msg: "Indique a descrição do movimento." };
+    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const r = await DB.executar("UPDATE caixa SET tipo=?, valor=?, justificativa=?, editado_em=?, editado_por=? WHERE id=?",
+      [tipo, valor, justificativa.trim(), agora, nomeSessao(), id]);
+    return r.afetadas === 1 ? { ok: true, msg: "Lançamento atualizado." } : { ok: false, msg: "Não foi possível atualizar." };
+  }
+
+  async function caixaOcultar(id, ocultar) {
+    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    await DB.executar("UPDATE caixa SET oculto=?, oculto_por=?, oculto_em=? WHERE id=?",
+      [ocultar, ocultar ? nomeSessao() : null, ocultar ? agora : null, id]);
+    return { ok: true, msg: ocultar ? "Lançamento ocultado (continua no saldo)." : "Lançamento visível outra vez." };
+  }
+
+  async function caixaApagar(id, quem) {
+    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    await DB.lote([
+      { sql: "INSERT INTO caixa_eliminados (caixa_id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, eliminado_por, eliminado_em, pagamento_anulado) " +
+             "SELECT id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, ?, ?, FALSE FROM caixa WHERE id=?", params: [quem, agora, id] },
+      { sql: "DELETE FROM caixa WHERE id=?", params: [id] },
+    ]);
+    return { ok: true, msg: "Lançamento nº " + id + " enviado para o Lixo do Caixa. O saldo foi atualizado." };
+  }
+
+  // Movimentos incluindo os ocultos (para gerir no caixa)
+  async function movimentosCaixa(quantidade, incluirOcultos) {
+    return (await DB.consultar(
+      "SELECT id, tipo, valor, justificativa, categoria, data_movimento, registado_por, COALESCE(oculto,false)::text AS oculto " +
+      "FROM caixa " + (incluirOcultos ? "" : "WHERE NOT oculto ") + "ORDER BY id DESC LIMIT ?", [quantidade || 60]))
+      .map((r) => ({ id: Number(r.id), tipo: r.tipo, valor: Number(r.valor), justificativa: r.justificativa,
+        categoria: r.categoria, dataMovimento: r.data_movimento, registadoPor: r.registado_por,
+        oculto: r.oculto === "true" || r.oculto === "t", livre: ehLivre(r.categoria) }));
+  }
+  function nomeSessao() { return Dados._nome || "Sistema"; }
+
   // ---------- SMS enviados (só leitura; a tabela existe apenas na base real) ----------
   async function smsEnviadosListar() {
     try {
@@ -772,5 +844,7 @@ const Dados = (() => {
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, smsEnviadosListar,
+    alterarMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
+    _nome: "",
   };
 })();

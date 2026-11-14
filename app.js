@@ -193,6 +193,7 @@
   function iniciarSessao(user) {
     S.user = user;
     S.perms = calcularPerms(user);
+    Dados._nome = user.nome || user.utilizador;   // autor dos registos de edição
     S.ocultar = true;   // modo privado ao entrar, como na app
     if (user.perfil === "CLIENTE") { $("l-erro").textContent = "Este painel é para a equipa. Use a app do cliente."; $("l-btn").disabled = false; S.user = null; return; }
     mostrar("ecra-app");
@@ -250,6 +251,31 @@
     $("cb-olho").onclick = () => { S.ocultar = !S.ocultar; navegar(S.ecra); };
   }
 
+  // Donut SVG (gráfico de estado). segs = [{rotulo, valor, cor}]. Identidade por legenda, não só por cor.
+  function donutSVG(segs, centroTitulo, centroValor) {
+    const total = segs.reduce((s, x) => s + x.valor, 0) || 1;
+    const r = 52, cx = 70, cy = 70, C = 2 * Math.PI * r;
+    let off = 0;
+    const aneis = segs.filter((s) => s.valor > 0).map((s) => {
+      const len = (s.valor / total) * C;
+      const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.cor}" stroke-width="18"
+        stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
+        transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.rotulo)}: ${s.valor}</title></circle>`;
+      off += len; return el;
+    }).join("");
+    const legenda = segs.map((s) => `<div style="display:flex;align-items:center;gap:8px;font-size:.84rem;margin:4px 0">
+      <span style="width:12px;height:12px;border-radius:3px;background:${s.cor};flex:none"></span>
+      <span style="flex:1">${esc(s.rotulo)}</span><b style="font-variant-numeric:tabular-nums">${s.valor}</b></div>`).join("");
+    return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+      <svg viewBox="0 0 140 140" width="140" height="140" style="flex:none">
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--fundo)" stroke-width="18"></circle>
+        ${aneis}
+        <text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="22" font-weight="800" fill="var(--texto)">${centroValor}</text>
+        <text x="${cx}" y="${cy + 15}" text-anchor="middle" font-size="10" fill="var(--texto-suave)">${esc(centroTitulo)}</text>
+      </svg>
+      <div style="flex:1;min-width:140px">${legenda}</div></div>`;
+  }
+
   // ============================================================
   // ECRÃ: INÍCIO (Balanço ou Cobranças)
   // ============================================================
@@ -277,16 +303,25 @@
           <div class="kpi alerta"><div class="rotulo">Em atraso</div><div class="valor">${vmt(ind.emAtraso)}</div></div>
           <div class="kpi"><div class="rotulo">Margem (juros)</div><div class="valor">${vmt(ind.margemLucro)}</div></div>
         </div>
-        <div class="seccao-titulo">Empréstimos</div>
-        <div class="cartao"><div class="contadores">
-          <div class="contador"><div class="n">${ind.pendentes}</div><div class="t">Pendentes</div></div>
-          <div class="contador"><div class="n">${ind.emCurso}</div><div class="t">Em curso</div></div>
-          <div class="contador"><div class="n">${ind.pagos}</div><div class="t">Pagos</div></div>
-        </div></div>
+        <div class="seccao-titulo">Empréstimos por estado</div>
+        <div class="cartao">${donutSVG([
+          { rotulo: "Em curso", valor: ind.emCurso, cor: "#1f3a5f" },
+          { rotulo: "Pagos", valor: ind.pagos, cor: "#1b8f5a" },
+          { rotulo: "Pendentes", valor: ind.pendentes, cor: "#c77700" },
+          { rotulo: "Cancelados", valor: ind.cancelados, cor: "#94a3b8" },
+        ], "total", ind.emCurso + ind.pagos + ind.pendentes + ind.cancelados)}</div>
         <div class="seccao-titulo">Cobranças previstas (7 dias)</div>
         <div class="cartao">${barras}</div>
         <div class="seccao-titulo">Maiores clientes</div>
-        <div class="cartao">${topHtml}</div>`;
+        <div class="cartao">${topHtml}</div>
+        ${pode("EXPORTAR") ? `<button class="btn secundario" id="bal-pdf" style="margin-top:4px">📄 Exportar Balanço (PDF)</button>` : ""}`;
+      if ($("bal-pdf")) $("bal-pdf").onclick = () => exportarPDF("Balanço Geral",
+        ["Indicador", "Valor"],
+        [["Capital investido", R.mt(ind.capitalInvestido)], ["Total a receber", R.mt(ind.totalAReceber)],
+         ["Em atraso", R.mt(ind.emAtraso)], ["Margem (juros)", R.mt(ind.margemLucro)],
+         ["Empréstimos em curso", String(ind.emCurso)], ["Pagos", String(ind.pagos)],
+         ["Pendentes", String(ind.pendentes)], ["Prestações em atraso", String(ind.prestacoesAtrasadas)]],
+        []);`;
     } catch (e) { c.innerHTML = erroEcra(e, verInicio); }
   }
 
@@ -297,10 +332,16 @@
     mostrar("ecra-app");
     cabecalho("Cobranças", "Prestações do dia e em atraso");
     const c = $("conteudo");
-    c.innerHTML = `<div class="pesquisa"><span class="lupa">🔎</span><input id="cob-f" placeholder="Procurar cliente…"></div><div id="cob-lista">${spinner}</div>`;
+    c.innerHTML = `<div class="pesquisa"><span class="lupa">🔎</span><input id="cob-f" placeholder="Procurar cliente…"></div>
+      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cob-pdf" style="margin-bottom:10px">📄 Exportar PDF</button>` : ""}
+      <div id="cob-lista">${spinner}</div>`;
     let todas = [];
     try { todas = await Dados.listarPorPagar(); }
     catch (e) { $("cob-lista").innerHTML = erroEcra(e, verCobrancas); return; }
+    if ($("cob-pdf")) $("cob-pdf").onclick = () => exportarPDF("Cobranças / Prestações",
+      ["Cliente", "Prest.", "Vencimento", "Atraso", "Em falta (MT)"],
+      todas.map((p) => [p.nomeCliente, p.numero + "ª", R.data(p.vencimento), (R.diasAtraso(p.vencimento, R.hojeISO()) || 0) + "d", R.mt(R.emFalta(p, R.hojeISO()))]),
+      ["Total por cobrar: " + R.mt(todas.reduce((s, p) => s + R.emFalta(p, R.hojeISO()), 0))]);
     const hoje = R.hojeISO();
     const render = (f) => {
       f = (f || "").toLowerCase();
@@ -340,6 +381,7 @@
     const multa = R.multaPrestacao(p, hoje);
     const atraso = R.diasAtraso(p.vencimento, hoje);
     const podePagar = pode("PAGAR_PRESTACAO") && p.estado !== "PAGO";
+    const podeMulta = pode("REMOVER_MULTA") && p.estado !== "PAGO" && multa > 0.004;
     abrirFolha(`
       <h3>${esc(p.nomeCliente)}</h3>
       <div class="sub">${p.numero}ª prestação · Empréstimo #${p.emprestimoId}</div>
@@ -347,7 +389,7 @@
       <div class="linha-dados"><span class="r">Situação</span><span class="v">${R.situacaoPrestacao(p)}${atraso > 0 ? ` (${atraso}d)` : ""}</span></div>
       <div class="linha-dados"><span class="r">Valor da prestação</span><span class="v">${R.mt(p.valor)}</span></div>
       <div class="linha-dados"><span class="r">Já pago</span><span class="v">${R.mt(p.valorPago)}</span></div>
-      <div class="linha-dados"><span class="r">Multa (2%/dia)</span><span class="v">${R.mt(multa)}</span></div>
+      <div class="linha-dados"><span class="r">Multa (2%/dia)</span><span class="v">${R.mt(multa)}${p.multaAlteradaPor ? " (alterada)" : ""}</span></div>
       <div class="linha-dados"><span class="r">Em falta</span><span class="v" style="color:var(--vermelho)">${R.mt(falta)}</span></div>
       ${p.telefoneCliente ? `<div class="linha-dados"><span class="r">Telefone</span><span class="v"><a href="tel:${esc(p.telefoneCliente)}">${esc(p.telefoneCliente)}</a></span></div>` : ""}
       ${podePagar ? `
@@ -357,7 +399,23 @@
           <input id="pg-data" type="date" value="${hoje}" max="${hoje}"></div>
         <button class="btn" id="pg-btn">Registar pagamento</button>` :
         (p.estado === "PAGO" ? `<p class="sub" style="text-align:center;margin-top:14px">Prestação paga.</p>` : "")}
+      ${podeMulta ? `<button class="btn secundario" id="pg-multa" style="margin-top:10px">Perdoar / reduzir multa</button>` : ""}
     `);
+    if (podeMulta) $("pg-multa").onclick = () => {
+      abrirFolha(`<h3>Multa de ${esc(p.nomeCliente)}</h3><div class="sub">${p.numero}ª prestação · multa atual ${R.mt(multa)}</div>
+        <div class="campo"><label>Nova multa (0 para perdoar tudo)</label><input id="mu-valor" type="number" inputmode="decimal" step="0.01" value="0" max="${multa.toFixed(2)}"></div>
+        <div class="erro-msg" id="mu-erro"></div>
+        <div class="btn-linha"><button class="btn secundario" id="mu-zero">Perdoar tudo (0)</button><button class="btn" id="mu-ok">Guardar</button></div>`);
+      $("mu-zero").onclick = () => { $("mu-valor").value = "0"; };
+      $("mu-ok").onclick = async () => {
+        $("mu-ok").disabled = true;
+        try {
+          const r = await Dados.alterarMulta(p.id, parseFloat($("mu-valor").value) || 0, nomeRegisto());
+          if (!r.ok) { $("mu-erro").textContent = r.msg; $("mu-ok").disabled = false; return; }
+          fecharFolha(); toast(r.msg); if (recarregar) recarregar();
+        } catch (e) { $("mu-erro").textContent = e.message; $("mu-ok").disabled = false; }
+      };
+    };
     if (podePagar) {
       $("pg-btn").onclick = async () => {
         const valor = parseFloat($("pg-valor").value);
@@ -383,12 +441,19 @@
     cabecalho("Clientes", "", acao);
     if ($("cl-novo")) $("cl-novo").onclick = () => formCliente(null);
     const c = $("conteudo");
-    c.innerHTML = `<div class="pesquisa"><span class="lupa">🔎</span><input id="cl-f" placeholder="Procurar por nome, telefone ou local…"></div><div id="cl-lista">${spinner}</div>`;
-    let timer;
+    c.innerHTML = `<div class="pesquisa"><span class="lupa">🔎</span><input id="cl-f" placeholder="Procurar por nome, telefone ou local…"></div>
+      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cl-pdf" style="margin-bottom:10px">📄 Exportar PDF</button>` : ""}
+      <div id="cl-lista">${spinner}</div>`;
+    let timer, ultima = [];
+    if ($("cl-pdf")) $("cl-pdf").onclick = () => exportarPDF("Clientes",
+      ["Nome", "Telefone", "Local", "Empr.", "Dívida (MT)"],
+      ultima.map((cl) => [cl.nome, cl.telefone || "", cl.localNegocio || "", String(cl.emprestimos), R.mt(cl.emDivida)]),
+      ["Total de clientes: " + ultima.length]);
     const carregar = async (f) => {
       $("cl-lista").innerHTML = spinner;
       try {
         const lista = await Dados.listarClientes(f);
+        ultima = lista;
         if (!lista.length) { $("cl-lista").innerHTML = vazio("👥", "Nenhum cliente encontrado."); return; }
         $("cl-lista").innerHTML = lista.map((cl) => {
           const atraso = cl.prestacoesEmAtraso > 0;
@@ -502,8 +567,14 @@
     abas.push(["todos", pode("TODOS_EMPRESTIMOS") ? "Todos" : "Em curso"]);
     let ativa = abas[0][0];
     c.innerHTML = `<div class="cartao" style="display:flex;gap:8px;padding:8px">${abas.map(([id, r]) =>
-      `<button class="btn ${id === ativa ? "" : "secundario"}" data-ab="${id}" style="margin:0;padding:10px">${r}</button>`).join("")}</div><div id="emp-lista">${spinner}</div>`;
+      `<button class="btn ${id === ativa ? "" : "secundario"}" data-ab="${id}" style="margin:0;padding:10px">${r}</button>`).join("")}</div>
+      ${pode("EXPORTAR") ? `<button class="btn secundario" id="emp-pdf" style="margin-bottom:10px">📄 Exportar PDF</button>` : ""}
+      <div id="emp-lista">${spinner}</div>`;
     let fonte = [];
+    if ($("emp-pdf")) $("emp-pdf").onclick = () => exportarPDF("Empréstimos",
+      ["#", "Cliente", "Capital (MT)", "Situação", "Em falta (MT)"],
+      fonte.map((e) => [String(e.id), e.nomeCliente, R.mt(e.capital), R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso), e.emFalta > 0 ? R.mt(e.emFalta) : "—"]),
+      ["Total: " + fonte.length + " empréstimo(s)"]);
     const carregar = async () => {
       $("emp-lista").innerHTML = spinner;
       try {
@@ -691,20 +762,22 @@
   }
 
   // ---------- Caixa ----------
+  let caixaVerOcultos = false;
   async function verCaixa() {
     cabecalho("Fluxo de Caixa", "", `<button class="icone" id="cx-novo" title="Novo lançamento">＋</button>`);
     $("cx-novo").onclick = () => formCaixa();
     const c = $("conteudo");
     c.innerHTML = spinner;
+    const gere = pode("CAIXA_EDITAR") || pode("CAIXA_OCULTAR");
     try {
-      const [s, movs] = await Promise.all([Dados.saldoCaixa(), Dados.ultimosMovimentos(60)]);
+      const [s, movs] = await Promise.all([Dados.saldoCaixa(), Dados.movimentosCaixa(80, caixaVerOcultos)]);
       const lista = movs.map((m) => {
         const entrada = m.tipo === "ENTRADA";
-        return `<div class="item" style="cursor:default">
+        return `<button class="item" data-mid="${m.id}" style="${gere ? "" : "cursor:default"};${m.oculto ? "opacity:.55" : ""}">
           <span class="avatar" style="background:${entrada ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "↓" : "↑"}</span>
-          <span class="meio"><span class="nome">${esc(curto(m.categoria))}</span><span class="det">${esc(m.justificativa || "")}</span>
+          <span class="meio"><span class="nome">${esc(curto(m.categoria))}${m.oculto ? " · oculto" : ""}</span><span class="det">${esc(m.justificativa || "")}</span>
             <span class="det" style="font-size:.75rem">${R.dataHora(m.dataMovimento)}</span></span>
-          <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></div>`;
+          <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></button>`;
       }).join("");
       c.innerHTML = `
         <div class="kpis" style="grid-template-columns:1fr">
@@ -714,8 +787,53 @@
           <div class="kpi"><div class="rotulo">Entradas</div><div class="valor" style="color:var(--verde)">${vmt(s.entradas)}</div></div>
           <div class="kpi"><div class="rotulo">Saídas</div><div class="valor" style="color:var(--vermelho)">${vmt(s.saidas)}</div></div>
         </div>
-        <div class="seccao-titulo">Últimos movimentos</div>${lista || vazio("💰", "Sem movimentos.")}`;
+        ${pode("EXPORTAR") ? `<button class="btn secundario" id="cx-pdf" style="margin-bottom:8px">📄 Exportar PDF</button>` : ""}
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div class="seccao-titulo">Movimentos</div>
+          ${pode("CAIXA_OCULTAR") ? `<label style="font-size:.78rem;color:var(--texto-suave)"><input type="checkbox" id="cx-oc" ${caixaVerOcultos ? "checked" : ""}> ver ocultos</label>` : ""}
+        </div>${lista || vazio("💰", "Sem movimentos.")}`;
+      if ($("cx-oc")) $("cx-oc").onchange = (e) => { caixaVerOcultos = e.target.checked; verCaixa(); };
+      if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa",
+        ["Data", "Tipo", "Categoria", "Descrição", "Valor (MT)"],
+        movs.map((m) => [R.dataHora(m.dataMovimento), m.tipo, curto(m.categoria), m.justificativa || "", (m.tipo === "ENTRADA" ? "+" : "-") + R.mt(m.valor)]),
+        [`Saldo: ${R.mt(s.saldo)}  |  Entradas: ${R.mt(s.entradas)}  |  Saídas: ${R.mt(s.saidas)}`]);
+      if (gere) c.querySelectorAll("[data-mid]").forEach((b) => b.onclick = () => gerirCaixa(movs.find((m) => m.id == b.dataset.mid)));
     } catch (e) { c.innerHTML = erroEcra(e, verCaixa); }
+  }
+
+  function gerirCaixa(m) {
+    const podeEditar = pode("CAIXA_EDITAR") && m.livre;
+    abrirFolha(`<h3>${esc(curto(m.categoria))}</h3><div class="sub">Lançamento #${m.id} · ${R.dataHora(m.dataMovimento)}</div>
+      <div class="linha-dados"><span class="r">Tipo</span><span class="v">${m.tipo === "ENTRADA" ? "Entrada" : "Saída"}</span></div>
+      <div class="linha-dados"><span class="r">Valor</span><span class="v">${R.mt(m.valor)}</span></div>
+      <div class="linha-dados"><span class="r">Descrição</span><span class="v" style="max-width:60%">${esc(m.justificativa || "")}</span></div>
+      ${!m.livre ? `<p class="sub" style="margin-top:12px;color:var(--texto-suave)">Este lançamento está ligado a um empréstimo/prestação. Só pode ser ocultado aqui; para o anular, use o empréstimo.</p>` : ""}
+      <div class="btn-linha" style="margin-top:14px">
+        ${podeEditar ? `<button class="btn secundario" id="g-editar">Editar</button>` : ""}
+        ${pode("CAIXA_OCULTAR") ? `<button class="btn secundario" id="g-ocultar">${m.oculto ? "Mostrar" : "Ocultar"}</button>` : ""}
+      </div>
+      ${podeEditar ? `<button class="btn perigo" id="g-apagar" style="margin-top:10px">Apagar (vai para o Lixo)</button>` : ""}`);
+    if ($("g-editar")) $("g-editar").onclick = () => {
+      abrirFolha(`<h3>Editar lançamento</h3>
+        <div class="campo"><label>Tipo</label><select id="ge-tipo"><option value="ENTRADA" ${m.tipo === "ENTRADA" ? "selected" : ""}>Entrada</option><option value="SAIDA" ${m.tipo === "SAIDA" ? "selected" : ""}>Saída</option></select></div>
+        <div class="campo"><label>Valor (MT)</label><input id="ge-valor" type="number" inputmode="decimal" value="${m.valor}"></div>
+        <div class="campo"><label>Descrição</label><input id="ge-just" value="${esc(m.justificativa || "")}"></div>
+        <div class="erro-msg" id="ge-erro"></div><button class="btn" id="ge-ok">Guardar</button>`);
+      $("ge-ok").onclick = async () => {
+        $("ge-ok").disabled = true;
+        try { const r = await Dados.caixaEditar(m.id, $("ge-tipo").value, parseFloat($("ge-valor").value), $("ge-just").value);
+          if (!r.ok) { $("ge-erro").textContent = r.msg; $("ge-ok").disabled = false; return; }
+          fecharFolha(); toast(r.msg); verCaixa();
+        } catch (e) { $("ge-erro").textContent = e.message; $("ge-ok").disabled = false; }
+      };
+    };
+    if ($("g-ocultar")) $("g-ocultar").onclick = async () => {
+      const r = await comErro(() => Dados.caixaOcultar(m.id, !m.oculto)); fecharFolha(); toast(r.msg, !r.ok); verCaixa();
+    };
+    if ($("g-apagar")) $("g-apagar").onclick = async () => {
+      if (!(await confirmar("Apagar lançamento", "Vai para o Lixo do Caixa. O saldo é atualizado (pode restaurar depois).", "Apagar", true))) return;
+      const r = await comErro(() => Dados.caixaApagar(m.id, nomeRegisto())); fecharFolha(); toast(r.msg, !r.ok); verCaixa();
+    };
   }
 
   function formCaixa() {
@@ -1015,6 +1133,42 @@
     window.__retry = retry;
     return `<div class="vazio"><span class="ic">⚠️</span>${esc(e.message || "Erro ao carregar.")}<br><br>
       <button class="btn secundario" style="max-width:220px;margin:14px auto 0" onclick="window.__retry&&window.__retry()">Tentar de novo</button></div>`;
+  }
+
+  // ---------- Exportar PDF ----------
+  function carregarScript(src) {
+    return new Promise((res, rej) => {
+      if ([...document.scripts].some((s) => s.src === src)) return res();
+      const s = document.createElement("script");
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error("Não foi possível carregar o gerador de PDF (precisa de Internet)."));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function exportarPDF(titulo, colunas, linhas, notas) {
+    toast("A preparar o PDF…");
+    try {
+      await carregarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
+      await carregarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF();
+      doc.setFillColor(31, 58, 95); doc.rect(0, 0, 210, 24, "F");
+      doc.setTextColor(255, 255, 255); doc.setFontSize(15); doc.setFont(undefined, "bold");
+      doc.text("Kubatsira Microcrédito", 14, 11);
+      doc.setFontSize(10); doc.setFont(undefined, "normal");
+      doc.text(titulo, 14, 18);
+      doc.setTextColor(90, 90, 90); doc.setFontSize(9);
+      doc.text("Gerado em " + R.data(R.hojeISO()) + " · " + (S.user.nome || S.user.utilizador), 196, 18, { align: "right" });
+      let y = 30;
+      (notas || []).forEach((n) => { doc.setTextColor(40, 40, 40); doc.setFontSize(10); doc.text(String(n), 14, y); y += 6; });
+      doc.autoTable({
+        head: [colunas], body: linhas, startY: y + 2, styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [31, 58, 95], textColor: 255 }, alternateRowStyles: { fillColor: [238, 242, 247] },
+        margin: { left: 14, right: 14 },
+      });
+      doc.save("Kubatsira - " + titulo + " - " + R.data(R.hojeISO()).replace(/\//g, "-") + ".pdf");
+      toast("PDF gerado.");
+    } catch (e) { toast(e.message || "Falha ao gerar o PDF.", true); }
   }
 
   // ---------- Arranque ----------
