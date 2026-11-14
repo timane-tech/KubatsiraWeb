@@ -927,10 +927,10 @@
     if (op === "biometria") {
       if (Bio.ativa(S.user.id)) {
         if (await confirmar("Desativar biometria", "Deixa de pedir Face ID / Touch ID para mostrar valores.", "Desativar", true)) {
-          Bio.desativar(S.user.id); toast("Biometria desativada."); verMais();
+          Bio.desativar(S.user.id); toast("Biometria desativada."); navegar("mais");
         }
       } else {
-        try { await Bio.registar(S.user.id, S.user.nome || S.user.utilizador); toast("Face ID / Touch ID ativado."); verMais(); }
+        try { await Bio.registar(S.user.id, S.user.nome || S.user.utilizador); toast("Face ID / Touch ID ativado."); navegar("mais"); }
         catch (e) { toast("Não foi possível ativar a biometria neste aparelho.", true); }
       }
       return;
@@ -1304,7 +1304,14 @@
       "Regras do produto: juros de 30% sobre o capital; multa de 2% do valor da prestação por cada dia de atraso; " +
       "modalidades: 6 prestações de 5 em 5 dias, ou prestação única aos 30 dias. Valores em Meticais (MT).\n\n";
     try {
-      if (pode("BALANCO")) {
+      if (S.cliente) {
+        const pp = await Dados.porPagarDoCliente(S.user.clienteId);
+        const hoje = R.hojeISO(); let divida = 0, atras = 0, prox = null;
+        pp.forEach((p) => { divida += R.emFalta(p, hoje); if (R.diasAtraso(p.vencimento, hoje) > 0) atras++; if (!prox) prox = p; });
+        ctx += "Situacao deste cliente:\n- Em divida: " + R.mt(divida) + "\n- Prestacoes em atraso: " + atras + "\n" +
+          (prox ? "- Proxima prestacao: " + R.data(prox.vencimento) + " (" + R.mt(R.emFalta(prox, hoje)) + ")\n" : "- Sem prestacoes por pagar\n") +
+          "Responde APENAS sobre a situacao deste cliente e as regras do credito. Nunca fales de outros clientes nem das financas da empresa.\n";
+      } else if (pode("BALANCO")) {
         const ind = await Dados.balanco();
         const s = await Dados.saldoCaixa();
         ctx += "Dados atuais da empresa:\n" +
@@ -1371,7 +1378,7 @@
       <div class="erro-msg" id="n-erro"></div><button class="btn" id="n-btn">Guardar</button>`);
     $("n-btn").onclick = async () => {
       const r = await comErro(() => Dados.alterarNome(S.user.id, $("n-nome").value));
-      S.user.nome = $("n-nome").value.trim(); fecharFolha(); toast(r.msg); verMais();
+      S.user.nome = $("n-nome").value.trim(); fecharFolha(); toast(r.msg); navegar("mais");
     };
   }
   function formSenha() {
@@ -1606,8 +1613,10 @@
           <div class="det" style="color:var(--texto-suave)">Cliente · ${esc(S.user.utilizador)}</div></div>
       </div>
       <div class="seccao-titulo">Conta</div>
+      ${op("perfil", "perfil", "Editar o meu nome", "")}
       ${op("senha", "senha", "Alterar a minha senha", "")}
       ${bioDisp ? op("biometria", "biometria", bioOn ? "Desativar Face ID / Touch ID" : "Ativar Face ID / Touch ID", "") : ""}
+      ${op("assistente", "assistente", "Assistente", "Perguntas sobre o seu crédito")}
       <div class="seccao-titulo">Sistema</div>
       ${op("sobre", "sobre", "Sobre a aplicação", "")}
       ${op("sair", "sair", "Terminar sessão", "")}`;
