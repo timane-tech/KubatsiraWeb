@@ -433,8 +433,10 @@
     cabecalho("Cobranças", "Prestações do dia e em atraso");
     const c = $("conteudo");
     c.innerHTML = `<div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cob-f" placeholder="Procurar cliente…"></div>
+      <button class="btn" id="cob-todos" style="margin-bottom:10px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>
       ${pode("EXPORTAR") ? `<button class="btn secundario" id="cob-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
       <div id="cob-lista">${spinner}</div>`;
+    $("cob-todos").onclick = cobrarTodos;
     let todas = [];
     try { todas = await Dados.listarPorPagar(); }
     catch (e) { $("cob-lista").innerHTML = erroEcra(e, verCobrancas); return; }
@@ -609,7 +611,8 @@
       ${poup > 0 ? `<div class="linha-dados"><span class="r">Poupança</span><span class="v">${vmt(poup)}</span></div>` : ""}
       <div class="seccao-titulo" style="margin-left:0">Empréstimos</div>
       ${empHtml}
-      <div class="btn-linha" style="margin-top:16px">
+      ${cl.emDivida > 0 && cl.telefone ? `<button class="btn" id="cl-sms" style="margin-top:14px">${ic("sms", 16)} Enviar SMS de cobrança</button>` : ""}
+      <div class="btn-linha" style="margin-top:10px">
         ${pode("NOVO_EMPRESTIMO") ? `<button class="btn" id="cl-pedir">Novo crédito</button>` : ""}
         ${pode("CLIENTES") ? `<button class="btn secundario" id="cl-editar">Editar</button>` : ""}
       </div>
@@ -619,6 +622,14 @@
       </div>`);
     $("folha").querySelectorAll("[data-eid]").forEach((b) =>
       b.onclick = () => abrirEmprestimo(emprestimos.find((x) => x.id == b.dataset.eid), () => abrirCliente(cl)));
+    if ($("cl-sms")) $("cl-sms").onclick = async () => {
+      try {
+        const ps = (await Dados.listarPorPagar()).filter((p) => p.clienteId === cl.id);
+        if (!ps.length) { toast("Este cliente não tem prestações por pagar.", true); return; }
+        const total = ps.reduce((s, p) => s + R.emFalta(p, R.hojeISO()), 0);
+        abrirSMS(cl.telefone, mensagemCobrancaGrupo(ps, total));
+      } catch (e) { toast(e.message, true); }
+    };
     if ($("cl-pedir")) $("cl-pedir").onclick = () => formPedido(cl);
     if ($("cl-editar")) $("cl-editar").onclick = () => formCliente(cl);
     if ($("cl-codigo")) $("cl-codigo").onclick = async () => {
@@ -1380,7 +1391,78 @@
     window.location.href = `sms:${num}${sep}body=${encodeURIComponent(texto)}`;
   }
 
-  // Texto da cobrança (como na app Android: nome, nº do empréstimo, vencimento, atraso e valor com multa).
+  // Mensagem agrupada: todas as prestações em dívida de um cliente (igual ao gateway/Android).
+  function mensagemCobrancaGrupo(prest, dividaTotal) {
+    const hoje = R.hojeISO();
+    const ps = [...prest].sort((a, b) => (a.vencimento || "").localeCompare(b.vencimento || "") || a.numero - b.numero);
+    let total = 0, multas = 0, atraso = false, n = 0; const linhas = [];
+    for (const p of ps) {
+      n++;
+      const m = R.multaPrestacao(p, hoje), falta = R.emFalta(p, hoje), dd = R.diasAtraso(p.vencimento, hoje);
+      total += falta; multas += m; if (dd > 0) atraso = true;
+      if (n > 3) continue;
+      let l = `- ${p.numero}a prest. (emp. ${p.emprestimoId}), `;
+      if (dd > 0) l += `venceu ${R.data(p.vencimento).slice(0, 5)} (${dd} dia${dd !== 1 ? "s" : ""} atraso)`;
+      else if (p.vencimento === hoje) l += "vence HOJE";
+      else l += `vence ${R.data(p.vencimento).slice(0, 5)}`;
+      l += ": " + R.mt(falta); if (m > 0) l += " c/ multa " + R.mt(m);
+      linhas.push(l);
+    }
+    if (n > 3) linhas.push(`- e mais ${n - 3} valor(es) em atraso`);
+    const qt = ps.length;
+    let t = `Caro(a) ${ps[0].nomeCliente},\nKubatsira Microcredito informa que tem ${qt === 1 ? "1 prestacao" : qt + " prestacoes"} em divida:\n`;
+    t += linhas.join("\n") + "\n";
+    t += "TOTAL A PAGAR: " + R.mt(total);
+    if (multas > 0) t += " (inclui multas de " + R.mt(multas) + ")";
+    t += "\n";
+    if (dividaTotal > total + 0.5) t += "Divida total (com prestacoes por vencer): " + R.mt(dividaTotal) + "\n";
+    t += atraso ? "Regularize o pagamento o mais breve possivel. Obrigado." : "Obrigado.";
+    return t;
+  }
+
+  // Fluxo "Enviar SMS a todos": percorre os clientes com cobranças, um a um (1 toque por cliente).
+  async function cobrarTodos() {
+    toast("A preparar as cobranças…");
+    const hoje = R.hojeISO();
+    let cobr, todas;
+    try { cobr = await Dados.listarCobrancas(hoje); todas = await Dados.listarPorPagar(); }
+    catch (e) { toast(e.message, true); return; }
+    const divida = {}; todas.forEach((p) => divida[p.clienteId] = (divida[p.clienteId] || 0) + R.emFalta(p, hoje));
+    const grupos = {}; cobr.forEach((p) => { (grupos[p.clienteId] = grupos[p.clienteId] || []).push(p); });
+    const lista = Object.keys(grupos).map((cid) => {
+      const ps = grupos[cid];
+      return { nome: ps[0].nomeCliente, tel: ps[0].telefoneCliente,
+        texto: mensagemCobrancaGrupo(ps, divida[cid] || 0),
+        total: ps.reduce((s, p) => s + R.emFalta(p, hoje), 0) };
+    });
+    const semTel = lista.filter((x) => !x.tel).length;
+    const comTel = lista.filter((x) => x.tel);
+    if (!comTel.length) { toast("Não há clientes com telefone para cobrar.", true); return; }
+    let i = 0;
+    const render = () => {
+      if (i >= comTel.length) {
+        abrirFolha(`<h3>Concluído</h3><p class="sub">Percorreste os ${comTel.length} cliente(s)${semTel ? " (" + semTel + " sem telefone foram ignorados)" : ""}.</p><button class="btn" id="ct-ok">Fechar</button>`);
+        $("ct-ok").onclick = fecharFolha; return;
+      }
+      const x = comTel[i];
+      abrirFolha(`<h3>Enviar SMS a todos</h3><div class="sub">Cliente ${i + 1} de ${comTel.length}</div>
+        <div class="linha-dados"><span class="r">Cliente</span><span class="v">${esc(x.nome)}</span></div>
+        <div class="linha-dados"><span class="r">Telefone</span><span class="v">${esc(x.tel)}</span></div>
+        <div class="linha-dados"><span class="r">A pagar</span><span class="v">${vmt(x.total)}</span></div>
+        <div class="cartao" style="background:var(--fundo);white-space:pre-wrap;font-size:.8rem;margin-top:10px">${esc(x.texto)}</div>
+        <button class="btn" id="ct-env">${ic("sms", 16)} Enviar a ${esc(primeiroNome(x.nome))} e seguir</button>
+        <div class="btn-linha" style="margin-top:10px">
+          <button class="btn secundario" id="ct-salta">Saltar</button>
+          <button class="btn secundario" id="ct-fim">Terminar</button>
+        </div>`);
+      $("ct-env").onclick = () => { abrirSMS(x.tel, x.texto); i++; setTimeout(render, 500); };
+      $("ct-salta").onclick = () => { i++; render(); };
+      $("ct-fim").onclick = fecharFolha;
+    };
+    render();
+  }
+
+  // Texto da cobrança (uma prestação).
   function mensagemCobranca(p) {
     const hoje = R.hojeISO();
     const atraso = R.diasAtraso(p.vencimento, hoje);
