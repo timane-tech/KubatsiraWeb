@@ -22,8 +22,9 @@
   font-size: 16px;
 }
 
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; padding: 0; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; min-width: 0; }
+html, body { margin: 0; padding: 0; width: 100%; max-width: 100%; overflow-x: hidden; }
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 body {
   font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   background: var(--fundo);
@@ -32,6 +33,9 @@ body {
   overscroll-behavior-y: none;
   -webkit-font-smoothing: antialiased;
 }
+img, svg, canvas, video { max-width: 100%; height: auto; }
+input, select, textarea { font-size: 16px; max-width: 100%; }   /* 16px evita o zoom automático do iOS */
+button { font-family: inherit; }
 
 /* ---------- Ecrãs ---------- */
 .ecra { display: none; min-height: 100dvh; }
@@ -46,7 +50,7 @@ body {
   display: flex; align-items: center; gap: 12px;
   box-shadow: 0 2px 12px rgba(20, 40, 70, .18);
 }
-.cabecalho .titulo { font-size: 1.15rem; font-weight: 700; flex: 1; }
+.cabecalho .titulo { font-size: 1.15rem; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cabecalho .sub { font-size: .78rem; opacity: .8; font-weight: 500; }
 .cabecalho .avatar {
   width: 40px; height: 40px; border-radius: 50%;
@@ -236,5 +240,19 @@ textarea { resize: vertical; min-height: 44px; }
 }
 
 .oculto { display: none !important; }
+
+/* Ecrãs pequenos (telemóveis estreitos) */
+@media (max-width: 400px) {
+  .conteudo { padding-left: 12px; padding-right: 12px; }
+  .cabecalho { padding-left: 12px; padding-right: 12px; gap: 8px; }
+  .cabecalho .avatar, .cabecalho button.icone { width: 36px; height: 36px; }
+  .barra-inferior button { font-size: .62rem; }
+  .kpi .valor { font-size: 1.08rem; }
+  .btn { padding: 13px; }
+  .item { padding: 11px 12px; }
+}
+@media (max-width: 340px) {
+  .kpis { grid-template-columns: 1fr; }
+}
 .linha-link { text-align: center; margin-top: 18px; }
 .linha-link a { color: var(--accent); font-weight: 600; text-decoration: none; font-size: .9rem; cursor: pointer; }
