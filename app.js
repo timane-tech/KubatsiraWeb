@@ -532,61 +532,77 @@
   // ============================================================
   async function verCobrancas() {
     mostrar("ecra-app");
-    cabecalho("Cobranças", "Prestações do dia e em atraso");
+    const acaoPdf = pode("EXPORTAR") ? `<button class="icone" id="cob-pdf" title="Exportar PDF">${ic("pdf", 19)}</button>` : "";
+    cabecalho("Prestações do Dia", "Toque para pagar, ajustar multa ou contactar", acaoPdf);
     const c = $("conteudo");
-    c.innerHTML = `<div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cob-f" placeholder="Procurar cliente…"></div>
+    c.innerHTML = `
+      <div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cob-f" placeholder="Cliente, contacto ou local"></div>
+      <div class="chips" id="cob-chips">
+        <button class="chip ativo" data-fil="todas">Por pagar</button>
+        <button class="chip" data-fil="atraso">Em atraso</button>
+        <button class="chip" data-fil="hoje">Vence hoje</button>
+        <button class="chip" data-fil="7dias">Próximos 7 dias</button>
+      </div>
       <button class="btn" id="cob-todos" style="margin-bottom:10px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>
-      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cob-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
       <div id="cob-lista">${spinner}</div>`;
     $("cob-todos").onclick = cobrarTodos;
     let todas = [];
     try { todas = await Dados.listarPorPagar(); }
     catch (e) { $("cob-lista").innerHTML = erroEcra(e, verCobrancas); return; }
-    if ($("cob-pdf")) $("cob-pdf").onclick = () => exportarPDF("Cobranças / Prestações",
-      ["Cliente", "Prest.", "Vencimento", "Atraso", "Em falta (MT)"],
-      todas.map((p) => [p.nomeCliente, p.numero + "ª", R.data(p.vencimento), (R.diasAtraso(p.vencimento, R.hojeISO()) || 0) + "d", R.mt(R.emFalta(p, R.hojeISO()))]),
-      ["Total por cobrar: " + R.mt(todas.reduce((s, p) => s + R.emFalta(p, R.hojeISO()), 0))]);
     const hoje = R.hojeISO();
-    const render = (f) => {
-      f = (f || "").toLowerCase();
-      const lista = todas.filter((p) => !f || p.nomeCliente.toLowerCase().includes(f));
-      if (!lista.length) { $("cob-lista").innerHTML = vazio("ok", todas.length ? "Nenhum resultado." : "Não há prestações por cobrar. Bom trabalho!"); return; }
-      let totalHoje = 0, totalAtraso = 0;
+    if ($("cob-pdf")) $("cob-pdf").onclick = () => exportarPDF("Prestações / Cobranças",
+      ["Cliente", "Prest.", "Vencimento", "Atraso", "Em falta (MT)"],
+      todas.map((p) => [p.nomeCliente, p.numero + "ª", R.data(p.vencimento), (R.diasAtraso(p.vencimento, hoje) || 0) + "d", R.mt(R.emFalta(p, hoje))]),
+      ["Total por cobrar: " + R.mt(todas.reduce((s, p) => s + R.emFalta(p, hoje), 0))]);
+    let filtro = "todas", busca = "";
+    const passa = (p) => {
+      const atraso = R.diasAtraso(p.vencimento, hoje);
+      if (filtro === "atraso" && atraso <= 0) return false;
+      if (filtro === "hoje" && p.vencimento !== hoje) return false;
+      if (filtro === "7dias") { const d = R.diasEntre(hoje, p.vencimento); if (d < 0 || d > 7) return false; }
+      if (busca && !((p.nomeCliente || "").toLowerCase().includes(busca) || (p.telefoneCliente || "").includes(busca) || (p.localNegocio || "").toLowerCase().includes(busca))) return false;
+      return true;
+    };
+    const render = () => {
+      const lista = todas.filter(passa);
+      const totalFalta = lista.reduce((s, p) => s + R.emFalta(p, hoje), 0);
+      const nAtraso = lista.filter((p) => R.diasAtraso(p.vencimento, hoje) > 0).length;
+      if (!lista.length) { $("cob-lista").innerHTML = vazio("ok", todas.length ? "Nenhuma prestação neste filtro." : "Não há prestações por cobrar. Bom trabalho!"); return; }
       const itens = lista.map((p) => {
-        const falta = R.emFalta(p, hoje);
-        const atraso = R.diasAtraso(p.vencimento, hoje);
-        if (atraso > 0) totalAtraso += falta; else if (p.vencimento === hoje) totalHoje += falta;
+        const falta = R.emFalta(p, hoje), multa = R.multaPrestacao(p, hoje), atraso = R.diasAtraso(p.vencimento, hoje);
         const sit = R.situacaoPrestacao(p);
         const cls = atraso > 0 ? "e-atraso" : p.vencimento === hoje ? "e-aviso" : "e-neutro";
-        const detAtraso = atraso > 0 ? ` · ${atraso} dia${atraso > 1 ? "s" : ""} de atraso` : "";
-        return `<div class="item" style="gap:10px">
-          <span class="avatar" data-pid="${p.id}">${esc(R.iniciais(p.nomeCliente))}</span>
-          <span class="meio" data-pid="${p.id}" style="cursor:pointer"><span class="nome">${esc(p.nomeCliente)}</span>
-            <span class="det">${p.numero}ª prest. · vence ${R.data(p.vencimento)}${detAtraso}</span>
-            <span class="etiqueta ${cls}">${sit}</span></span>
-          <span class="fim" style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
-            <span class="mt">${vmt(falta)}</span>
-            ${p.telefoneCliente ? `<button class="btn secundario" data-sms="${p.clienteId}" title="Enviar SMS" style="padding:6px 10px;width:auto;margin:0">${ic("sms", 15)}</button>` : ""}
-          </span></div>`;
+        const quando = atraso > 0 ? `venceu ${R.data(p.vencimento)}` : p.vencimento === hoje ? "vence hoje" : `vence ${R.data(p.vencimento)}`;
+        return `<div class="cartao" data-pid="${p.id}" style="cursor:pointer;padding:14px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <span class="avatar" style="flex:none">${esc(R.iniciais(p.nomeCliente))}</span>
+            <div style="flex:1;min-width:0">
+              <div class="nome" style="font-weight:800">${esc(p.nomeCliente)}</div>
+              <div class="det">${p.numero}ª prestação · ${quando}</div>
+              ${atraso > 0 ? `<div class="det" style="color:var(--vermelho)">${atraso} dia${atraso > 1 ? "s" : ""} de atraso</div>` : ""}
+            </div>
+            <div style="text-align:right;flex:none">
+              <div style="font-weight:800;color:${atraso > 0 ? "var(--vermelho)" : "var(--texto)"};white-space:nowrap">${vmt(falta)}</div>
+              <span class="etiqueta ${cls}">${sit}</span>
+            </div>
+          </div>
+          ${(p.telefoneCliente || multa > 0 || p.valorPago > 0) ? `<div style="border-top:1px solid var(--borda);margin-top:11px;padding-top:9px;display:flex;flex-direction:column;gap:4px;font-size:.84rem;color:var(--texto-suave)">
+            ${p.telefoneCliente ? `<div style="display:flex;align-items:center;gap:7px">${ic("sms", 14)}<a href="tel:${esc(p.telefoneCliente)}" onclick="event.stopPropagation()">${esc(p.telefoneCliente)}</a></div>` : ""}
+            ${multa > 0 ? `<div style="display:flex;align-items:center;gap:7px;color:var(--laranja)">${ic("alerta", 14)}Multa: ${vmt(multa)}</div>` : ""}
+            ${p.valorPago > 0 ? `<div style="display:flex;align-items:center;gap:7px;color:var(--verde)">${ic("check", 14)}Já pago: ${vmt(p.valorPago)}</div>` : ""}
+          </div>` : ""}</div>`;
       }).join("");
-      $("cob-lista").innerHTML =
-        `<div class="cartao" style="display:flex;justify-content:space-around;text-align:center">
-           <div><div class="t" style="color:var(--texto-suave);font-size:.75rem">Vence hoje</div><div style="font-weight:800">${vmt(totalHoje)}</div></div>
-           <div><div class="t" style="color:var(--texto-suave);font-size:.75rem">Em atraso</div><div style="font-weight:800;color:var(--vermelho)">${vmt(totalAtraso)}</div></div>
-         </div>` + itens;
+      $("cob-lista").innerHTML = `<div class="cartao" style="text-align:center;font-weight:600;font-size:.9rem">${lista.length} prestações · <b style="color:var(--vermelho)">${nAtraso} em atraso</b> · a cobrar: <b>${vmt(totalFalta)}</b></div>` + itens;
       $("cob-lista").querySelectorAll("[data-pid]").forEach((b) =>
         b.onclick = () => abrirPrestacao(todas.find((x) => x.id == b.dataset.pid), verCobrancas));
-      $("cob-lista").querySelectorAll("[data-sms]").forEach((b) => b.onclick = (ev) => {
-        ev.stopPropagation();
-        const cid = Number(b.dataset.sms);
-        const ps = todas.filter((x) => x.clienteId === cid);
-        if (!ps.length) return;
-        const total = ps.reduce((s, p) => s + R.emFalta(p, hoje), 0);
-        abrirSMS(ps[0].telefoneCliente, mensagemCobrancaGrupo(ps, total));
-      });
     };
-    render("");
-    $("cob-f").oninput = (e) => render(e.target.value);
+    $("cob-chips").querySelectorAll("[data-fil]").forEach((ch) => ch.onclick = () => {
+      filtro = ch.dataset.fil;
+      $("cob-chips").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
+      render();
+    });
+    $("cob-f").oninput = (e) => { busca = (e.target.value || "").toLowerCase(); render(); };
+    render();
   }
 
   // Folha de uma prestação (detalhe + registar pagamento)
