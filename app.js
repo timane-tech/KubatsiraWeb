@@ -1062,7 +1062,7 @@
     c.innerHTML = spinner;
     const gere = pode("CAIXA_EDITAR") || pode("CAIXA_OCULTAR");
     try {
-      const [s, movs] = await Promise.all([Dados.saldoCaixa(), Dados.movimentosCaixa(80, caixaVerOcultos)]);
+      const [s, movs, cxd, ev] = await Promise.all([Dados.saldoCaixa(), Dados.movimentosCaixa(80, caixaVerOcultos), Dados.caixaDoDia(), Dados.graficoEvolucaoCaixa()]);
       const lista = movs.map((m) => {
         const entrada = m.tipo === "ENTRADA";
         return `<button class="item" data-mid="${m.id}" style="${gere ? "" : "cursor:default"};${m.oculto ? "opacity:.55" : ""}">
@@ -1071,14 +1071,19 @@
             <span class="det" style="font-size:.75rem">${R.dataHora(m.dataMovimento)}</span></span>
           <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></button>`;
       }).join("");
+      const ld = (rotulo, valor, cor, sinal) => `<div class="linha-dados"><span class="r">${rotulo}</span><span class="v" style="color:${cor || "var(--texto)"}">${sinal || ""}${vmt(valor)}</span></div>`;
       c.innerHTML = `
-        <div class="kpis" style="grid-template-columns:1fr">
-          <div class="kpi destaque"><div class="rotulo">Saldo em caixa</div><div class="valor" style="font-size:1.6rem">${vmt(s.saldo)}</div></div>
+        <div class="cartao">
+          <div style="display:flex;align-items:center;gap:8px;font-weight:800;margin-bottom:10px">${ic("acessos", 18)} Caixa do dia · ${R.data(cxd.dia)}</div>
+          ${ld("Saldo de abertura", cxd.abertura)}
+          ${ld("↓ Prestações recebidas", cxd.prestacoes, "var(--verde)", "+")}
+          ${ld("↓ Outras entradas", cxd.outras, "var(--verde)", "+")}
+          ${ld("↑ Empréstimos concedidos", cxd.emprestimos, "var(--roxo)", "−")}
+          ${ld("↑ Despesas", cxd.despesas, "var(--vermelho)", "−")}
+          <div class="linha-dados" style="border-top:2px solid var(--borda);margin-top:4px"><span class="r" style="font-weight:800;color:var(--texto)">Saldo de fecho</span><span class="v" style="color:var(--accent);font-size:1.15rem">${vmt(cxd.fecho)}</span></div>
         </div>
-        <div class="kpis">
-          <div class="kpi"><div class="rotulo">Entradas</div><div class="valor" style="color:var(--verde)">${vmt(s.entradas)}</div></div>
-          <div class="kpi"><div class="rotulo">Saídas</div><div class="valor" style="color:var(--vermelho)">${vmt(s.saidas)}</div></div>
-        </div>
+        <div class="grafico-cartao"><h3>Evolução do saldo</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
+        <button class="btn" id="cx-novo2" style="margin-bottom:8px">${ic("mais_add", 16)} Novo lançamento</button>
         <div class="btn-linha" style="margin-bottom:8px">
           ${pode("EXPORTAR") ? `<button class="btn secundario" id="cx-pdf">${ic("pdf", 16)} PDF</button>` : ""}
           ${pode("CAIXA_RECONCILIAR") ? `<button class="btn secundario" id="cx-rec">${ic("reconciliar", 16)} Reconciliar</button>` : ""}
@@ -1087,6 +1092,7 @@
           <div class="seccao-titulo">Movimentos</div>
           ${pode("CAIXA_OCULTAR") ? `<label style="font-size:.78rem;color:var(--texto-suave)"><input type="checkbox" id="cx-oc" ${caixaVerOcultos ? "checked" : ""}> ver ocultos</label>` : ""}
         </div>${lista || vazio("caixa", "Sem movimentos.")}`;
+      if ($("cx-novo2")) $("cx-novo2").onclick = () => formCaixa();
       if ($("cx-oc")) $("cx-oc").onchange = (e) => { caixaVerOcultos = e.target.checked; verCaixa(); };
       if ($("cx-rec")) $("cx-rec").onclick = () => {
         abrirFolha(`<h3>Reconciliar o caixa</h3><div class="sub">Saldo do sistema: ${R.mt(s.saldo)}</div>
@@ -1432,6 +1438,20 @@
           "- Saldo em caixa: " + R.mt(s.saldo) + "\n" +
           "- Empréstimos: " + ind.emCurso + " em curso, " + ind.pagos + " pagos, " + ind.pendentes + " pendentes\n" +
           "- Prestações: " + ind.prestacoesAtrasadas + " em atraso, " + ind.prestacoesNoPrazo + " no prazo\n";
+        // Lista de clientes com dívida, para a IA responder a perguntas específicas
+        try {
+          const clientes = await Dados.listarClientes("");
+          const devedores = clientes.filter((cl) => cl.emDivida > 0.005).sort((a, b) => b.emDivida - a.emDivida);
+          ctx += "\nTotal de clientes: " + clientes.length + ". Com dívida: " + devedores.length + ".\n";
+          if (devedores.length) {
+            ctx += "Clientes com dívida (nome, telefone, valor em dívida, prestações em atraso):\n";
+            devedores.slice(0, 40).forEach((cl) => {
+              ctx += "- " + cl.nome + (cl.telefone ? " (" + cl.telefone + ")" : "") + ": " + R.mt(cl.emDivida) +
+                (cl.prestacoesEmAtraso > 0 ? ", " + cl.prestacoesEmAtraso + " em atraso" : " (no prazo)") + "\n";
+            });
+          }
+          ctx += "Usa estes dados reais para responder a perguntas sobre clientes, dívidas, atrasos e cobranças.\n";
+        } catch (e) { /* mantém o contexto base */ }
       } else {
         const cob = await Dados.listarPorPagar();
         ctx += "Há " + cob.length + " prestações por cobrar. NÃO reveles valores financeiros globais da empresa a um agente.\n";

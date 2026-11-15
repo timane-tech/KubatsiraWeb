@@ -313,6 +313,23 @@ const Dados = (() => {
     return { entradas, saidas, saldo: Regras.arredondar(entradas - saidas) };
   }
 
+  // Resumo do caixa de um dia (saldo de abertura, entradas/saídas por tipo, saldo de fecho)
+  async function caixaDoDia(diaISO) {
+    const dia = diaISO || Regras.hojeISO();
+    const abertura = Number((await DB.consultar(
+      "SELECT COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END),0) AS s FROM caixa WHERE data_movimento::date < ?::date", [dia]))[0].s);
+    const r = (await DB.consultar(
+      "SELECT " +
+      "COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND categoria='PRESTACAO' THEN valor ELSE 0 END),0) AS prest," +
+      "COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND COALESCE(categoria,'')<>'PRESTACAO' THEN valor ELSE 0 END),0) AS outras," +
+      "COALESCE(SUM(CASE WHEN tipo='SAIDA' AND categoria='DESEMBOLSO' THEN valor ELSE 0 END),0) AS emp," +
+      "COALESCE(SUM(CASE WHEN tipo='SAIDA' AND COALESCE(categoria,'')<>'DESEMBOLSO' THEN valor ELSE 0 END),0) AS desp " +
+      "FROM caixa WHERE data_movimento::date = ?::date", [dia]))[0];
+    const prestacoes = Number(r.prest), outras = Number(r.outras), emprestimos = Number(r.emp), despesas = Number(r.desp);
+    return { dia, abertura, prestacoes, outras, emprestimos, despesas,
+      fecho: Regras.arredondar(abertura + prestacoes + outras - emprestimos - despesas) };
+  }
+
   async function ultimosMovimentos(quantidade) {
     return (await DB.consultar(
       "SELECT id, tipo, valor, justificativa, categoria, data_movimento, registado_por " +
@@ -1043,7 +1060,7 @@ const Dados = (() => {
     autenticar, idAdminPrincipal, balanco, cobrancasPrevistas, topClientes,
     graficoEntradasSaidas, graficoEvolucaoCaixa,
     listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo,
-    saldoCaixa, ultimosMovimentos, registarPagamento,
+    saldoCaixa, caixaDoDia, ultimosMovimentos, registarPagamento,
     registarCliente, atualizarCliente, novoCodigoAcesso, eliminarCliente, poupancaSaldo,
     pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,
     registarCaixa, listarUtilizadores, criarUtilizador, atualizarUtilizador, eliminarUtilizador,
