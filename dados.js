@@ -141,8 +141,9 @@ const Dados = (() => {
       margemLucro: Number(r.margem),
       pendentes: Number(r.pendentes), emCurso: Number(r.emcurso), pagos: Number(r.pagos),
       rejeitados: Number(r.rejeitados), cancelados: Number(r.cancelados),
-      totalAReceber: 0, emAtraso: 0, prestacoesNoPrazo: 0, prestacoesAtrasadas: 0,
+      totalAReceber: 0, emAtraso: 0, prestacoesPagas: 0, prestacoesNoPrazo: 0, prestacoesAtrasadas: 0,
     };
+    ind.prestacoesPagas = Number((await DB.consultar("SELECT COUNT(*) AS n FROM prestacoes WHERE status='PAGO'", []))[0].n);
     const hoje = Regras.hojeISO();
     for (const p of await listarPorPagar()) {
       ind.totalAReceber += Regras.emFalta(p, hoje);
