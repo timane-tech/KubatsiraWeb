@@ -41,26 +41,39 @@ button { font-family: inherit; }
 .ecra { display: none; min-height: 100dvh; }
 .ecra.ativo { display: block; }
 
-/* Cabeçalho */
+/* Cabeçalho (gradiente azul, como no Android) */
 .cabecalho {
   position: sticky; top: 0; z-index: 20;
-  background: var(--navy);
+  background: linear-gradient(135deg, #16366a 0%, #1f4fa0 55%, #2f80ed 115%);
   color: #fff;
-  padding: calc(env(safe-area-inset-top) + 14px) 16px 14px;
+  padding: calc(env(safe-area-inset-top) + 16px) 18px 18px;
   display: flex; align-items: center; gap: 12px;
-  box-shadow: 0 2px 12px rgba(20, 40, 70, .18);
+  border-radius: 0 0 22px 22px;
+  box-shadow: 0 4px 16px rgba(20, 40, 70, .22);
 }
-.cabecalho .titulo { font-size: 1.15rem; font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cabecalho .sub { font-size: .78rem; opacity: .8; font-weight: 500; }
+.cabecalho .titulo { font-size: 1.25rem; font-weight: 800; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cabecalho .sub { font-size: .82rem; opacity: .85; font-weight: 500; }
 .cabecalho .avatar {
-  width: 40px; height: 40px; border-radius: 50%;
-  background: var(--navy-300); color: #fff; font-weight: 700;
-  display: grid; place-items: center; font-size: .9rem; flex: none;
+  width: 44px; height: 44px; border-radius: 50%;
+  background: rgba(255,255,255,.22); color: #fff; font-weight: 700;
+  display: grid; place-items: center; font-size: .95rem; flex: none;
+  border: 2px solid rgba(255,255,255,.45); background-size: cover; background-position: center;
 }
 .cabecalho button.icone {
-  background: rgba(255,255,255,.12); border: 0; color: #fff;
-  width: 40px; height: 40px; border-radius: 12px; font-size: 1.1rem; cursor: pointer;
+  background: rgba(255,255,255,.16); border: 0; color: #fff;
+  width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; position: relative;
 }
+.cabecalho button.icone:active { background: rgba(255,255,255,.3); }
+/* Cabeçalho "painel" (Início): saudação grande + data + pílula do perfil */
+.cab-painel { flex-direction: column; align-items: stretch; gap: 10px; padding-bottom: 16px; }
+.cab-topo { display: flex; align-items: center; gap: 12px; }
+.cab-topo .avatar { width: 52px; height: 52px; }
+.cab-saud { flex: 1; min-width: 0; }
+.cab-saud .ola { font-size: 1.35rem; font-weight: 800; line-height: 1.15; }
+.cab-saud .data { font-size: .82rem; opacity: .85; }
+.pilula-perfil { display: inline-block; background: rgba(255,255,255,.2); color: #fff; font-weight: 700; font-size: .82rem; padding: 6px 14px; border-radius: 999px; align-self: flex-start; }
+.badge-sino { position: absolute; top: -3px; right: -3px; background: var(--vermelho); color: #fff; font-size: .62rem; font-weight: 800; min-width: 17px; height: 17px; border-radius: 999px; display: grid; place-items: center; padding: 0 4px; border: 2px solid #1f4fa0; }
 
 /* Conteúdo */
 .conteudo { padding: 16px 16px calc(var(--barra) + env(safe-area-inset-bottom) + 24px); max-width: 720px; margin: 0 auto; }
@@ -85,6 +98,46 @@ button { font-family: inherit; }
 .kpi.destaque { background: linear-gradient(135deg, var(--navy), var(--navy-700)); color: #fff; border: 0; }
 .kpi.destaque .rotulo { color: rgba(255,255,255,.82); }
 .kpi.alerta .valor { color: var(--vermelho); }
+
+/* KPIs em fila com scroll horizontal (como no Android) */
+.kpis-scroll { display: flex; gap: 12px; overflow-x: auto; padding: 2px 2px 8px; margin: 0 -2px 4px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.kpis-scroll::-webkit-scrollbar { display: none; }
+.kpi-card {
+  flex: 0 0 auto; min-width: 165px; background: var(--cartao); border: 1px solid var(--borda);
+  border-radius: 14px; padding: 14px 16px 14px 18px; box-shadow: var(--sombra); position: relative; overflow: hidden;
+}
+.kpi-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 5px; border-radius: 0 4px 4px 0; background: var(--cor, var(--accent)); }
+.kpi-card .rotulo { font-size: .74rem; color: var(--texto-suave); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+.kpi-card .valor { font-size: 1.3rem; font-weight: 800; margin-top: 6px; color: var(--cor, var(--texto)); white-space: nowrap; }
+
+/* Botão-pílula (Mostrar valores / Ver todas) */
+.pilula-btn { display: inline-flex; align-items: center; gap: 6px; background: var(--accent-bg); color: var(--accent); border: 0; font-weight: 700; font-size: .82rem; padding: 7px 14px; border-radius: 999px; cursor: pointer; font-family: inherit; }
+.pilula-btn:active { opacity: .8; }
+.linha-seccao { display: flex; align-items: center; justify-content: space-between; margin: 18px 2px 10px; }
+.linha-seccao .seccao-titulo { margin: 0; }
+
+/* Chips de filtro (como no Android) */
+.chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.chips::-webkit-scrollbar { display: none; }
+.chip { flex: 0 0 auto; background: var(--cartao); border: 1px solid var(--borda); color: var(--texto-suave); font-weight: 700; font-size: .85rem; padding: 9px 16px; border-radius: 999px; cursor: pointer; font-family: inherit; white-space: nowrap; }
+.chip.ativo { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+/* Cartão de gráfico */
+.grafico-cartao { background: var(--cartao); border: 1px solid var(--borda); border-radius: var(--raio); box-shadow: var(--sombra); padding: 16px; margin-bottom: 14px; }
+.grafico-cartao h3 { margin: 0; font-size: 1.1rem; font-weight: 800; }
+.grafico-cartao .sub { color: var(--texto-suave); font-size: .84rem; margin: 2px 0 10px; }
+.legenda-grafico { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-bottom: 8px; }
+.legenda-grafico span { display: inline-flex; align-items: center; gap: 6px; font-size: .82rem; color: var(--texto-suave); font-weight: 600; }
+.legenda-grafico i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+
+/* Botão flutuante IA */
+.fab-ia {
+  position: fixed; right: 16px; bottom: calc(var(--barra) + env(safe-area-inset-bottom) + 14px); z-index: 25;
+  background: var(--navy); color: #fff; border: 0; border-radius: 16px; padding: 14px 20px;
+  font-weight: 800; font-size: .95rem; font-family: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px; box-shadow: 0 8px 24px rgba(20,40,70,.35);
+}
+.fab-ia:active { transform: scale(.97); }
 
 /* Contadores de estado */
 .contadores { display: flex; gap: 8px; flex-wrap: wrap; }

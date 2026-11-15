@@ -177,6 +177,48 @@ const Dados = (() => {
     return mapa;
   }
 
+  // Entradas vs Saídas dos últimos 6 meses (entradas, empréstimos/desembolso, despesas)
+  async function graficoEntradasSaidas() {
+    const rows = await DB.consultar(
+      "SELECT to_char(data_movimento,'YYYY-MM') AS mes, " +
+      "COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE 0 END),0) AS entradas, " +
+      "COALESCE(SUM(CASE WHEN categoria='DESEMBOLSO' THEN valor ELSE 0 END),0) AS emprestimos, " +
+      "COALESCE(SUM(CASE WHEN categoria='DESPESA' THEN valor ELSE 0 END),0) AS despesas " +
+      "FROM caixa WHERE data_movimento >= date_trunc('month', CURRENT_DATE) - interval '5 months' " +
+      "GROUP BY mes ORDER BY mes", []);
+    const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    const mapa = {};
+    rows.forEach((r) => mapa[r.mes] = { entradas: Number(r.entradas), emprestimos: Number(r.emprestimos), despesas: Number(r.despesas) });
+    const out = [];
+    const d = new Date(); d.setDate(1);
+    const lista = [];
+    for (let i = 5; i >= 0; i--) { const m = new Date(d); m.setMonth(d.getMonth() - i); lista.push(m); }
+    for (const m of lista) {
+      const chave = m.getFullYear() + "-" + String(m.getMonth() + 1).padStart(2, "0");
+      const v = mapa[chave] || { entradas: 0, emprestimos: 0, despesas: 0 };
+      out.push({ mes: meses[m.getMonth()], entradas: v.entradas, emprestimos: v.emprestimos, despesas: v.despesas });
+    }
+    return out;
+  }
+
+  // Evolução do saldo em caixa nos últimos 30 dias (saldo acumulado por dia)
+  async function graficoEvolucaoCaixa() {
+    const inicial = Number((await DB.consultar(
+      "SELECT COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END),0) AS s FROM caixa WHERE data_movimento < CURRENT_DATE - interval '29 days'", []))[0].s);
+    const diarios = await DB.consultar(
+      "SELECT data_movimento::date AS dia, SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END) AS net " +
+      "FROM caixa WHERE data_movimento >= CURRENT_DATE - interval '29 days' GROUP BY dia ORDER BY dia", []);
+    const mapa = {}; diarios.forEach((r) => mapa[Regras.dataBase(r.dia)] = Number(r.net));
+    const out = []; let saldo = inicial;
+    for (let i = 29; i >= 0; i--) {
+      const dt = new Date(); dt.setDate(dt.getDate() - i);
+      const iso = dt.toISOString().slice(0, 10);
+      saldo += (mapa[iso] || 0);
+      out.push({ dia: iso, saldo: Regras.arredondar(saldo) });
+    }
+    return out;
+  }
+
   async function topClientes() {
     return (await DB.consultar(
       "SELECT c.nome, SUM(e.valor_solicitado) AS total FROM emprestimos e JOIN clientes c ON c.id = e.cliente_id " +
@@ -998,6 +1040,7 @@ const Dados = (() => {
 
   return {
     autenticar, idAdminPrincipal, balanco, cobrancasPrevistas, topClientes,
+    graficoEntradasSaidas, graficoEvolucaoCaixa,
     listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo,
     saldoCaixa, ultimosMovimentos, registarPagamento,
     registarCliente, atualizarCliente, novoCodigoAcesso, eliminarCliente, poupancaSaldo,

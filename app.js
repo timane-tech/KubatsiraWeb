@@ -330,6 +330,11 @@
       btn.onclick = () => navegar(a.id);
       b.appendChild(btn);
     });
+    if (!$("fab-ia-btn")) {
+      const f = el(`<button class="fab-ia" id="fab-ia-btn">${ic("assistente", 18)} IA</button>`);
+      f.onclick = () => (S.cliente ? verAssistente() : verAssistente());
+      $("ecra-app").appendChild(f);
+    }
   }
 
   function animarLogo() {
@@ -364,6 +369,7 @@
 
   function cabecalho(titulo, sub, acoes) {
     const ini = R.iniciais(S.user.nome || S.user.utilizador);
+    $("cabecalho").className = "cabecalho";
     $("cabecalho").innerHTML = `
       <div style="flex:1;min-width:0">
         <div class="titulo">${esc(titulo)}</div>
@@ -406,52 +412,118 @@
       <div style="flex:1;min-width:140px">${legenda}</div></div>`;
   }
 
+  // ---------- Saudação e data ----------
+  function saudacao() {
+    const h = new Date().getHours();
+    return h < 12 ? "Bom dia" : h < 19 ? "Boa tarde" : "Boa noite";
+  }
+  function dataExtenso() {
+    const dias = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+    const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+    const d = new Date();
+    return `${dias[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]}`;
+  }
+
+  // Gráfico de linha/área (evolução). pontos = [{saldo}]
+  function svgLinha(pontos) {
+    const W = 320, H = 130, P = 8;
+    const vals = pontos.map((p) => p.saldo);
+    const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
+    const rng = (max - min) || 1;
+    const x = (i) => P + (i * (W - 2 * P)) / Math.max(1, pontos.length - 1);
+    const y = (v) => H - P - ((v - min) / rng) * (H - 2 * P);
+    const pts = pontos.map((p, i) => `${x(i).toFixed(1)},${y(p.saldo).toFixed(1)}`).join(" ");
+    const area = `M ${x(0).toFixed(1)},${(H - P).toFixed(1)} L ` + pontos.map((p, i) => `${x(i).toFixed(1)},${y(p.saldo).toFixed(1)}`).join(" L ") + ` L ${x(pontos.length - 1).toFixed(1)},${(H - P).toFixed(1)} Z`;
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block">
+      <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f80ed" stop-opacity=".25"/><stop offset="1" stop-color="#2f80ed" stop-opacity="0"/></linearGradient></defs>
+      <path d="${area}" fill="url(#gl)"/>
+      <polyline points="${pts}" fill="none" stroke="#2f80ed" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(pontos.length - 1).toFixed(1)}" cy="${y(pontos[pontos.length - 1].saldo).toFixed(1)}" r="4" fill="#2f80ed"/>
+    </svg>`;
+  }
+
+  // Barras agrupadas (Entradas/Empréstimos/Despesas por mês). dados = [{mes, entradas, emprestimos, despesas}]
+  function svgBarrasAgrupadas(dados) {
+    const W = 320, H = 150, P = 20, base = H - 18;
+    const max = Math.max(1, ...dados.flatMap((d) => [d.entradas, d.emprestimos, d.despesas]));
+    const gw = (W - 2 * P) / dados.length;
+    const bw = Math.min(10, gw / 4);
+    const cores = ["#1e9a55", "#6e3cb4", "#c62828"];
+    let barras = "", rotulos = "";
+    dados.forEach((d, i) => {
+      const gx = P + i * gw + gw / 2;
+      [d.entradas, d.emprestimos, d.despesas].forEach((v, j) => {
+        const bh = (v / max) * (base - P);
+        const bx = gx - bw * 1.6 + j * (bw + 1.2);
+        barras += `<rect x="${bx.toFixed(1)}" y="${(base - bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="2" fill="${cores[j]}"/>`;
+      });
+      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="9" fill="#6e7887">${esc(d.mes)}</text>`;
+    });
+    return `<div class="legenda-grafico"><span><i style="background:#1e9a55"></i>Entradas</span><span><i style="background:#6e3cb4"></i>Empréstimos</span><span><i style="background:#c62828"></i>Despesas</span></div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block"><line x1="${P}" y1="${base}" x2="${W - P + 10}" y2="${base}" stroke="#e6eaf0"/>${barras}${rotulos}</svg>`;
+  }
+
+  const ocultoCartao = () => `<div style="text-align:center;color:var(--laranja);padding:24px 0;font-weight:600">${ic("senha", 18)} Valores ocultos</div>`;
+
   // ============================================================
   // ECRÃ: INÍCIO (Balanço ou Cobranças)
   // ============================================================
   async function verInicio() {
-    cabecalho("Olá, " + primeiroNome(S.user.nome || S.user.utilizador), S.user.perfilParaMostrar ? "" : perfilNome(S.user.perfil));
+    if (!pode("BALANCO")) { cabecalho("Início", ""); verCobrancas(); return; }
+    const nome = S.user.nome || S.user.utilizador;
+    $("cabecalho").className = "cabecalho cab-painel";
+    $("cabecalho").innerHTML = `
+      <div class="cab-topo">
+        <div class="avatar" id="cb-avatar">${esc(R.iniciais(nome))}</div>
+        <div class="cab-saud"><div class="ola">${esc(saudacao())},</div><div class="data">${esc(dataExtenso())}</div></div>
+        <button class="icone" id="cb-atualizar" title="Atualizar">${ic("restaurar", 19)}</button>
+        <button class="icone" id="cb-sino" title="Notificações">${ic("notificacoes", 19)}</button>
+        <button class="icone" id="cb-sair" title="Sair">${ic("sair", 19)}</button>
+      </div>
+      <span class="pilula-perfil">Painel do ${esc(perfilNome(S.user.perfil))}</span>`;
+    pintarAvatar($("cb-avatar"), S.user.foto);
+    $("cb-atualizar").onclick = () => verInicio();
+    $("cb-sino").onclick = () => verNotificacoes();
+    $("cb-sair").onclick = async () => { if (await confirmar("Terminar sessão", "Quer sair da sua conta?", "Sair")) sair(); };
     const c = $("conteudo");
-    if (!pode("BALANCO")) { verCobrancas(); return; }
     c.innerHTML = spinner;
     try {
-      const [ind, cob, top] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.topClientes()]);
+      const [ind, cob, saldo, es, ev] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(), Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa()]);
+      const kpis = [
+        { rot: "Saldo em caixa", txt: vmt(saldo.saldo), cor: "#2f80ed" },
+        { rot: "Por aprovar", txt: String(ind.pendentes), cor: "#1e9a55" },
+        { rot: "Em curso", txt: String(ind.emCurso), cor: "#6e3cb4" },
+        { rot: "Em dívida", txt: vmt(ind.totalAReceber), cor: "#6e3cb4" },
+        { rot: "Em atraso", txt: vmt(ind.emAtraso), cor: "#c62828" },
+        { rot: "Margem (juros)", txt: vmt(ind.margemLucro), cor: "#1e9a55" },
+      ];
+      const kpisHtml = kpis.map((k) => `<div class="kpi-card" style="--cor:${k.cor}"><div class="rotulo">${esc(k.rot)}</div><div class="valor">${k.txt}</div></div>`).join("");
       let barras = "";
       const max = Math.max(1, ...[...cob.values()]);
       for (const [rot, val] of cob) {
         const pct = Math.round((val / max) * 100);
-        barras += `<div class="barra-linha ${rot === "Atraso" ? "atraso" : ""}">
-          <span class="rot">${esc(rot)}</span>
-          <span class="barra-trilho"><span class="barra-preench" style="width:${val > 0 ? Math.max(4, pct) : 0}%"></span></span>
-          <span class="mt">${vmt(val)}</span></div>`;
+        barras += `<div class="barra-linha ${rot === "Atraso" ? "atraso" : ""}"><span class="rot">${esc(rot)}</span><span class="barra-trilho"><span class="barra-preench" style="width:${val > 0 ? Math.max(4, pct) : 0}%"></span></span><span class="mt">${vmt(val)}</span></div>`;
       }
-      let topHtml = top.length ? top.map((t) => `<div class="linha-dados"><span class="r">${esc(t.nome)}</span><span class="v">${vmt(t.total)}</span></div>`).join("") : `<p class="sub" style="color:var(--texto-suave)">Sem dados.</p>`;
+      const donut = donutSVG([
+        { rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "#1e9a55" },
+        { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "#2f80ed" },
+        { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "#c62828" },
+      ], "prestações", ind.prestacoesPagas + ind.prestacoesNoPrazo + ind.prestacoesAtrasadas);
       c.innerHTML = `
-        <div class="kpis">
-          <div class="kpi destaque"><div class="rotulo">Capital investido</div><div class="valor">${vmt(ind.capitalInvestido)}</div></div>
-          <div class="kpi"><div class="rotulo">A receber</div><div class="valor">${vmt(ind.totalAReceber)}</div></div>
-          <div class="kpi alerta"><div class="rotulo">Em atraso</div><div class="valor">${vmt(ind.emAtraso)}</div></div>
-          <div class="kpi"><div class="rotulo">Margem (juros)</div><div class="valor">${vmt(ind.margemLucro)}</div></div>
-        </div>
-        <div class="seccao-titulo">Empréstimos por estado</div>
-        <div class="cartao">${donutSVG([
-          { rotulo: "Em curso", valor: ind.emCurso, cor: "#1f3a5f" },
-          { rotulo: "Pagos", valor: ind.pagos, cor: "#1b8f5a" },
-          { rotulo: "Pendentes", valor: ind.pendentes, cor: "#c77700" },
-          { rotulo: "Cancelados", valor: ind.cancelados, cor: "#94a3b8" },
-        ], "total", ind.emCurso + ind.pagos + ind.pendentes + ind.cancelados)}</div>
-        <div class="seccao-titulo">Cobranças previstas (7 dias)</div>
-        <div class="cartao">${barras}</div>
-        <div class="seccao-titulo">Maiores clientes</div>
-        <div class="cartao">${topHtml}</div>
-        ${pode("EXPORTAR") ? `<button class="btn secundario" id="bal-pdf" style="margin-top:4px">${ic("pdf", 16)} Exportar Balanço (PDF)</button>` : ""}`;
-      if ($("bal-pdf")) $("bal-pdf").onclick = () => exportarPDF("Balanço Geral",
-        ["Indicador", "Valor"],
-        [["Capital investido", R.mt(ind.capitalInvestido)], ["Total a receber", R.mt(ind.totalAReceber)],
-         ["Em atraso", R.mt(ind.emAtraso)], ["Margem (juros)", R.mt(ind.margemLucro)],
-         ["Empréstimos em curso", String(ind.emCurso)], ["Pagos", String(ind.pagos)],
-         ["Pendentes", String(ind.pendentes)], ["Prestações em atraso", String(ind.prestacoesAtrasadas)]],
-        []);
+        <div class="kpis-scroll">${kpisHtml}</div>
+        <div class="linha-seccao"><div class="seccao-titulo">Balanço</div>
+          <button class="pilula-btn" id="bal-olho">${ic(S.ocultar ? "olho" : "olhoff", 15)} ${S.ocultar ? "Mostrar valores" : "Ocultar"}</button></div>
+        <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">Últimos 6 meses · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
+        <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
+        <div class="grafico-cartao"><h3>Situação das prestações</h3><div class="sub">Pagas, no prazo e em atraso</div>${donut}</div>
+        <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : barras}</div>
+        ${pode("EXPORTAR") ? `<button class="btn secundario" id="bal-pdf">${ic("pdf", 16)} Exportar Balanço (PDF)</button>` : ""}`;
+      $("bal-olho").onclick = async () => {
+        if (S.ocultar && Bio.ativa(S.user.id)) { try { await Bio.verificar(S.user.id); } catch (e) { toast("Não foi possível confirmar a identidade.", true); return; } }
+        S.ocultar = !S.ocultar; verInicio();
+      };
+      if ($("bal-pdf")) $("bal-pdf").onclick = () => exportarPDF("Balanço Geral", ["Indicador", "Valor"],
+        [["Saldo em caixa", R.mt(saldo.saldo)], ["Capital investido", R.mt(ind.capitalInvestido)], ["Total a receber", R.mt(ind.totalAReceber)], ["Em atraso", R.mt(ind.emAtraso)], ["Margem (juros)", R.mt(ind.margemLucro)], ["Em curso", String(ind.emCurso)], ["Pagos", String(ind.pagos)], ["Pendentes", String(ind.pendentes)]], []);
     } catch (e) { c.innerHTML = erroEcra(e, verInicio); }
   }
 
