@@ -46,7 +46,7 @@ const Dados = (() => {
     if (!rows.length) return null;
     const u = lerUser(rows[0]);
     if (u.ativo) {
-      const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+      const agora = Regras.agoraLocal();
       await DB.executar("UPDATE usuarios SET ultimo_acesso = ? WHERE id = ?", [agora, u.id]);
     }
     return u;
@@ -96,6 +96,12 @@ const Dados = (() => {
     (await DB.consultar(SELECT_PREST +
       "WHERE p.status='PENDENTE' AND e.status='APROVADO' AND p.data_vencimento <= ? AND NOT " + JA_COBERTA +
       " ORDER BY p.data_vencimento, c.nome", [ateISO])).map(lerPrest);
+
+  // Prestações pagas com a data de pagamento entre "de" e "ate" (filtro "Pagas" das Prestações do Dia)
+  const listarPagas = async (deISO, ateISO) =>
+    (await DB.consultar(SELECT_PREST +
+      "WHERE p.status='PAGO' AND p.data_pagamento::date BETWEEN ?::date AND ?::date" +
+      " ORDER BY p.data_pagamento DESC, c.nome", [deISO || "1900-01-01", ateISO || "2999-12-31"])).map(lerPrest);
 
   const listarPorEmprestimo = async (empId) =>
     (await DB.consultar(SELECT_PREST + "WHERE p.emprestimo_id = ? ORDER BY p.numero_prestacao", [empId])).map(lerPrest);
@@ -162,12 +168,12 @@ const Dados = (() => {
     mapa.set("Atraso", 0);
     for (let i = 0; i < 7; i++) {
       const d = new Date(hoje + "T00:00:00"); d.setDate(d.getDate() + i);
-      const iso = d.toISOString().slice(0, 10);
+      const iso = Regras.isoLocal(d);
       const rot = i === 0 ? "Hoje" : Regras.data(iso).substring(0, 5);
       mapa.set(rot, 0);
     }
     const ate = new Date(hoje + "T00:00:00"); ate.setDate(ate.getDate() + 6);
-    for (const p of await listarCobrancas(ate.toISOString().slice(0, 10))) {
+    for (const p of await listarCobrancas(Regras.isoLocal(ate))) {
       let chave;
       if (Regras.diasAtraso(p.vencimento, hoje) > 0) chave = "Atraso";
       else if (p.vencimento === hoje) chave = "Hoje";
@@ -213,7 +219,7 @@ const Dados = (() => {
     const out = []; let saldo = inicial;
     for (let i = 29; i >= 0; i--) {
       const dt = new Date(); dt.setDate(dt.getDate() - i);
-      const iso = dt.toISOString().slice(0, 10);
+      const iso = Regras.isoLocal(dt);
       saldo += (mapa[iso] || 0);
       out.push({ dia: iso, saldo: Regras.arredondar(saldo) });
     }
@@ -244,7 +250,7 @@ const Dados = (() => {
   async function listarClientes(filtro) {
     const f = "%" + (filtro || "").trim() + "%";
     const lista = (await DB.consultar(SELECT_CLIENTE +
-      "WHERE c.nome ILIKE ? OR u.telefone ILIKE ? OR c.local_negocio ILIKE ? ORDER BY c.nome", [f, f, f]))
+      "WHERE c.nome ILIKE ? OR u.telefone ILIKE ? OR c.local_negocio ILIKE ? OR c.tipo_negocio ILIKE ? ORDER BY c.nome", [f, f, f, f]))
       .map(lerCliente);
     const porId = new Map(lista.map((c) => [c.id, c]));
     const hoje = Regras.hojeISO();
@@ -635,7 +641,7 @@ const Dados = (() => {
   }
 
   async function rejeitar(id, administrador) {
-    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const agora = Regras.agoraLocal();
     const r = await DB.executar("UPDATE emprestimos SET status='REJEITADO', processado_por=?, rejeitado_em=? WHERE id=? AND status='PENDENTE'", [administrador, agora, id]);
     return r.afetadas === 1 ? { ok: true, msg: "Pedido nº " + id + " rejeitado. Foi para a Lixeira." } : { ok: false, msg: "Este pedido já não está pendente." };
   }
@@ -858,7 +864,7 @@ const Dados = (() => {
     novaMulta = Regras.arredondar(novaMulta);
     if (novaMulta < 0 || novaMulta > atual + 0.004)
       return { ok: false, msg: "A nova multa tem de estar entre 0 e " + Regras.mt(atual) + "." };
-    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const agora = Regras.agoraLocal();
     const ficaPaga = p.valorPago + 0.005 >= Regras.arredondar(p.valor + novaMulta);
     const comandos = [{
       sql: "UPDATE prestacoes SET multa_congelada=?, multa_original=?, multa_alterada_por=?, multa_alterada_em=?" +
@@ -908,21 +914,21 @@ const Dados = (() => {
     if (tipo !== "ENTRADA" && tipo !== "SAIDA") return { ok: false, msg: "Tipo inválido." };
     if (valor <= 0) return { ok: false, msg: "Indique um valor válido." };
     if (!justificativa || justificativa.trim().length < 3) return { ok: false, msg: "Indique a descrição do movimento." };
-    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const agora = Regras.agoraLocal();
     const r = await DB.executar("UPDATE caixa SET tipo=?, valor=?, justificativa=?, editado_em=?, editado_por=? WHERE id=?",
       [tipo, valor, justificativa.trim(), agora, nomeSessao(), id]);
     return r.afetadas === 1 ? { ok: true, msg: "Lançamento atualizado." } : { ok: false, msg: "Não foi possível atualizar." };
   }
 
   async function caixaOcultar(id, ocultar) {
-    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const agora = Regras.agoraLocal();
     await DB.executar("UPDATE caixa SET oculto=?, oculto_por=?, oculto_em=? WHERE id=?",
       [ocultar, ocultar ? nomeSessao() : null, ocultar ? agora : null, id]);
     return { ok: true, msg: ocultar ? "Lançamento ocultado (continua no saldo)." : "Lançamento visível outra vez." };
   }
 
   async function caixaApagar(id, quem) {
-    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const agora = Regras.agoraLocal();
     await DB.lote([
       { sql: "INSERT INTO caixa_eliminados (caixa_id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, eliminado_por, eliminado_em, pagamento_anulado) " +
              "SELECT id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, ?, ?, FALSE FROM caixa WHERE id=?", params: [quem, agora, id] },
@@ -936,6 +942,16 @@ const Dados = (() => {
     return (await DB.consultar(
       "SELECT id, tipo, valor, justificativa, categoria, data_movimento, registado_por, COALESCE(oculto,false)::text AS oculto " +
       "FROM caixa " + (incluirOcultos ? "" : "WHERE NOT oculto ") + "ORDER BY id DESC LIMIT ?", [quantidade || 60]))
+      .map((r) => ({ id: Number(r.id), tipo: r.tipo, valor: Number(r.valor), justificativa: r.justificativa,
+        categoria: r.categoria, dataMovimento: r.data_movimento, registadoPor: r.registado_por,
+        oculto: r.oculto === "true" || r.oculto === "t", livre: ehLivre(r.categoria) }));
+  }
+  // Movimentos de um período (lista "Lançamentos" do Caixa, como no Android)
+  async function movimentosPeriodo(deISO, ateISO, incluirOcultos) {
+    return (await DB.consultar(
+      "SELECT id, tipo, valor, justificativa, categoria, data_movimento, registado_por, COALESCE(oculto,false)::text AS oculto " +
+      "FROM caixa WHERE data_movimento::date BETWEEN ?::date AND ?::date " + (incluirOcultos ? "" : "AND NOT oculto ") +
+      "ORDER BY data_movimento DESC, id DESC", [deISO || "1900-01-01", ateISO || "2999-12-31"]))
       .map((r) => ({ id: Number(r.id), tipo: r.tipo, valor: Number(r.valor), justificativa: r.justificativa,
         categoria: r.categoria, dataMovimento: r.data_movimento, registadoPor: r.registado_por,
         oculto: r.oculto === "true" || r.oculto === "t", livre: ehLivre(r.categoria) }));
@@ -964,7 +980,7 @@ const Dados = (() => {
     if (Number(chk.rec) > 0) return { ok: false, msg: "O desembolso já foi reconciliado, por isso a data não pode ser alterada." };
 
     const diff = emp.dataAprovacao ? Regras.diasEntre(emp.dataAprovacao, novaDataISO) : 0;
-    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const agora = Regras.agoraLocal();
     const comandos = [];
     if (emp.dataPedido && Regras.diasEntre(novaDataISO, emp.dataPedido) > 0)
       comandos.push({ sql: "UPDATE emprestimos SET data_aprovacao=?, data_solicitacao=? WHERE id=?", params: [novaDataISO, novaDataISO, emp.id] });
@@ -991,7 +1007,7 @@ const Dados = (() => {
     const sistema = (await saldoCaixa()).saldo;
     const diferenca = Regras.arredondar(contado - sistema);
     const obs = (observacao || "").trim();
-    const agora = new Date().toISOString().slice(0, 19).replace("T", " ");
+    const agora = Regras.agoraLocal();
     const hoje = Regras.hojeISO();
     const comandos = [];
     if (registarAjuste && Math.abs(diferenca) > 0.005) {
@@ -1059,7 +1075,8 @@ const Dados = (() => {
   return {
     autenticar, idAdminPrincipal, balanco, cobrancasPrevistas, topClientes,
     graficoEntradasSaidas, graficoEvolucaoCaixa,
-    listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo,
+    listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo, listarPagas,
+    movimentosPeriodo,
     saldoCaixa, caixaDoDia, ultimosMovimentos, registarPagamento,
     registarCliente, atualizarCliente, novoCodigoAcesso, eliminarCliente, poupancaSaldo,
     pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,

@@ -135,6 +135,72 @@
     return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;display:inline-block">${p}</svg>`;
   }
 
+  // Ícones cheios (Material Icons, como na barra e nos menus da app Android)
+  const ICONES_CHEIOS = {
+    inicio: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z",
+    cobrancas: "M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z",
+    clientes: "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
+    caixa: "M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z",
+    credito: "M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z",
+    mais: "M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z",
+    balanco: "M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z",
+    editar: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
+    pasta: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
+    visto: "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
+    cadeado: "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z",
+    cofre: "M20 3H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2v1h2v-1h12v1h2v-1c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H4V5h16v12zM7 7h7v6H7zm2 2v2h3V9zm7-2h2v6h-2z",
+    lixo: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12 1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z",
+    escudo: "M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z",
+    mensagem: "M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z",
+    chave: "M12.65 10A5.99 5.99 0 0 0 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6a5.99 5.99 0 0 0 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
+    olhofechado: "M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.8 11.8 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78 3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z",
+    olhoaberto: "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z",
+    engrenagem: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
+    telefone: "M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z",
+    local: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z",
+    aviso: "M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z",
+    calendario: "M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z",
+    atualizar: "M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
+    documento: "M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z",
+    tendencia: "m16 6 2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z",
+    sino: "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z",
+    porta: "M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 0 0-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z",
+    robo: "M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z",
+  };
+  function icf(nome, tam) {
+    const d = ICONES_CHEIOS[nome];
+    if (!d) return ic(nome, tam);
+    const s = tam || 22;
+    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="currentColor" style="vertical-align:middle;flex:none;display:inline-block"><path d="${d}"/></svg>`;
+  }
+
+  // Cor do avatar a partir do nome — a mesma fórmula do Android (Ui.corAvatar, String.hashCode do Java):
+  // o mesmo cliente tem a mesma cor no telemóvel, no iPhone e no computador.
+  const CORES_AVATAR = ["#2F80ED", "#1E9A55", "#6E3CB4", "#E6821E", "#19969F", "#D2466E", "#5A6E8C"];
+  function corAvatar(nome) {
+    const s = nome || "";
+    let h = 0;
+    for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
+    return CORES_AVATAR[Math.abs(h) % CORES_AVATAR.length];
+  }
+  const avatar = (nome, tam) => `<span class="av" style="background:${corAvatar(nome)}${tam ? `;width:${tam}px;height:${tam}px` : ""}">${esc(R.iniciais(nome))}</span>`;
+
+  // Cores [texto, fundo] de uma situação (Ui.coresSituacao)
+  function coresSituacao(sit) {
+    switch (sit) {
+      case "Em curso": case "Por pagar": case "No prazo": return ["#2F80ED", "#E8F1FD"];
+      case "Com atraso": case "Em atraso": case "Rejeitado": return ["#C62828", "#FDE6E6"];
+      case "Por aprovar": case "Vence hoje": return ["#B26A00", "#FFF0D6"];
+      case "Concluído": case "Paga": case "Pago": return ["#1E9A55", "#DEF5E6"];
+      default: return ["#6E7887", "#EEF1F5"];
+    }
+  }
+  const pilula = (texto, cores) => `<span class="pilula" style="color:${cores[0]};background:${cores[1]}">${esc(texto)}</span>`;
+
+  // Botões do cabeçalho das abas (como no Android: ↻ redondo e pílula "PDF")
+  const btnAtualizar = (id) => `<button class="icone" id="${id}" title="Atualizar">${icf("atualizar", 21)}</button>`;
+  const btnPdf = (id) => `<button class="pilula-cab" id="${id}" title="Exportar PDF">${icf("documento", 17)} PDF</button>`;
+
   // Valor eventualmente oculto (modo privado)
   const vmt = (v) => (S.ocultar ? "••••" : R.mt(v));
 
@@ -326,12 +392,12 @@
     const b = $("barra-inferior");
     b.innerHTML = "";
     tabsBarra().forEach((a) => {
-      const btn = el(`<button data-aba="${a.id}"><span class="ic">${ic(a.ic, 23)}</span><span>${a.rot}</span></button>`);
+      const btn = el(`<button data-aba="${a.id}"><span class="ic">${icf(a.ic, 24)}</span><span>${a.rot}</span></button>`);
       btn.onclick = () => navegar(a.id);
       b.appendChild(btn);
     });
     if (!$("fab-ia-btn")) {
-      const f = el(`<button class="fab-ia" id="fab-ia-btn">${ic("assistente", 18)} IA</button>`);
+      const f = el(`<button class="fab-ia" id="fab-ia-btn">${icf("robo", 20)} IA</button>`);
       f.onclick = () => (S.cliente ? verAssistente() : verAssistente());
       $("ecra-app").appendChild(f);
     }
@@ -345,6 +411,17 @@
       document.body.appendChild(o);
       setTimeout(() => o.remove(), 660);
     } catch (e) {}
+  }
+
+  // Área de conteúdo nova para cada ecrã: um ecrã que ainda estava a carregar (ex.: Início lento)
+  // escreve na área antiga, que já saiu da página, e não por cima do ecrã que o utilizador abriu.
+  function novoConteudo() {
+    const velho = $("conteudo");
+    const novo = velho.cloneNode(false);
+    novo.className = "conteudo";
+    novo.removeAttribute("style");
+    velho.replaceWith(novo);
+    return novo;
   }
 
   function navegar(aba) {
@@ -367,24 +444,26 @@
     else if (aba === "mais") verMais();
   }
 
+  // Cabeçalho como no Android: título + subtítulo e, à direita, os botões do ecrã (↻, PDF, +…).
+  // Mostrar/ocultar valores fica no Início (pílula) e no menu Mais, como na app.
   function cabecalho(titulo, sub, acoes) {
-    const ini = R.iniciais(S.user.nome || S.user.utilizador);
     $("cabecalho").className = "cabecalho";
     $("cabecalho").innerHTML = `
       <div style="flex:1;min-width:0">
         <div class="titulo">${esc(titulo)}</div>
         ${sub ? `<div class="sub">${esc(sub)}</div>` : ""}
       </div>
-      ${acoes || ""}
-      <button class="icone" id="cb-olho" title="Mostrar/ocultar valores">${ic(S.ocultar ? "olhoff" : "olho", 20)}</button>
-      <div class="avatar" id="cb-avatar"${S.user.foto ? ` style="background-image:url('data:image/jpeg;base64,${S.user.foto}');background-size:cover;background-position:center;color:transparent"` : ""}>${esc(ini)}</div>`;
-    $("cb-olho").onclick = async () => {
-      if (S.ocultar && Bio.ativa(S.user.id)) {   // vai revelar: pede Face ID/Touch ID
-        try { await Bio.verificar(S.user.id); }
-        catch (e) { toast("Não foi possível confirmar a identidade.", true); return; }
-      }
-      S.ocultar = !S.ocultar; navegar(S.ecra);
-    };
+      ${acoes ? `<div class="cab-acoes">${acoes}</div>` : ""}`;
+  }
+
+  // Mostrar/ocultar valores (pede Face ID / Touch ID para mostrar, se estiver ativo)
+  async function alternarValores(depois) {
+    if (S.ocultar && Bio.ativa(S.user.id)) {
+      try { await Bio.verificar(S.user.id); }
+      catch (e) { toast("Não foi possível confirmar a identidade.", true); return; }
+    }
+    S.ocultar = !S.ocultar;
+    (depois || (() => navegar(S.ecra)))();
   }
 
   // Donut SVG (gráfico de estado). segs = [{rotulo, valor, cor}]. Identidade por legenda, não só por cor.
@@ -399,17 +478,47 @@
         transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.rotulo)}: ${s.valor}</title></circle>`;
       off += len; return el;
     }).join("");
-    const legenda = segs.map((s) => `<div style="display:flex;align-items:center;gap:8px;font-size:.84rem;margin:4px 0">
-      <span style="width:12px;height:12px;border-radius:3px;background:${s.cor};flex:none"></span>
-      <span style="flex:1">${esc(s.rotulo)}</span><b style="font-variant-numeric:tabular-nums">${s.valor}</b></div>`).join("");
-    return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap">
-      <svg viewBox="0 0 140 140" width="140" height="140" style="flex:none">
+    // Legenda como no Android: ● Pagas / "50 · 56%"
+    const legenda = segs.map((s) => `<div class="l"><span class="p" style="background:${s.cor}"></span>
+      <div><div class="t">${esc(s.rotulo)}</div><div class="n">${s.valor} · ${Math.round((s.valor / total) * 100)}%</div></div></div>`).join("");
+    return `<div style="display:flex;gap:18px;align-items:center">
+      <svg viewBox="0 0 140 140" width="150" height="150" style="flex:none">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--fundo)" stroke-width="18"></circle>
         ${aneis}
-        <text x="${cx}" y="${cy - 2}" text-anchor="middle" font-size="22" font-weight="800" fill="var(--texto)">${centroValor}</text>
-        <text x="${cx}" y="${cy + 15}" text-anchor="middle" font-size="10" fill="var(--texto-suave)">${esc(centroTitulo)}</text>
+        <text x="${cx}" y="${cy + 3}" text-anchor="middle" font-size="22" font-weight="800" fill="var(--texto)">${centroValor}</text>
+        <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="9" fill="var(--texto-suave)">${esc(centroTitulo)}</text>
       </svg>
-      <div style="flex:1;min-width:140px">${legenda}</div></div>`;
+      <div class="leg-donut" style="flex:1;min-width:0">${legenda}</div></div>`;
+  }
+
+  // ---------- Eixos dos gráficos (como no Android: 0 · 125 k · 250 k · 375 k · 500 k) ----------
+  // Passo "redondo" (1,25; 2,5; 5 × 10^n, como no Android) para 4 intervalos que cobrem o máximo.
+  function escalaEixo(max) {
+    if (!(max > 0)) return { passo: 1, topo: 4 };
+    const bruto = max / 4;
+    const p = Math.pow(10, Math.floor(Math.log10(bruto)));
+    const passo = [1.25, 2.5, 5, 12.5].map((f) => f * p).find((v) => v >= bruto - 1e-9);
+    return { passo, topo: passo * 4 };
+  }
+  // 165680 -> "165,68 k"; 125000 -> "125 k"; 200 -> "200"
+  function numCurto(v) {
+    if (Math.abs(v) >= 1000) {
+      const k = Math.round((v / 1000) * 100) / 100;
+      return k.toLocaleString("pt-PT", { maximumFractionDigits: 2 }).replace(/ /g, " ") + " k";
+    }
+    return Math.round(v).toLocaleString("pt-PT");
+  }
+  // Grelha + rótulos do eixo Y. Devolve {svg, y(v)} para a área de desenho [x0..x1] × [yTopo..yBase]
+  function grelhaY(max, x0, x1, yTopo, yBase) {
+    const { passo, topo } = escalaEixo(max);
+    const y = (v) => yBase - (v / topo) * (yBase - yTopo);
+    let svg = "";
+    for (let i = 0; i <= 4; i++) {
+      const v = passo * i, yy = y(v).toFixed(1);
+      svg += `<line x1="${x0}" y1="${yy}" x2="${x1}" y2="${yy}" stroke="#e6eaf0" stroke-width="1"/>` +
+        `<text x="${x0 - 6}" y="${(+yy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#6e7887">${numCurto(v)}</text>`;
+    }
+    return { svg, y };
   }
 
   // ---------- Saudação e data ----------
@@ -425,45 +534,73 @@
   }
 
   // Gráfico de linha/área (evolução). pontos = [{saldo}]
+  // Linha/área com eixos (evolução do saldo, 30 dias). pontos = [{dia, saldo}]
   function svgLinha(pontos) {
-    const W = 320, H = 130, P = 8;
-    const vals = pontos.map((p) => p.saldo);
-    const max = Math.max(1, ...vals), min = Math.min(0, ...vals);
-    const rng = (max - min) || 1;
-    const x = (i) => P + (i * (W - 2 * P)) / Math.max(1, pontos.length - 1);
-    const y = (v) => H - P - ((v - min) / rng) * (H - 2 * P);
-    const pts = pontos.map((p, i) => `${x(i).toFixed(1)},${y(p.saldo).toFixed(1)}`).join(" ");
-    const area = `M ${x(0).toFixed(1)},${(H - P).toFixed(1)} L ` + pontos.map((p, i) => `${x(i).toFixed(1)},${y(p.saldo).toFixed(1)}`).join(" L ") + ` L ${x(pontos.length - 1).toFixed(1)},${(H - P).toFixed(1)} Z`;
-    return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block">
-      <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f80ed" stop-opacity=".25"/><stop offset="1" stop-color="#2f80ed" stop-opacity="0"/></linearGradient></defs>
-      <path d="${area}" fill="url(#gl)"/>
-      <polyline points="${pts}" fill="none" stroke="#2f80ed" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="${x(pontos.length - 1).toFixed(1)}" cy="${y(pontos[pontos.length - 1].saldo).toFixed(1)}" r="4" fill="#2f80ed"/>
+    const W = 340, H = 200, x0 = 46, x1 = W - 10, yTopo = 10, yBase = H - 26;
+    const max = Math.max(1, ...pontos.map((p) => p.saldo));
+    const g = grelhaY(max, x0, x1, yTopo, yBase);
+    const n = pontos.length;
+    const x = (i) => x0 + (i * (x1 - x0)) / Math.max(1, n - 1);
+    const y = (v) => Math.min(yBase, g.y(Math.max(0, v)));
+    const linha = pontos.map((p, i) => `${x(i).toFixed(1)},${y(p.saldo).toFixed(1)}`);
+    const area = `M ${x(0).toFixed(1)},${yBase} L ${linha.join(" L ")} L ${x(n - 1).toFixed(1)},${yBase} Z`;
+    let datas = "";
+    for (let i = 0; i < n; i += 6) {
+      const d = pontos[i].dia || "";
+      datas += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#6e7887">${d.slice(8, 10)}/${d.slice(5, 7)}</text>`;
+    }
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">
+      <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f80ed" stop-opacity=".22"/><stop offset="1" stop-color="#2f80ed" stop-opacity=".02"/></linearGradient></defs>
+      ${g.svg}<path d="${area}" fill="url(#gl)"/>
+      <polyline points="${linha.join(" ")}" fill="none" stroke="#2f80ed" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(n - 1).toFixed(1)}" cy="${y(pontos[n - 1].saldo).toFixed(1)}" r="4.5" fill="#2f80ed"/>${datas}
     </svg>`;
   }
 
-  // Barras agrupadas (Entradas/Empréstimos/Despesas por mês). dados = [{mes, entradas, emprestimos, despesas}]
+  // Barras agrupadas com eixos (Entradas / Empréstimos / Despesas por mês). dados = [{mes, entradas, emprestimos, despesas}]
   function svgBarrasAgrupadas(dados) {
-    const W = 320, H = 150, P = 20, base = H - 18;
+    const W = 340, H = 210, x0 = 46, x1 = W - 8, yTopo = 10, yBase = H - 26;
     const max = Math.max(1, ...dados.flatMap((d) => [d.entradas, d.emprestimos, d.despesas]));
-    const gw = (W - 2 * P) / dados.length;
-    const bw = Math.min(10, gw / 4);
+    const g = grelhaY(max, x0, x1, yTopo, yBase);
+    const gw = (x1 - x0) / dados.length;
+    const bw = Math.min(11, gw / 4.2);
     const cores = ["#1e9a55", "#6e3cb4", "#c62828"];
     let barras = "", rotulos = "";
     dados.forEach((d, i) => {
-      const gx = P + i * gw + gw / 2;
+      const gx = x0 + i * gw + gw / 2;
       [d.entradas, d.emprestimos, d.despesas].forEach((v, j) => {
-        const bh = (v / max) * (base - P);
-        const bx = gx - bw * 1.6 + j * (bw + 1.2);
-        barras += `<rect x="${bx.toFixed(1)}" y="${(base - bh).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, bh).toFixed(1)}" rx="2" fill="${cores[j]}"/>`;
+        const yy = g.y(Math.max(0, v));
+        const bx = gx - (bw * 3 + 2.4) / 2 + j * (bw + 1.2);
+        barras += `<rect x="${bx.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, yBase - yy).toFixed(1)}" rx="1.5" fill="${cores[j]}"/>`;
       });
-      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="9" fill="#6e7887">${esc(d.mes)}</text>`;
+      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#6e7887">${esc(d.mes)}</text>`;
     });
     return `<div class="legenda-grafico"><span><i style="background:#1e9a55"></i>Entradas</span><span><i style="background:#6e3cb4"></i>Empréstimos</span><span><i style="background:#c62828"></i>Despesas</span></div>
-      <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block"><line x1="${P}" y1="${base}" x2="${W - P + 10}" y2="${base}" stroke="#e6eaf0"/>${barras}${rotulos}</svg>`;
+      <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">${g.svg}${barras}${rotulos}</svg>`;
   }
 
-  const ocultoCartao = () => `<div style="text-align:center;color:var(--laranja);padding:24px 0;font-weight:600">${ic("senha", 18)} Valores ocultos</div>`;
+  // Barras verticais com eixos e o valor por cima (Cobranças previstas). mapa = Map(rótulo -> valor)
+  function svgBarrasVert(mapa) {
+    const W = 340, H = 210, x0 = 46, x1 = W - 8, yTopo = 14, yBase = H - 26;
+    const itens = [...mapa.entries()];
+    const max = Math.max(1, ...itens.map(([, v]) => v));
+    const g = grelhaY(max, x0, x1, yTopo, yBase);
+    const gw = (x1 - x0) / Math.max(1, itens.length);
+    const bw = Math.min(18, gw * .45);
+    let barras = "", rotulos = "";
+    itens.forEach(([rot, v], i) => {
+      const gx = x0 + i * gw + gw / 2;
+      if (v > 0) {
+        const yy = g.y(v);
+        barras += `<rect x="${(gx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(yBase - yy).toFixed(1)}" rx="1.5" fill="${rot === "Atraso" ? "#c62828" : "#2f80ed"}"/>` +
+          `<text x="${gx.toFixed(1)}" y="${(yy - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="#6e7887">${numCurto(v)}</text>`;
+      }
+      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#6e7887">${esc(rot)}</text>`;
+    });
+    return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">${g.svg}${barras}${rotulos}</svg>`;
+  }
+
+  const ocultoCartao = () => `<div style="text-align:center;color:var(--texto-suave);padding:26px 0 30px;font-weight:500">🔒 Valores ocultos</div>`;
 
   // ============================================================
   // ECRÃ: INÍCIO (Balanço ou Cobranças)
@@ -474,21 +611,24 @@
     $("cabecalho").className = "cabecalho cab-painel";
     $("cabecalho").innerHTML = `
       <div class="cab-topo">
-        <div class="avatar" id="cb-avatar">${esc(R.iniciais(nome))}</div>
+        <div class="avatar" id="cb-avatar" style="background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
         <div class="cab-saud"><div class="ola">${esc(saudacao())},</div><div class="data">${esc(dataExtenso())}</div></div>
-        <button class="icone" id="cb-atualizar" title="Atualizar">${ic("restaurar", 19)}</button>
-        <button class="icone" id="cb-sino" title="Notificações">${ic("notificacoes", 19)}</button>
-        <button class="icone" id="cb-sair" title="Sair">${ic("sair", 19)}</button>
+        <button class="icone" id="cb-atualizar" title="Atualizar">${icf("atualizar", 21)}</button>
+        <button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>
+        <button class="icone" id="cb-sair" title="Sair">${icf("porta", 21)}</button>
       </div>
       <span class="pilula-perfil">Painel do ${esc(perfilNome(S.user.perfil))}</span>`;
     pintarAvatar($("cb-avatar"), S.user.foto);
     $("cb-atualizar").onclick = () => verInicio();
-    $("cb-sino").onclick = () => verNotificacoes();
+    $("cb-sino").onclick = () => { marcarNotificacoesVistas(); verNotificacoes(); };
     $("cb-sair").onclick = async () => { if (await confirmar("Terminar sessão", "Quer sair da sua conta?", "Sair")) sair(); };
-    const c = $("conteudo");
+    atualizarBadgeSino();
+    const c = novoConteudo();
     c.innerHTML = spinner;
     try {
-      const [ind, cob, saldo, es, ev] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(), Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa()]);
+      const hoje = R.hojeISO();
+      const [ind, cob, saldo, es, ev, aCobrar] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(),
+        Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa(), pode("COBRANCAS") ? Dados.listarCobrancas(hoje) : Promise.resolve([])]);
       const kpis = [
         { rot: "Saldo em caixa", txt: vmt(saldo.saldo), cor: "#2f80ed" },
         { rot: "Por aprovar", txt: String(ind.pendentes), cor: "#1e9a55" },
@@ -498,12 +638,6 @@
         { rot: "Margem (juros)", txt: vmt(ind.margemLucro), cor: "#1e9a55" },
       ];
       const kpisHtml = kpis.map((k) => `<div class="kpi-card" style="--cor:${k.cor}"><div class="rotulo">${esc(k.rot)}</div><div class="valor">${k.txt}</div></div>`).join("");
-      let barras = "";
-      const max = Math.max(1, ...[...cob.values()]);
-      for (const [rot, val] of cob) {
-        const pct = Math.round((val / max) * 100);
-        barras += `<div class="barra-linha ${rot === "Atraso" ? "atraso" : ""}"><span class="rot">${esc(rot)}</span><span class="barra-trilho"><span class="barra-preench" style="width:${val > 0 ? Math.max(4, pct) : 0}%"></span></span><span class="mt">${vmt(val)}</span></div>`;
-      }
       const donut = donutSVG([
         { rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "#1e9a55" },
         { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "#2f80ed" },
@@ -516,93 +650,179 @@
         <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">Últimos 6 meses · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
         <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
         <div class="grafico-cartao"><h3>Situação das prestações</h3><div class="sub">Pagas, no prazo e em atraso</div>${donut}</div>
-        <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : barras}</div>
-        ${pode("EXPORTAR") ? `<button class="btn secundario" id="bal-pdf">${ic("pdf", 16)} Exportar Balanço (PDF)</button>` : ""}`;
-      $("bal-olho").onclick = async () => {
-        if (S.ocultar && Bio.ativa(S.user.id)) { try { await Bio.verificar(S.user.id); } catch (e) { toast("Não foi possível confirmar a identidade.", true); return; } }
-        S.ocultar = !S.ocultar; verInicio();
-      };
-      if ($("bal-pdf")) $("bal-pdf").onclick = () => exportarPDF("Balanço Geral", ["Indicador", "Valor"],
-        [["Saldo em caixa", R.mt(saldo.saldo)], ["Capital investido", R.mt(ind.capitalInvestido)], ["Total a receber", R.mt(ind.totalAReceber)], ["Em atraso", R.mt(ind.emAtraso)], ["Margem (juros)", R.mt(ind.margemLucro)], ["Em curso", String(ind.emCurso)], ["Pagos", String(ind.pagos)], ["Pendentes", String(ind.pendentes)]], []);
+        <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : svgBarrasVert(cob)}</div>
+        <button class="btn-contorno" id="bal-completo">${icf("balanco", 18)} Ver o balanço completo</button>
+        ${pode("COBRANCAS") ? `
+          <div class="linha-seccao"><div class="seccao-titulo">Cobrar hoje e em atraso (${aCobrar.length})</div>
+            <button class="pilula-btn" id="ini-todas">Ver todas ›</button></div>
+          ${aCobrar.length ? aCobrar.slice(0, 5).map((p) => cartaoCobranca(p, hoje)).join("") : vazio("ok", "Nada para cobrar hoje.")}` : ""}`;
+      $("bal-olho").onclick = () => alternarValores(verInicio);
+      $("bal-completo").onclick = () => verBalanco();
+      if ($("ini-todas")) $("ini-todas").onclick = () => navegar("cobrancas");
+      ligarCartoesCobranca(c, aCobrar, verInicio);
     } catch (e) { c.innerHTML = erroEcra(e, verInicio); }
+  }
+
+  // ---------- Sino: quantas notificações ainda não foram vistas neste aparelho ----------
+  const chaveVistas = () => "kub_notif_vista_" + (S.user ? S.user.id : 0);
+  async function atualizarBadgeSino() {
+    try {
+      const lista = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
+      let vista = 0; try { vista = Number(localStorage.getItem(chaveVistas()) || 0); } catch (e) {}
+      const n = lista.filter((x) => x.id > vista).length;
+      const b = $("cb-badge"); if (!b) return;
+      b.textContent = n > 9 ? "9+" : String(n);
+      b.classList.toggle("oculto", n === 0);
+      atualizarBadgeSino._max = lista.length ? lista[0].id : 0;
+    } catch (e) {}
+  }
+  function marcarNotificacoesVistas() {
+    try { if (atualizarBadgeSino._max) localStorage.setItem(chaveVistas(), String(atualizarBadgeSino._max)); } catch (e) {}
+  }
+
+  // ---------- Cartão de uma prestação a cobrar (ListaActivity.itemCobranca) ----------
+  function cartaoCobranca(p, hoje) {
+    const dias = R.diasAtraso(p.vencimento, hoje);
+    const paga = p.estado === "PAGO";
+    const sit = R.situacaoPrestacao(p);
+    const sub = paga
+      ? `${p.numero}ª prestação · paga em ${R.data(p.dataPagamento)}`
+      : `${p.numero}ª prestação · ${dias > 0 ? "venceu" : "vence"} ${R.data(p.vencimento)}` + (dias > 0 ? `\n${dias} ${dias === 1 ? "dia" : "dias"} de atraso` : "");
+    const multa = paga ? 0 : R.multaPrestacao(p, hoje);
+    const linhas = [];
+    if (p.telefoneCliente) linhas.push(`<div>${icf("telefone", 15)}<span>${esc(p.telefoneCliente)}</span></div>`);
+    if (p.localNegocio) linhas.push(`<div>${icf("local", 15)}<span>${esc(p.localNegocio)}</span></div>`);
+    if (multa > 0) linhas.push(`<div>${icf("aviso", 15)}<span>Multa: ${vmt(multa)}</span></div>`);
+    if (p.valorPago > 0 && !paga) linhas.push(`<div>${icf("visto", 15)}<span>Já pago: ${vmt(p.valorPago)}</span></div>`);
+    const valor = paga ? p.valorPago : R.emFalta(p, hoje);
+    return `<div class="cl" data-pid="${p.id}">
+      <div class="cl-topo">${avatar(p.nomeCliente)}
+        <div class="cl-meio"><div class="cl-tit">${esc(p.nomeCliente)}</div><div class="cl-sub">${esc(sub)}</div></div>
+        <div class="cl-fim"><div class="cl-valor" style="color:${dias > 0 && !paga ? "var(--vermelho)" : "var(--texto)"}">${vmt(valor)}</div>${pilula(sit, coresSituacao(sit))}</div>
+      </div>
+      ${linhas.length ? `<div class="cl-det">${linhas.join("")}</div>` : ""}</div>`;
+  }
+  function ligarCartoesCobranca(raiz, lista, recarregar) {
+    raiz.querySelectorAll(".cl[data-pid]").forEach((b) =>
+      b.onclick = () => abrirPrestacao(lista.find((x) => x.id == b.dataset.pid), recarregar));
+  }
+
+  // ============================================================
+  // ECRÃ: BALANÇO GERAL (completo, como o BalancoActivity)
+  // ============================================================
+  async function verBalanco() {
+    mostrar("ecra-app");
+    cabecalho("Balanço Geral", "Indicadores, gráficos e maiores clientes", (pode("EXPORTAR") ? btnPdf("bg-pdf") : "") + btnAtualizar("bg-atu"));
+    $("bg-atu").onclick = () => verBalanco();
+    const c = novoConteudo();
+    c.innerHTML = spinner;
+    try {
+      const [ind, cob, saldo, es, ev, top] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(),
+        Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa(), Dados.topClientes()]);
+      const linhas = [
+        ["Saldo em caixa", vmt(saldo.saldo), "var(--accent)"],
+        ["Capital investido", vmt(ind.capitalInvestido)],
+        ["Margem (juros)", vmt(ind.margemLucro), "var(--verde)"],
+        ["Total a receber", vmt(ind.totalAReceber)],
+        ["Em atraso", vmt(ind.emAtraso), "var(--vermelho)"],
+        ["Empréstimos em curso", String(ind.emCurso)],
+        ["Empréstimos pagos", String(ind.pagos)],
+        ["Pedidos por aprovar", String(ind.pendentes)],
+        ["Cancelados", String(ind.cancelados)],
+      ].map(([r, v, cor]) => `<div class="linha-dados"><span class="r">${r}</span><span class="v" style="${cor ? "color:" + cor : ""}">${v}</span></div>`).join("");
+      const donut = donutSVG([
+        { rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "#1e9a55" },
+        { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "#2f80ed" },
+        { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "#c62828" },
+      ], "prestações", ind.prestacoesPagas + ind.prestacoesNoPrazo + ind.prestacoesAtrasadas);
+      c.innerHTML = `
+        <div class="cartao">${linhas}</div>
+        <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">Últimos 6 meses · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
+        <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
+        <div class="grafico-cartao"><h3>Situação das prestações</h3><div class="sub">Pagas, no prazo e em atraso</div>${donut}</div>
+        <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : svgBarrasVert(cob)}</div>
+        <div class="seccao-titulo">Maiores clientes</div>
+        ${top.map((t) => `<div class="cl" style="cursor:default"><div class="cl-topo">${avatar(t.nome)}<div class="cl-meio"><div class="cl-tit">${esc(t.nome)}</div><div class="cl-sub">Capital emprestado</div></div><div class="cl-fim"><div class="cl-valor">${vmt(t.total)}</div></div></div></div>`).join("") || vazio("clientes", "Sem empréstimos.")}`;
+      if ($("bg-pdf")) $("bg-pdf").onclick = () => exportarPDF("Balanço Geral", ["Indicador", "Valor"],
+        [["Saldo em caixa", R.mt(saldo.saldo)], ["Capital investido", R.mt(ind.capitalInvestido)], ["Total a receber", R.mt(ind.totalAReceber)], ["Em atraso", R.mt(ind.emAtraso)], ["Margem (juros)", R.mt(ind.margemLucro)], ["Em curso", String(ind.emCurso)], ["Pagos", String(ind.pagos)], ["Pendentes", String(ind.pendentes)]], []);
+    } catch (e) { c.innerHTML = erroEcra(e, verBalanco); }
   }
 
   // ============================================================
   // ECRÃ: COBRANÇAS (prestações por pagar)
   // ============================================================
+  // Como no Android (ListaActivity, modo COBRANCAS): situação × período, resumo e cartões.
+  const SIT_PREST = ["Por pagar", "Em curso", "Atrasadas", "Pagas"];
+  // Período pela data de vencimento (nas pagas, pela data do pagamento). [de, até]; null = sem limite.
+  // "Hoje + atrasos", "Próximos 7 dias" e "Este mês" incluem as que já estão em atraso; "Só hoje" não.
+  function periodosCobranca() {
+    const h = R.hojeISO(), d = (n) => R.somaDias(h, n);
+    const agora = new Date();
+    const fimMes = R.isoLocal(new Date(agora.getFullYear(), agora.getMonth() + 1, 0));
+    const iniMes = R.isoLocal(new Date(agora.getFullYear(), agora.getMonth(), 1));
+    return [
+      ["Hoje + atrasos", null, h], ["Só hoje", h, h], ["Ontem", d(-1), d(-1)], ["Últimos 7 dias", d(-6), h],
+      ["Amanhã", d(1), d(1)], ["Próximos 7 dias", null, d(6)], ["Este mês", null, fimMes, iniMes],
+    ];
+  }
+  let cobSit = 0, cobPer = 0;
+
   async function verCobrancas() {
     mostrar("ecra-app");
-    const acaoPdf = pode("EXPORTAR") ? `<button class="icone" id="cob-pdf" title="Exportar PDF">${ic("pdf", 19)}</button>` : "";
-    cabecalho("Prestações do Dia", "Toque para pagar, ajustar multa ou contactar", acaoPdf);
-    const c = $("conteudo");
+    cabecalho("Prestações do Dia", "Toque para pagar, ajustar multa ou contactar", btnAtualizar("cob-atu") + (pode("EXPORTAR") ? btnPdf("cob-pdf") : ""));
+    $("cob-atu").onclick = () => verCobrancas();
+    const c = novoConteudo();
+    const pers = periodosCobranca();
     c.innerHTML = `
       <div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cob-f" placeholder="Cliente, contacto ou local"></div>
-      <div class="chips" id="cob-chips">
-        <button class="chip ativo" data-fil="todas">Por pagar</button>
-        <button class="chip" data-fil="atraso">Em atraso</button>
-        <button class="chip" data-fil="hoje">Vence hoje</button>
-        <button class="chip" data-fil="7dias">Próximos 7 dias</button>
-      </div>
-      <button class="btn" id="cob-todos" style="margin-bottom:10px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>
+      <div class="chips" id="cob-sit" style="padding-bottom:6px">${SIT_PREST.map((s, i) => `<button class="chip ${i === cobSit ? "ativo" : ""}" data-i="${i}">${s}</button>`).join("")}</div>
+      <div class="chips" id="cob-per">${pers.map((p, i) => `<button class="chip ${i === cobPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
       <div id="cob-lista">${spinner}</div>`;
-    $("cob-todos").onclick = cobrarTodos;
-    let todas = [];
-    try { todas = await Dados.listarPorPagar(); }
-    catch (e) { $("cob-lista").innerHTML = erroEcra(e, verCobrancas); return; }
     const hoje = R.hojeISO();
-    if ($("cob-pdf")) $("cob-pdf").onclick = () => exportarPDF("Prestações / Cobranças",
-      ["Cliente", "Prest.", "Vencimento", "Atraso", "Em falta (MT)"],
-      todas.map((p) => [p.nomeCliente, p.numero + "ª", R.data(p.vencimento), (R.diasAtraso(p.vencimento, hoje) || 0) + "d", R.mt(R.emFalta(p, hoje))]),
-      ["Total por cobrar: " + R.mt(todas.reduce((s, p) => s + R.emFalta(p, hoje), 0))]);
-    let filtro = "todas", busca = "";
-    const passa = (p) => {
-      const atraso = R.diasAtraso(p.vencimento, hoje);
-      if (filtro === "atraso" && atraso <= 0) return false;
-      if (filtro === "hoje" && p.vencimento !== hoje) return false;
-      if (filtro === "7dias") { const d = R.diasEntre(hoje, p.vencimento); if (d < 0 || d > 7) return false; }
-      if (busca && !((p.nomeCliente || "").toLowerCase().includes(busca) || (p.telefoneCliente || "").includes(busca) || (p.localNegocio || "").toLowerCase().includes(busca))) return false;
-      return true;
+    let porPagar = null, pagas = null, busca = "", lista = [];
+    const passaBusca = (p) => !busca || (p.nomeCliente || "").toLowerCase().includes(busca) ||
+      (p.telefoneCliente || "").includes(busca) || (p.localNegocio || "").toLowerCase().includes(busca);
+    const carregar = async () => {
+      $("cob-lista").innerHTML = spinner;
+      try {
+        if (cobSit === 3) { const [, de, ate] = pers[cobPer]; pagas = await Dados.listarPagas(de || pers[cobPer][3], ate); }
+        else if (!porPagar) porPagar = await Dados.listarPorPagar();
+        render();
+      } catch (e) { $("cob-lista").innerHTML = erroEcra(e, verCobrancas); }
     };
     const render = () => {
-      const lista = todas.filter(passa);
-      const totalFalta = lista.reduce((s, p) => s + R.emFalta(p, hoje), 0);
-      const nAtraso = lista.filter((p) => R.diasAtraso(p.vencimento, hoje) > 0).length;
-      if (!lista.length) { $("cob-lista").innerHTML = vazio("ok", todas.length ? "Nenhuma prestação neste filtro." : "Não há prestações por cobrar. Bom trabalho!"); return; }
-      const itens = lista.map((p) => {
-        const falta = R.emFalta(p, hoje), multa = R.multaPrestacao(p, hoje), atraso = R.diasAtraso(p.vencimento, hoje);
-        const sit = R.situacaoPrestacao(p);
-        const cls = atraso > 0 ? "e-atraso" : p.vencimento === hoje ? "e-aviso" : "e-neutro";
-        const quando = atraso > 0 ? `venceu ${R.data(p.vencimento)}` : p.vencimento === hoje ? "vence hoje" : `vence ${R.data(p.vencimento)}`;
-        return `<div class="cartao" data-pid="${p.id}" style="cursor:pointer;padding:14px">
-          <div style="display:flex;gap:12px;align-items:flex-start">
-            <span class="avatar" style="flex:none">${esc(R.iniciais(p.nomeCliente))}</span>
-            <div style="flex:1;min-width:0">
-              <div class="nome" style="font-weight:800">${esc(p.nomeCliente)}</div>
-              <div class="det">${p.numero}ª prestação · ${quando}</div>
-              ${atraso > 0 ? `<div class="det" style="color:var(--vermelho)">${atraso} dia${atraso > 1 ? "s" : ""} de atraso</div>` : ""}
-            </div>
-            <div style="text-align:right;flex:none">
-              <div style="font-weight:800;color:${atraso > 0 ? "var(--vermelho)" : "var(--texto)"};white-space:nowrap">${vmt(falta)}</div>
-              <span class="etiqueta ${cls}">${sit}</span>
-            </div>
-          </div>
-          ${(p.telefoneCliente || multa > 0 || p.valorPago > 0) ? `<div style="border-top:1px solid var(--borda);margin-top:11px;padding-top:9px;display:flex;flex-direction:column;gap:4px;font-size:.84rem;color:var(--texto-suave)">
-            ${p.telefoneCliente ? `<div style="display:flex;align-items:center;gap:7px">${ic("sms", 14)}<a href="tel:${esc(p.telefoneCliente)}" onclick="event.stopPropagation()">${esc(p.telefoneCliente)}</a></div>` : ""}
-            ${multa > 0 ? `<div style="display:flex;align-items:center;gap:7px;color:var(--laranja)">${ic("alerta", 14)}Multa: ${vmt(multa)}</div>` : ""}
-            ${p.valorPago > 0 ? `<div style="display:flex;align-items:center;gap:7px;color:var(--verde)">${ic("check", 14)}Já pago: ${vmt(p.valorPago)}</div>` : ""}
-          </div>` : ""}</div>`;
-      }).join("");
-      $("cob-lista").innerHTML = `<div class="cartao" style="text-align:center;font-weight:600;font-size:.9rem">${lista.length} prestações · <b style="color:var(--vermelho)">${nAtraso} em atraso</b> · a cobrar: <b>${vmt(totalFalta)}</b></div>` + itens;
-      $("cob-lista").querySelectorAll("[data-pid]").forEach((b) =>
-        b.onclick = () => abrirPrestacao(todas.find((x) => x.id == b.dataset.pid), verCobrancas));
+      const [, de, ate] = pers[cobPer];
+      if (cobSit === 3) lista = pagas.filter(passaBusca);
+      else lista = porPagar.filter((p) => {
+        const dias = R.diasAtraso(p.vencimento, hoje);
+        if (cobSit === 1 && dias > 0) return false;    // "Em curso": ainda dentro do prazo
+        if (cobSit === 2 && dias === 0) return false;  // "Atrasadas"
+        if (de && p.vencimento < de) return false;
+        if (ate && p.vencimento > ate) return false;
+        return passaBusca(p);
+      });
+      const nAtraso = lista.filter((p) => p.estado !== "PAGO" && R.diasAtraso(p.vencimento, hoje) > 0).length;
+      const total = lista.reduce((s, p) => s + (p.estado === "PAGO" ? p.valorPago : R.emFalta(p, hoje)), 0);
+      const resumo = cobSit === 3
+        ? `${lista.length} prestaç${lista.length === 1 ? "ão" : "ões"} paga${lista.length === 1 ? "" : "s"} · recebido: <b>${vmt(total)}</b>`
+        : `${lista.length} prestaç${lista.length === 1 ? "ão" : "ões"} · <b>${nAtraso} em atraso</b> · a cobrar: <b>${vmt(total)}</b>`;
+      $("cob-lista").innerHTML = `<div class="resumo-lista">${resumo}</div>` +
+        (lista.length ? lista.map((p) => cartaoCobranca(p, hoje)).join("") : vazio("ok", "Nenhuma prestação neste filtro."));
+      ligarCartoesCobranca($("cob-lista"), lista, verCobrancas);
     };
-    $("cob-chips").querySelectorAll("[data-fil]").forEach((ch) => ch.onclick = () => {
-      filtro = ch.dataset.fil;
-      $("cob-chips").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
-      render();
+    const chips = (id, fn) => $(id).querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+      $(id).querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
+      fn(Number(ch.dataset.i));
     });
-    $("cob-f").oninput = (e) => { busca = (e.target.value || "").toLowerCase(); render(); };
-    render();
+    chips("cob-sit", (i) => { cobSit = i; carregar(); });
+    chips("cob-per", (i) => { cobPer = i; if (cobSit === 3) carregar(); else render(); });
+    $("cob-f").oninput = (e) => { busca = (e.target.value || "").toLowerCase().trim(); if (porPagar || pagas) render(); };
+    if ($("cob-pdf")) $("cob-pdf").onclick = () => exportarPDF("Prestações do Dia — " + SIT_PREST[cobSit] + " · " + pers[cobPer][0],
+      ["Cliente", "Prest.", "Vencimento", "Atraso", cobSit === 3 ? "Pago (MT)" : "Em falta (MT)"],
+      lista.map((p) => [p.nomeCliente, p.numero + "ª", R.data(p.vencimento), (p.estado === "PAGO" ? 0 : R.diasAtraso(p.vencimento, hoje)) + "d",
+        R.mt(p.estado === "PAGO" ? p.valorPago : R.emFalta(p, hoje))]),
+      ["Total: " + R.mt(lista.reduce((s, p) => s + (p.estado === "PAGO" ? p.valorPago : R.emFalta(p, hoje)), 0))]);
+    carregar();
   }
 
   // Folha de uma prestação (detalhe + registar pagamento)
@@ -687,40 +907,64 @@
   // ============================================================
   // ECRÃ: CLIENTES
   // ============================================================
+  // Como no Android (ListaActivity, modo CLIENTES): pesquisa, 5 filtros, cartões e "+ Registar cliente".
+  const SIT_CLIENTE = ["Todos", "Em curso", "Atrasados", "Pagos", "Sem empréstimo"];
+  let cliSit = 0;
+  function cartaoCliente(cl) {
+    const classe = (cl.classificacao || "NOVO").replace(/\s*\(.*$/, "");   // "BOM CLIENTE (…)" -> "BOM CLIENTE", como aparece no Android
+    const bom = classe.toUpperCase().startsWith("BOM");
+    let valor = "";
+    if (cl.prestacoesEmAtraso > 0) valor = `<div class="cl-valor" style="color:var(--vermelho)">${cl.prestacoesEmAtraso} em atraso</div>`;
+    else if (pode("BALANCO") && cl.emDivida > 0) valor = `<div class="cl-valor" style="color:var(--laranja)">${vmt(cl.emDivida)}</div>`;
+    else if (cl.emDivida === 0) valor = `<div class="cl-valor" style="color:var(--verde)">✓ Sem dívida</div>`;
+    const sub = `<span style="display:inline-flex;align-items:center;gap:4px">${icf("telefone", 14)}${esc(cl.telefone || "")}</span>${cl.tipoNegocio ? " · " + esc(cl.tipoNegocio) : ""}`;
+    const det = (cl.morada || "") + (cl.localNegocio ? "  ·  negócio: " + cl.localNegocio : "");
+    return `<div class="cl" data-cid="${cl.id}">
+      <div class="cl-topo">${avatar(cl.nome)}
+        <div class="cl-meio"><div class="cl-tit">${esc(cl.nome)}</div><div class="cl-sub" style="white-space:normal">${sub}</div></div>
+        <div class="cl-fim">${valor}${pilula(bom ? "★ " + classe : classe, bom ? ["#1E9A55", "#DEF5E6"] : ["#2F80ED", "#E8F1FD"])}</div>
+      </div>
+      ${det.trim() ? `<div class="cl-det"><div>${icf("local", 15)}<span>${esc(det)}</span></div></div>` : ""}</div>`;
+  }
+
   async function verClientes() {
     mostrar("ecra-app");
-    const acao = pode("CLIENTES") ? `<button class="icone" id="cl-novo" title="Novo cliente">${ic("mais_add", 20)}</button>` : "";
-    cabecalho("Clientes", "", acao);
+    cabecalho("Gestão de Clientes", "Toque num cliente para abrir a ficha", btnAtualizar("cl-atu") + (pode("EXPORTAR") ? btnPdf("cl-pdf") : ""));
+    $("cl-atu").onclick = () => verClientes();
+    const c = novoConteudo();
+    if (pode("CLIENTES")) c.classList.add("com-btn-fixo");
+    c.innerHTML = `<div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cl-f" placeholder="Nome, telefone, negócio ou local"></div>
+      <div class="chips" id="cl-sit">${SIT_CLIENTE.map((s, i) => `<button class="chip ${i === cliSit ? "ativo" : ""}" data-i="${i}">${s}</button>`).join("")}</div>
+      <div id="cl-lista">${spinner}</div>
+      ${pode("CLIENTES") ? `<button class="btn-fixo" id="cl-novo">+ Registar cliente</button>` : ""}`;
     if ($("cl-novo")) $("cl-novo").onclick = () => formCliente(null);
-    const c = $("conteudo");
-    c.innerHTML = `<div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cl-f" placeholder="Procurar por nome, telefone ou local…"></div>
-      ${pode("EXPORTAR") ? `<button class="btn secundario" id="cl-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
-      <div id="cl-lista">${spinner}</div>`;
-    let timer, ultima = [];
-    if ($("cl-pdf")) $("cl-pdf").onclick = () => exportarPDF("Clientes",
-      ["Nome", "Telefone", "Local", "Empr.", "Dívida (MT)"],
-      ultima.map((cl) => [cl.nome, cl.telefone || "", cl.localNegocio || "", String(cl.emprestimos), R.mt(cl.emDivida)]),
-      ["Total de clientes: " + ultima.length]);
+    let timer, todos = [], lista = [];
+    const render = () => {
+      lista = todos.filter((cl) => {
+        if (cliSit === 1 && cl.prestacoesPorPagar === 0) return false;                    // Em curso
+        if (cliSit === 2 && cl.prestacoesEmAtraso === 0) return false;                    // Atrasados
+        if (cliSit === 3 && (cl.emprestimos === 0 || cl.prestacoesPorPagar > 0)) return false; // Pagos: tudo pago
+        if (cliSit === 4 && cl.emprestimos > 0) return false;                             // Sem empréstimo
+        return true;
+      });
+      if (!lista.length) { $("cl-lista").innerHTML = vazio("clientes", "Nenhum cliente encontrado."); return; }
+      $("cl-lista").innerHTML = lista.map(cartaoCliente).join("");
+      $("cl-lista").querySelectorAll(".cl[data-cid]").forEach((b) =>
+        b.onclick = () => abrirCliente(lista.find((x) => x.id == b.dataset.cid)));
+    };
     const carregar = async (f) => {
       $("cl-lista").innerHTML = spinner;
-      try {
-        const lista = await Dados.listarClientes(f);
-        ultima = lista;
-        if (!lista.length) { $("cl-lista").innerHTML = vazio("clientes", "Nenhum cliente encontrado."); return; }
-        $("cl-lista").innerHTML = lista.map((cl) => {
-          const atraso = cl.prestacoesEmAtraso > 0;
-          return `<button class="item" data-cid="${cl.id}">
-            <span class="avatar">${esc(cl.iniciais || R.iniciais(cl.nome))}</span>
-            <span class="meio"><span class="nome">${esc(cl.nome)}</span>
-              <span class="det">${esc(cl.telefone || "")}${cl.localNegocio ? " · " + esc(cl.localNegocio) : ""}</span>
-              ${cl.emDivida > 0 ? `<span class="etiqueta ${atraso ? "e-atraso" : "e-neutro"}">Dívida ${vmt(cl.emDivida)}${atraso ? " · em atraso" : ""}</span>` : `<span class="etiqueta e-ok">Sem dívida</span>`}
-            </span>
-            <span class="fim"><span class="det">${cl.emprestimos} empr.</span></span></button>`;
-        }).join("");
-        $("cl-lista").querySelectorAll("[data-cid]").forEach((b) =>
-          b.onclick = () => abrirCliente(lista.find((x) => x.id == b.dataset.cid)));
-      } catch (e) { $("cl-lista").innerHTML = erroEcra(e, () => carregar(f)); }
+      try { todos = await Dados.listarClientes(f); render(); }
+      catch (e) { $("cl-lista").innerHTML = erroEcra(e, () => carregar(f)); }
     };
+    $("cl-sit").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+      $("cl-sit").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
+      cliSit = Number(ch.dataset.i); render();
+    });
+    if ($("cl-pdf")) $("cl-pdf").onclick = () => exportarPDF("Clientes — " + SIT_CLIENTE[cliSit],
+      ["Nome", "Telefone", "Local", "Empr.", "Dívida (MT)"],
+      lista.map((cl) => [cl.nome, cl.telefone || "", cl.localNegocio || "", String(cl.emprestimos), R.mt(cl.emDivida)]),
+      ["Total de clientes: " + lista.length]);
     carregar("");
     $("cl-f").oninput = (e) => { clearTimeout(timer); const v = e.target.value; timer = setTimeout(() => carregar(v), 350); };
   }
@@ -819,14 +1063,14 @@
   // ============================================================
   // ECRÃ: EMPRÉSTIMOS / CRÉDITO
   // ============================================================
-  async function verEmprestimos() {
+  async function verEmprestimos(abaInicial) {
     mostrar("ecra-app");
-    cabecalho("Empréstimos", "");
-    const c = $("conteudo");
+    cabecalho(abaInicial === "pendentes" ? "Aprovar Pedidos" : abaInicial === "todos" ? "Todos Empréstimos" : "Empréstimos", "");
+    const c = novoConteudo();
     const abas = [];
     if (pode("APROVACOES")) abas.push(["pendentes", "Pendentes"]);
     abas.push(["todos", pode("TODOS_EMPRESTIMOS") ? "Todos" : "Em curso"]);
-    let ativa = abas[0][0];
+    let ativa = abas.some((a) => a[0] === abaInicial) ? abaInicial : abas[0][0];
     c.innerHTML = `<div class="cartao" style="display:flex;gap:8px;padding:8px">${abas.map(([id, r]) =>
       `<button class="btn ${id === ativa ? "" : "secundario"}" data-ab="${id}" style="margin:0;padding:10px">${r}</button>`).join("")}</div>
       ${pode("EXPORTAR") ? `<button class="btn secundario" id="emp-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
@@ -992,37 +1236,58 @@
   // ============================================================
   // ECRÃ: MAIS
   // ============================================================
+  // Como no Android (BarraInferior → "Mais"): o "Menu" com as mesmas opções, cores e ícones.
   async function verMais() {
     mostrar("ecra-app");
     cabecalho("Mais", "");
-    const c = $("conteudo");
-    const bioDisp = await Bio.disponivel();
-    const bioOn = Bio.ativa(S.user.id);
-    const op = (id, nome, t, sub) => `<button class="item" data-op="${id}"><span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic(nome, 20)}</span><span class="meio"><span class="nome">${t}</span>${sub ? `<span class="det">${sub}</span>` : ""}</span></button>`;
-    c.innerHTML = `
-      <div class="cartao" style="display:flex;align-items:center;gap:14px">
-        <div class="avatar" style="width:54px;height:54px;background:var(--navy)">${esc(R.iniciais(S.user.nome || S.user.utilizador))}</div>
-        <div><div style="font-weight:800;font-size:1.1rem">${esc(S.user.nome || S.user.utilizador)}</div>
-          <div class="det" style="color:var(--texto-suave)">${perfilNome(S.user.perfil)}${S.user.principal ? " principal" : ""}</div></div>
-      </div>
-      <div class="seccao-titulo">Gestão</div>
-      ${op("emprestimos", "credito", "Empréstimos", "Todos, aprovar e novo pedido")}
-      ${op("caixa", "caixa", "Fluxo de Caixa", "Saldo, entradas e despesas")}
-      ${pode("CAIXA") ? op("poupanca", "poupanca", "Poupança de Clientes", "Cofres dos clientes") : ""}
-      ${pode("UTILIZADORES") ? op("utilizadores", "utilizadores", "Utilizadores e Permissões", "") : ""}
-      ${pode("CAIXA") ? op("lixeira", "lixeira", "Lixeira", "Lançamentos e pedidos apagados") : ""}
-      ${pode("SMS_VER") ? op("sms", "sms", "SMS enviados", "Cobranças e recados enviados") : ""}
-      ${S.user.perfil === "ADMIN" ? op("acessos", "acessos", "Acessos", "Quem entrou e quando") : ""}
-      ${op("assistente", "assistente", "Assistente (IA)", "Perguntas sobre o negócio")}
-      ${op("notificacoes", "notificacoes", "Notificações", "")}
-      <div class="seccao-titulo">Conta</div>
-      ${op("config", "perfil", "Configurações", "Foto, nome, senha, segurança")}
-      ${op("sobre", "sobre", "Sobre a aplicação", "")}
-      ${op("sair", "sair", "Terminar sessão", "")}`;
-    c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => maisAcao(b.dataset.op));
+    $("cabecalho").classList.add("oculto");   // o Menu do Android não tem cabeçalho azul
+    const c = novoConteudo();
+    const AZ = ["#2F80ED", "#E8F1FD"], VE = ["#1E9A55", "#DEF5E6"], RO = ["#6E3CB4", "#F0E9FC"], LA = ["#B26A00", "#FFF0D6"];
+    const op = (id, icone, cores, texto) => `<button class="op-menu" data-op="${id}">
+      <span class="bola" style="background:${cores[1]};color:${cores[0]}">${icf(icone, 22)}</span>${esc(texto)}
+      <span class="seta"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></span></button>`;
+    const admin = S.user.perfil === "ADMIN";
+    c.innerHTML = `<div class="menu-tit">Menu</div>
+      ${pode("BALANCO") ? op("balanco", "balanco", AZ, "Balanço Geral") : ""}
+      ${pode("NOVO_EMPRESTIMO") ? op("novo", "editar", VE, "Novo Empréstimo") : ""}
+      ${pode("TODOS_EMPRESTIMOS") ? op("todos", "pasta", RO, "Todos Empréstimos") : op("todos", "pasta", RO, "Empréstimos")}
+      ${pode("APROVACOES") ? op("aprovar", "visto", LA, "Aprovar Pedidos") : ""}
+      ${pode("UTILIZADORES") ? op("utilizadores", "cadeado", AZ, "Utilizadores") : ""}
+      ${pode("CAIXA") ? op("poupanca", "cofre", VE, "Poupança de Clientes") : ""}
+      ${pode("CAIXA") ? op("lixeira", "lixo", RO, "Lixeira") : ""}
+      ${admin ? op("acessos", "escudo", LA, "Controlo de Acesso") : ""}
+      ${pode("COBRANCAS") || pode("SMS_VER") ? op("sms", "mensagem", AZ, "SMS aos clientes") : ""}
+      ${op("valores", S.ocultar ? "olhoaberto" : "olhofechado", RO, S.ocultar ? "Mostrar valores" : "Ocultar valores")}
+      ${op("config", "engrenagem", LA, "Configurações")}`;
+    c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => {
+      $("cabecalho").classList.remove("oculto");
+      maisAcao(b.dataset.op);
+    });
+  }
+
+  // "Novo Empréstimo" a partir do menu: escolher o cliente e abrir o pedido
+  async function escolherClienteParaPedido() {
+    abrirFolha(`<h3>Novo Empréstimo</h3><div class="sub">Escolha o cliente</div>
+      <div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="ec-f" placeholder="Nome, telefone, negócio ou local"></div>
+      <div id="ec-lista">${spinner}</div>`);
+    let todos = [];
+    const render = (f) => {
+      const t = (f || "").toLowerCase().trim();
+      const l = todos.filter((cl) => !t || (cl.nome || "").toLowerCase().includes(t) || (cl.telefone || "").includes(t)).slice(0, 40);
+      $("ec-lista").innerHTML = l.map((cl) => `<button class="item" data-cid="${cl.id}">${avatar(cl.nome, 40)}
+        <span class="meio"><span class="nome">${esc(cl.nome)}</span><span class="det">${esc(cl.telefone || "")}</span></span></button>`).join("") || vazio("clientes", "Nenhum cliente.");
+      $("ec-lista").querySelectorAll("[data-cid]").forEach((b) => b.onclick = () => formPedido(todos.find((x) => x.id == b.dataset.cid)));
+    };
+    try { todos = await Dados.listarClientes(""); render(""); $("ec-f").oninput = (e) => render(e.target.value); }
+    catch (e) { $("ec-lista").innerHTML = erroEcra(e, escolherClienteParaPedido); }
   }
 
   async function maisAcao(op) {
+    if (op === "balanco") return verBalanco();
+    if (op === "novo") return escolherClienteParaPedido();
+    if (op === "todos") return verEmprestimos("todos");
+    if (op === "aprovar") return verEmprestimos("pendentes");
+    if (op === "valores") return alternarValores(verMais);
     if (op === "config") return verConfiguracoes();
     if (op === "emprestimos") return verEmprestimos();
     if (op === "caixa") return verCaixa();
@@ -1053,47 +1318,172 @@
     if (op === "sair") { if (await confirmar("Terminar sessão", "Quer sair da sua conta?", "Sair")) sair(); }
   }
 
-  // ---------- Caixa ----------
+  // Como no Android (CaixaActivity): saldo, gráfico, caixa do dia, novo lançamento e lançamentos por dia.
   let caixaVerOcultos = false;
+  let cxDia = null, cxPer = 2, cxTipo = 0, cxEntrada = true;
+  const DIAS_SEMANA = ["DOMINGO", "SEGUNDA-FEIRA", "TERÇA-FEIRA", "QUARTA-FEIRA", "QUINTA-FEIRA", "SEXTA-FEIRA", "SÁBADO"];
+  const movCurto = (m) => ({ PRESTACAO: "Prestação", DESEMBOLSO: "Desembolso", AJUSTE: "Ajuste", LICENCA: "Licença", POUPANCA: "Poupança" }[m.categoria]
+    || (m.tipo === "ENTRADA" ? "Entrada" : "Despesa"));
+  const coresMov = (m) => m.tipo === "ENTRADA" ? ["#1E9A55", "#DEF5E6"] : m.categoria === "DESEMBOLSO" ? ["#6E3CB4", "#F0E9FC"] : ["#C62828", "#FDE6E6"];
+
   async function verCaixa() {
-    cabecalho("Fluxo de Caixa", "", `<button class="icone" id="cx-novo" title="Novo lançamento">${ic("mais_add", 20)}</button>`);
-    $("cx-novo").onclick = () => formCaixa();
-    const c = $("conteudo");
+    mostrar("ecra-app");
+    cabecalho("Fluxo de Caixa", "Entradas, saídas e saldo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
+    const hoje = R.hojeISO();
+    if (!cxDia) cxDia = hoje;
     const gere = pode("CAIXA_EDITAR") || pode("CAIXA_OCULTAR");
     try {
-      const [s, movs, cxd, ev] = await Promise.all([Dados.saldoCaixa(), Dados.movimentosCaixa(80, caixaVerOcultos), Dados.caixaDoDia(), Dados.graficoEvolucaoCaixa()]);
-      const lista = movs.map((m) => {
-        const entrada = m.tipo === "ENTRADA";
-        return `<button class="item" data-mid="${m.id}" style="${gere ? "" : "cursor:default"};${m.oculto ? "opacity:.55" : ""}">
-          <span class="avatar" style="background:${entrada ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${ic(entrada ? "entrada" : "saida", 18)}</span>
-          <span class="meio"><span class="nome">${esc(curto(m.categoria))}${m.oculto ? " · oculto" : ""}</span><span class="det">${esc(m.justificativa || "")}</span>
-            <span class="det" style="font-size:.75rem">${R.dataHora(m.dataMovimento)}</span></span>
-          <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></button>`;
-      }).join("");
-      const ld = (rotulo, valor, cor, sinal) => `<div class="linha-dados"><span class="r">${rotulo}</span><span class="v" style="color:${cor || "var(--texto)"}">${sinal || ""}${vmt(valor)}</span></div>`;
+      const [s, ev] = await Promise.all([Dados.saldoCaixa(), Dados.graficoEvolucaoCaixa()]);
+      const sugEntrada = ["Capital investido", "Reposição do caixa", "Pagamento de dívida antiga", "Multa paga à parte"];
+      const sugDespesa = ["Pagamento de salário", "Renda do escritório", "Energia (Credelec)", "Transporte", "Comunicação"];
+      const periodos = [["Hoje", hoje, hoje], ["Ontem", R.somaDias(hoje, -1), R.somaDias(hoje, -1)], ["Últimos 7 dias", R.somaDias(hoje, -6), hoje],
+        ["Este mês", hoje.slice(0, 8) + "01", hoje]];
       c.innerHTML = `
+        <div class="saldo-cartao">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="rot">SALDO EM CAIXA</span>
+            <button class="pilula-btn" id="cx-olho">${icf(S.ocultar ? "olhoaberto" : "olhofechado", 15)} ${S.ocultar ? "Mostrar" : "Ocultar"}</button></div>
+          <div class="grande">${vmt(s.saldo)}</div>
+          <div class="tiles">
+            <div class="tile"><div class="r">↓ ENTRADAS</div><div class="v">${vmt(s.entradas)}</div></div>
+            <div class="tile"><div class="r">↑ SAÍDAS</div><div class="v">${vmt(s.saidas)}</div></div>
+          </div>
+        </div>
+        <div class="grafico-cartao"><div class="titulo-cartao">${icf("tendencia", 18)} Evolução do saldo · últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
         <div class="cartao">
-          <div style="display:flex;align-items:center;gap:8px;font-weight:800;margin-bottom:10px">${ic("acessos", 18)} Caixa do dia · ${R.data(cxd.dia)}</div>
-          ${ld("Saldo de abertura", cxd.abertura)}
-          ${ld("↓ Prestações recebidas", cxd.prestacoes, "var(--verde)", "+")}
-          ${ld("↓ Outras entradas", cxd.outras, "var(--verde)", "+")}
-          ${ld("↑ Empréstimos concedidos", cxd.emprestimos, "var(--roxo)", "−")}
-          ${ld("↑ Despesas", cxd.despesas, "var(--vermelho)", "−")}
-          <div class="linha-dados" style="border-top:2px solid var(--borda);margin-top:4px"><span class="r" style="font-weight:800;color:var(--texto)">Saldo de fecho</span><span class="v" style="color:var(--accent);font-size:1.15rem">${vmt(cxd.fecho)}</span></div>
+          <div class="titulo-cartao">${icf("calendario", 18)} Caixa do dia</div>
+          <div class="nav-dia">
+            <button id="cxd-ant" title="Dia anterior">◀</button>
+            <div class="dia"><span id="cxd-txt"></span><input type="date" id="cxd-data" max="${hoje}"></div>
+            <button id="cxd-seg" title="Dia seguinte">▶</button>
+            <button id="cxd-hoje">Hoje</button>
+          </div>
+          <div id="cxd-corpo">${spinner}</div>
         </div>
-        <div class="grafico-cartao"><h3>Evolução do saldo</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
-        <button class="btn" id="cx-novo2" style="margin-bottom:8px">${ic("mais_add", 16)} Novo lançamento</button>
-        <div class="btn-linha" style="margin-bottom:8px">
-          ${pode("EXPORTAR") ? `<button class="btn secundario" id="cx-pdf">${ic("pdf", 16)} PDF</button>` : ""}
-          ${pode("CAIXA_RECONCILIAR") ? `<button class="btn secundario" id="cx-rec">${ic("reconciliar", 16)} Reconciliar</button>` : ""}
+        ${pode("CAIXA") ? `<div class="cartao">
+          <div class="titulo-cartao" style="margin-bottom:10px">Novo lançamento</div>
+          <div class="chips" id="nl-tipo" style="padding-bottom:0"></div>
+          <input class="campo-linha" id="nl-valor" type="number" inputmode="decimal" step="0.01" placeholder="Valor (MT)">
+          <input class="campo-linha" id="nl-desc" placeholder="Descrição">
+          <div class="chips" id="nl-sug" style="margin-top:12px;padding-bottom:0"></div>
+          <div class="campo-dia"><span id="nl-dia-txt"></span><input type="date" id="nl-dia" max="${hoje}" value="${hoje}"></div>
+          <div class="erro-msg" id="nl-erro" style="min-height:0"></div>
+          <button class="btn btn-verde" id="nl-ok">✓ Registar lançamento</button>
+        </div>` : ""}
+        <div class="cartao">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
+            <div class="titulo-cartao" style="margin:0">Lançamentos</div>
+            <div style="display:flex;gap:6px">
+              ${pode("EXPORTAR") ? `<button class="pilula-btn" id="cx-pdf">${icf("documento", 14)} PDF</button>` : ""}
+              ${pode("CAIXA_RECONCILIAR") ? `<button class="pilula-btn" id="cx-rec">Reconciliar</button>` : ""}
+            </div>
+          </div>
+          <div class="chips" id="lc-per" style="padding-bottom:6px">${periodos.map((p, i) => `<button class="chip ${i === cxPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+          <div class="chips" id="lc-tipo">${["Todos", "Entradas", "Saídas"].map((t, i) => `<button class="chip ${i === cxTipo ? "ativo" : ""}" data-i="${i}">${t}</button>`).join("")}</div>
+          <div class="pesquisa" style="margin-bottom:8px"><span class="lupa">${ic("pesquisa", 18)}</span><input id="lc-f" placeholder="Pesquisar na descrição"></div>
+          ${pode("CAIXA_OCULTAR") ? `<label style="display:flex;align-items:center;gap:10px;font-size:.95rem;padding:4px 2px"><input type="checkbox" id="cx-oc" ${caixaVerOcultos ? "checked" : ""} style="width:20px;height:20px"> Mostrar lançamentos ocultos</label>` : ""}
         </div>
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <div class="seccao-titulo">Movimentos</div>
-          ${pode("CAIXA_OCULTAR") ? `<label style="font-size:.78rem;color:var(--texto-suave)"><input type="checkbox" id="cx-oc" ${caixaVerOcultos ? "checked" : ""}> ver ocultos</label>` : ""}
-        </div>${lista || vazio("caixa", "Sem movimentos.")}`;
-      if ($("cx-novo2")) $("cx-novo2").onclick = () => formCaixa();
-      if ($("cx-oc")) $("cx-oc").onchange = (e) => { caixaVerOcultos = e.target.checked; verCaixa(); };
+        <div id="lc-lista">${spinner}</div>`;
+      $("cx-olho").onclick = () => alternarValores(verCaixa);
+
+      // --- Caixa do dia (◀ data ▶ Hoje) ---
+      const mostrarDia = async () => {
+        $("cxd-txt").textContent = R.data(cxDia) + (cxDia === hoje ? " (hoje)" : "");
+        $("cxd-data").value = cxDia;
+        $("cxd-seg").disabled = cxDia >= hoje; $("cxd-seg").style.opacity = cxDia >= hoje ? ".4" : "1";
+        $("cxd-corpo").innerHTML = spinner;
+        try {
+          const d = await Dados.caixaDoDia(cxDia);
+          const ld = (r, v, cor, sinal) => `<div class="linha-dados"><span class="r">${r}</span><span class="v" style="color:${cor || "var(--texto)"}">${sinal || ""}${vmt(v)}</span></div>`;
+          $("cxd-corpo").innerHTML =
+            ld("Saldo de abertura", d.abertura) +
+            ld("↓ Prestações recebidas", d.prestacoes, "var(--verde)", "+ ") +
+            ld("↓ Outras entradas", d.outras, "var(--verde)", "+ ") +
+            ld("↑ Empréstimos concedidos", d.emprestimos, "var(--vermelho)", "− ") +
+            ld("↑ Despesas", d.despesas, "var(--vermelho)", "− ") +
+            `<div class="linha-dados" style="border-top:1.5px solid var(--borda);border-bottom:0;padding-top:12px"><span style="font-weight:700;font-size:1.02rem">Saldo de fecho</span><span class="v" style="color:var(--accent);font-size:1.15rem">${vmt(d.fecho)}</span></div>`;
+        } catch (e) { $("cxd-corpo").innerHTML = erroEcra(e, mostrarDia); }
+      };
+      $("cxd-ant").onclick = () => { cxDia = R.somaDias(cxDia, -1); mostrarDia(); };
+      $("cxd-seg").onclick = () => { if (cxDia < hoje) { cxDia = R.somaDias(cxDia, 1); mostrarDia(); } };
+      $("cxd-hoje").onclick = () => { cxDia = hoje; mostrarDia(); };
+      $("cxd-data").onchange = (e) => { if (e.target.value) { cxDia = e.target.value > hoje ? hoje : e.target.value; mostrarDia(); } };
+      mostrarDia();
+
+      // --- Novo lançamento ---
+      if ($("nl-ok")) {
+        const desenharTipo = () => {
+          $("nl-tipo").innerHTML = `<button class="chip ${cxEntrada ? "ativo" : ""}" data-e="1">↓ Entrada</button><button class="chip ${cxEntrada ? "" : "ativo"}" data-e="0">↑ Despesa</button>`;
+          $("nl-tipo").querySelectorAll(".chip").forEach((b) => b.onclick = () => { cxEntrada = b.dataset.e === "1"; desenharTipo(); });
+          const sug = cxEntrada ? sugEntrada : sugDespesa;
+          $("nl-sug").innerHTML = sug.map((t, i) => `<button class="chip" data-i="${i}">${t}</button>`).join("");
+          $("nl-sug").querySelectorAll(".chip").forEach((b) => b.onclick = () => { $("nl-desc").value = sug[Number(b.dataset.i)]; });
+        };
+        const mostrarDiaNovo = () => {
+          const v = $("nl-dia").value || hoje;
+          $("nl-dia-txt").textContent = "📅 Data do lançamento: " + R.data(v) + (v === hoje ? " (hoje)" : "") + "  ·  tocar para mudar";
+        };
+        desenharTipo(); mostrarDiaNovo();
+        $("nl-dia").onchange = mostrarDiaNovo;
+        $("nl-ok").onclick = async () => {
+          const valor = parseFloat(String($("nl-valor").value).replace(",", "."));
+          if (!valor || valor <= 0) { $("nl-erro").textContent = "Indique um valor válido."; return; }
+          $("nl-ok").disabled = true; $("nl-erro").textContent = "";
+          try {
+            const r = await Dados.registarCaixa(cxEntrada ? "ENTRADA" : "SAIDA", valor, $("nl-desc").value, $("nl-dia").value || hoje, nomeRegisto());
+            if (!r.ok) { $("nl-erro").textContent = r.msg; $("nl-ok").disabled = false; return; }
+            toast(r.msg); verCaixa();
+          } catch (e) { $("nl-erro").textContent = e.message; $("nl-ok").disabled = false; }
+        };
+      }
+
+      // --- Lançamentos (período × tipo × pesquisa), agrupados por dia ---
+      let movs = [], naLista = [], busca = "";
+      const render = () => {
+        naLista = movs.filter((m) => (cxTipo === 0 || (cxTipo === 1) === (m.tipo === "ENTRADA")) &&
+          (!busca || (m.justificativa || "").toLowerCase().includes(busca)));
+        let ent = 0, sai = 0;
+        naLista.forEach((m) => { if (m.tipo === "ENTRADA") ent += m.valor; else sai += m.valor; });
+        let html = `<div style="font-size:.88rem;color:var(--texto-suave);margin:2px 2px 4px">${naLista.length} lançamentos · <b style="color:var(--texto)">+ ${vmt(ent).replace(" MT", "")}</b> · <b style="color:var(--texto)">− ${vmt(sai).replace(" MT", "")}</b> · diferença ${vmt(ent - sai)}</div>`;
+        if (!naLista.length) html += `<div class="vazio" style="padding:24px">Não há lançamentos neste período.</div>`;
+        let diaAtual = null;
+        naLista.slice(0, 100).forEach((m) => {
+          const dia = R.dataBase(m.dataMovimento);
+          if (dia !== diaAtual) {
+            diaAtual = dia;
+            const tot = naLista.filter((x) => R.dataBase(x.dataMovimento) === dia).reduce((s2, x) => s2 + (x.tipo === "ENTRADA" ? x.valor : -x.valor), 0);
+            const nome = dia === hoje ? "HOJE" : dia === R.somaDias(hoje, -1) ? "ONTEM" : DIAS_SEMANA[new Date(dia + "T00:00:00").getDay()];
+            html += `<div class="grupo-dia"><span>${nome} · ${R.data(dia)}</span><span style="color:${tot >= 0 ? "var(--verde)" : "var(--vermelho)"}">${tot >= 0 ? "+" : "−"}${vmt(Math.abs(tot))}</span></div>`;
+          }
+          const cores = coresMov(m), ent2 = m.tipo === "ENTRADA";
+          const hora = (m.dataMovimento || "").length > 11 ? String(m.dataMovimento).substring(11, 16) : "";
+          html += `<div class="cl" data-mid="${m.id}" style="${gere ? "" : "cursor:default;"}${m.oculto ? "opacity:.55" : ""}">
+            <div class="cl-topo"><span class="circ-ic" style="background:${cores[0]}">${icf(ent2 ? "entrada" : "saida", 18)}</span>
+              <div class="cl-meio"><div class="mov-tit">${esc(m.justificativa || movCurto(m))}</div>
+                <div class="cl-sub">${hora ? hora + " · " : ""}nº ${m.id}${m.oculto ? " · oculto" : ""}</div></div>
+              <div class="cl-fim"><div class="cl-valor" style="color:${cores[0]}">${ent2 ? "+ " : "− "}${vmt(m.valor)}</div>${pilula(movCurto(m), cores)}</div>
+            </div></div>`;
+        });
+        if (naLista.length > 100) html += `<div class="vazio" style="padding:12px">(mostrados os 100 mais recentes; use os filtros)</div>`;
+        $("lc-lista").innerHTML = html;
+        if (gere) $("lc-lista").querySelectorAll(".cl[data-mid]").forEach((b) => b.onclick = () => gerirCaixa(movs.find((m) => m.id == b.dataset.mid)));
+      };
+      const carregar = async () => {
+        $("lc-lista").innerHTML = spinner;
+        try { const [, de, ate] = periodos[cxPer]; movs = await Dados.movimentosPeriodo(de, ate, caixaVerOcultos); render(); }
+        catch (e) { $("lc-lista").innerHTML = erroEcra(e, carregar); }
+      };
+      const chips = (id, fn) => $(id).querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+        $(id).querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch)); fn(Number(ch.dataset.i));
+      });
+      chips("lc-per", (i) => { cxPer = i; carregar(); });
+      chips("lc-tipo", (i) => { cxTipo = i; render(); });
+      $("lc-f").oninput = (e) => { busca = (e.target.value || "").toLowerCase().trim(); render(); };
+      if ($("cx-oc")) $("cx-oc").onchange = (e) => { caixaVerOcultos = e.target.checked; carregar(); };
+      carregar();
+
       if ($("cx-rec")) $("cx-rec").onclick = () => {
         abrirFolha(`<h3>Reconciliar o caixa</h3><div class="sub">Saldo do sistema: ${R.mt(s.saldo)}</div>
           <div class="campo"><label>Dinheiro contado (MT)</label><input id="rc-contado" type="number" inputmode="decimal" value="${s.saldo.toFixed(2)}"></div>
@@ -1118,11 +1508,10 @@
           } catch (e) { $("rc-erro").textContent = e.message; $("rc-ok").disabled = false; }
         };
       };
-      if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa",
+      if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa — " + periodos[cxPer][0],
         ["Data", "Tipo", "Categoria", "Descrição", "Valor (MT)"],
-        movs.map((m) => [R.dataHora(m.dataMovimento), m.tipo, curto(m.categoria), m.justificativa || "", (m.tipo === "ENTRADA" ? "+" : "-") + R.mt(m.valor)]),
+        naLista.map((m) => [R.dataHora(m.dataMovimento), m.tipo, movCurto(m), m.justificativa || "", (m.tipo === "ENTRADA" ? "+" : "-") + R.mt(m.valor)]),
         [`Saldo: ${R.mt(s.saldo)}  |  Entradas: ${R.mt(s.entradas)}  |  Saídas: ${R.mt(s.saidas)}`]);
-      if (gere) c.querySelectorAll("[data-mid]").forEach((b) => b.onclick = () => gerirCaixa(movs.find((m) => m.id == b.dataset.mid)));
     } catch (e) { c.innerHTML = erroEcra(e, verCaixa); }
   }
 
@@ -1185,7 +1574,7 @@
   async function verUtilizadores() {
     cabecalho("Utilizadores", "", `<button class="icone" id="u-novo" title="Novo utilizador">${ic("mais_add", 20)}</button>`);
     $("u-novo").onclick = () => formUtilizador(null);
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
     try {
       const lista = await Dados.listarUtilizadores();
@@ -1243,7 +1632,7 @@
   // ---------- Notificações ----------
   async function verNotificacoes() {
     cabecalho("Notificações", "");
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
     try {
       const lista = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
@@ -1257,7 +1646,7 @@
   // ---------- Poupança de Clientes ----------
   async function verPoupanca() {
     cabecalho("Poupança de Clientes", "Cofres dos clientes");
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
     try {
       const lista = await Dados.poupancaSaldos(false);
@@ -1303,7 +1692,7 @@
   // ---------- Lixeira ----------
   async function verLixeira() {
     cabecalho("Lixeira", "Lançamentos e pedidos apagados");
-    const c = $("conteudo");
+    const c = novoConteudo();
     let ativa = "caixa";
     c.innerHTML = `<div class="cartao" style="display:flex;gap:8px;padding:8px">
       <button class="btn" data-ab="caixa" style="margin:0;padding:10px">Lançamentos do caixa</button>
@@ -1376,14 +1765,17 @@
 
   // ---------- SMS enviados ----------
   async function verSms() {
-    cabecalho("SMS enviados", "Cobranças e recados");
-    const c = $("conteudo");
+    cabecalho("SMS aos clientes", "Cobranças e recados");
+    const c = novoConteudo();
     c.innerHTML = spinner;
+    // No iPhone não há envio automático: abre a app Mensagens já preenchida, um cliente de cada vez
+    const btnTodos = pode("COBRANCAS") ? `<button class="btn" id="sms-todos" style="margin-bottom:14px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>` : "";
+    const ligar = () => { if ($("sms-todos")) $("sms-todos").onclick = cobrarTodos; };
     try {
-      const lista = await Dados.smsEnviadosListar();
-      if (lista === null) { c.innerHTML = vazio("sms", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); return; }
-      if (!lista.length) { c.innerHTML = vazio("sms", "Ainda não há SMS enviados."); return; }
-      c.innerHTML = lista.map((s) => {
+      const lista = pode("SMS_VER") ? await Dados.smsEnviadosListar() : [];
+      if (lista === null) { c.innerHTML = btnTodos + vazio("sms", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); ligar(); return; }
+      if (!lista.length) { c.innerHTML = btnTodos + vazio("sms", "Ainda não há SMS enviados."); ligar(); return; }
+      c.innerHTML = btnTodos + `<div class="seccao-titulo">Enviados</div>` + lista.map((s) => {
         const ok = s.estado === "ENVIADO";
         return `<div class="item" style="cursor:default;align-items:flex-start">
           <span class="avatar" style="background:${ok ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${ok ? "var(--verde)" : "var(--vermelho)"}">${ic("sms", 18)}</span>
@@ -1391,13 +1783,14 @@
             <span class="det" style="white-space:normal">${esc(s.texto)}</span>
             <span class="det" style="font-size:.74rem">${esc(s.telefone)} · ${esc(s.quando || "")} · ${esc(s.estado || "")}</span></span></div>`;
       }).join("");
+      ligar();
     } catch (e) { c.innerHTML = erroEcra(e, verSms); }
   }
 
   // ---------- Acessos ----------
   async function verAcessos() {
     cabecalho("Acessos", "Entradas e saídas");
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
     try {
       const lista = await Dados.acessosListar(100);
@@ -1466,7 +1859,7 @@
 
   async function verAssistente() {
     cabecalho("Assistente", "Perguntas sobre o negócio");
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = `<div id="ia-chat" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px"></div>
       <div style="position:sticky;bottom:calc(var(--barra) + env(safe-area-inset-bottom));background:var(--fundo);padding:8px 0">
         <div style="display:flex;gap:8px">
@@ -1505,7 +1898,7 @@
   // ---------- Configurações (A minha conta) ----------
   async function verConfiguracoes() {
     cabecalho("Configurações", "A minha conta e preferências");
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
     const bioDisp = await Bio.disponivel();
     const bioOn = Bio.ativa(S.user.id);
@@ -1771,7 +2164,7 @@
   // ============================================================
   async function verClienteInicio() {
     cabecalho("Olá, " + primeiroNome(S.user.nome || S.user.utilizador), "Cliente");
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
     try {
       const [porPagar, meus] = await Promise.all([
@@ -1814,7 +2207,7 @@
 
   async function verClientePedir() {
     cabecalho("Pedir crédito", "");
-    const c = $("conteudo");
+    const c = novoConteudo();
     c.innerHTML = spinner;
     try {
       const [porPagar, meus] = await Promise.all([
@@ -1858,7 +2251,7 @@
 
   async function verClienteMais() {
     cabecalho("Mais", "");
-    const c = $("conteudo");
+    const c = novoConteudo();
     const op = (id, nome, t, sub) => `<button class="item" data-op="${id}"><span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic(nome, 20)}</span><span class="meio"><span class="nome">${t}</span>${sub ? `<span class="det">${sub}</span>` : ""}</span></button>`;
     const bioDisp = await Bio.disponivel(); const bioOn = Bio.ativa(S.user.id);
     c.innerHTML = `

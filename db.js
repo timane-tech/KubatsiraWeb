@@ -19,11 +19,18 @@ const DB = (() => {
   let pontos = [];            // endereços HTTP possíveis da API
   let pontoQueFunciona = null;
 
+  // Servidor (host) de uma URL postgresql://utilizador:senha@servidor/base. Não usa new URL(): em versões
+  // antigas do Chrome (Android) os esquemas "postgresql:" não são reconhecidos e o host vem vazio.
+  function hostDe(url) {
+    const m = /^[a-z][a-z0-9+.-]*:\/\/(?:[^@\/?#]*@)?([^\/?#:]+)(?::\d+)?/i.exec(url || "");
+    return m ? m[1].toLowerCase() : "";
+  }
+
   function prepararPontos() {
     pontos = [];
     if (!endereco) return;
     let host;
-    try { host = new URL(endereco).host; } catch (e) { host = ""; }
+    host = hostDe(endereco);
     if (host) {
       const ponto = host.indexOf(".");
       if (ponto > 0) pontos.push("https://api." + host.substring(ponto + 1) + "/sql");
@@ -46,13 +53,13 @@ const DB = (() => {
     const j = JSON.parse(texto);
     const neon = j.neon || "";
     let host = null;
-    try { host = (neon.startsWith("postgres")) ? new URL(neon).host : null; } catch (e) {}
+    host = neon.startsWith("postgres") ? (hostDe(neon) || null) : null;
     if (!host || !host.endsWith(".neon.tech")) throw new Error("neon");
     return { neon: neon, gemini: j.gemini || "" };
   }
 
   function servidorDoCodigo(codigo) {
-    try { return new URL(lerCodigo(codigo).neon).host; } catch (e) { return null; }
+    try { return hostDe(lerCodigo(codigo).neon) || null; } catch (e) { return null; }
   }
 
   function guardar(codigo) {
@@ -81,7 +88,7 @@ const DB = (() => {
   }
 
   const configurado = () => !!endereco && pontos.length > 0;
-  const servidorAtual = () => { try { return new URL(endereco).host; } catch (e) { return null; } };
+  const servidorAtual = () => hostDe(endereco) || null;
   const chaveGemini = () => gemini;
 
   // ---- Execução de SQL ----

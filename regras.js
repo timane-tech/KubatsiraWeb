@@ -26,9 +26,20 @@ const Regras = (() => {
     return null;
   }
 
+  // Data local -> "YYYY-MM-DD". Não usar toISOString(): converte para UTC e, em Moçambique (UTC+2),
+  // a meia-noite local passa a ser 22:00 do dia ANTERIOR (as datas ficavam com um dia a menos).
+  function isoLocal(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+  // Data e hora local -> "YYYY-MM-DD HH:MM:SS" (para gravar na base, como a app Android)
+  function agoraLocal() {
+    const d = new Date();
+    return isoLocal(d) + " " + d.toTimeString().slice(0, 8);
+  }
+
   function somaDias(iso, n) {
     const d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
+    return isoLocal(d);
   }
 
   // Calendário de pagamento: PARCELADO = 6 prestações de 5 em 5 dias; UNICO = 1 aos 30 dias.
@@ -148,5 +159,6 @@ const Regras = (() => {
     arredondar, totalAPagar, taxaAssistencia, validarValor, plano, limiteAprovacao, somaDias,
     hojeISO, dataBase, diasEntre, diasAtraso, multa, multaPrestacao, emFalta,
     situacaoPrestacao, situacaoEmprestimo, mt, data, dataHora, iniciais, hash,
+    isoLocal, agoraLocal,
   };
 })();
