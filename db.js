@@ -73,6 +73,8 @@ const DB = (() => {
     gemini = dados.gemini || "";
     pontoQueFunciona = null;
     prepararPontos();
+    try { const p = localStorage.getItem(CHAVE + "_ponto"); if (p && pontos.includes(p)) pontoQueFunciona = p; } catch (e) {}
+    limparCache();
   }
 
   function iniciar() {
@@ -139,7 +141,11 @@ const DB = (() => {
         if (resp.status === 404) { ultimo = new Error("404 em " + ponto); continue; }
         const txt = await resp.text();
         if (resp.status >= 400) throw erroDaBase(txt);
-        pontoQueFunciona = ponto;
+        if (pontoQueFunciona !== ponto) {
+          pontoQueFunciona = ponto;
+          // guarda o endereço que funcionou: na próxima abertura não se perde um pedido a tentar o outro
+          try { localStorage.setItem(CHAVE + "_ponto", ponto); } catch (e) {}
+        }
         return txt;
       } catch (e) {
         // erro de rede (TypeError do fetch) -> tenta o próximo endereço; erro da base -> propaga já
@@ -168,9 +174,32 @@ const DB = (() => {
     return { colunas, linhas, afetadas: j.rowCount != null ? j.rowCount : linhas.length };
   }
 
+  // ---- Cache de leituras (como o dados/Cache da app Android) ----
+  // A mesma consulta pedida várias vezes seguidas (ex.: as prestações por pagar, usadas pelo balanço, pelos
+  // clientes e pelas cobranças) vai UMA vez à base: os pedidos iguais em curso são partilhados e o resultado
+  // fica guardado uns segundos. Qualquer gravação (INSERT/UPDATE/DELETE) limpa tudo, para nunca mostrar dados
+  // antigos depois de uma alteração feita aqui. Login, senhas, notificações e SMS vão sempre à base.
+  const CACHE_MS = 20000;
+  const cache = new Map();        // chave -> { quando, promessa }
+  function limparCache() { cache.clear(); }
+  const ehLeitura = (sql) => /^\s*SELECT\b/i.test(sql) && !/\b(INSERT|UPDATE|DELETE)\b/i.test(sql);
+  const semCache = (sql) => /senha_hash|notificac|sms_cobranca|registo_acessos|sms_fila/i.test(sql);
+
   // Executa uma consulta. Devolve {colunas, linhas, afetadas}.
   async function executar(sql, params) {
-    return ler(await enviar(corpoComando(sql, params)));
+    if (!ehLeitura(sql)) {
+      limparCache();
+      try { return ler(await enviar(corpoComando(sql, params))); }
+      finally { limparCache(); }
+    }
+    if (semCache(sql)) return ler(await enviar(corpoComando(sql, params)));
+    const chave = sql + "\u0001" + JSON.stringify((params || []).map(texto));
+    const c = cache.get(chave);
+    if (c && Date.now() - c.quando < CACHE_MS) return c.promessa;
+    const promessa = enviar(corpoComando(sql, params)).then(ler);
+    cache.set(chave, { quando: Date.now(), promessa });
+    promessa.catch(() => { if (cache.get(chave) && cache.get(chave).promessa === promessa) cache.delete(chave); });   // falhas nunca ficam guardadas
+    return promessa;
   }
 
   // Consulta de leitura: devolve as linhas como objetos {coluna: valor}.
@@ -188,11 +217,13 @@ const DB = (() => {
     if (!comandos.length) return;
     if (comandos.length === 1) return executar(comandos[0].sql, comandos[0].params);
     const queries = comandos.map((c) => corpoComando(c.sql, c.params));
-    await enviar({ queries });
+    limparCache();
+    try { await enviar({ queries }); }
+    finally { limparCache(); }
   }
 
   return {
     PREFIXO, iniciar, guardar, apagar, configurado, servidorAtual, servidorDoCodigo,
-    chaveGemini, executar, consultar, lote,
+    chaveGemini, executar, consultar, lote, limparCache,
   };
 })();

@@ -10,7 +10,10 @@ const CASCA = [
 ];
 
 self.addEventListener("install", (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(CASCA)).then(() => self.skipWaiting()));
+  // cache:"reload" = vai mesmo à rede (não a uma cópia antiga do browser): a versão nova fica completa
+  e.waitUntil(caches.open(CACHE)
+    .then((c) => c.addAll(CASCA.map((u) => new Request(u, { cache: "reload" }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener("activate", (e) => {
@@ -33,12 +36,16 @@ self.addEventListener("fetch", (e) => {
   const url = new URL(e.request.url);
   // Pedidos à base de dados (Neon) e qualquer outro domínio: sempre pela rede, nunca em cache.
   if (e.request.method !== "GET" || url.origin !== self.location.origin) return;
-  // "Network-first" para os ficheiros da app: traz a versão nova se houver rede; senão, a guardada.
+  // "Procurar atualizações" pede a página com ?novo=…: vai sempre à rede para ver a versão publicada
+  if (url.searchParams.has("novo")) return;
+  // "Cache-first": os ficheiros da app abrem logo da cópia guardada (sem esperar pela rede).
+  // Uma versão nova chega com um sw.js novo (o browser verifica-o sozinho): é descarregada inteira em
+  // segundo plano e entra na abertura seguinte — nunca se misturam ficheiros de versões diferentes.
   e.respondWith(
-    fetch(e.request).then((resp) => {
-      const copia = resp.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copia)).catch(() => {});
-      return resp;
-    }).catch(() => caches.match(e.request).then((r) => r || caches.match("./index.html")))
+    caches.open(CACHE).then((c) => c.match(e.request, { ignoreSearch: true }).then((r) => r ||
+      fetch(e.request).then((resp) => {
+        if (resp.ok) c.put(e.request, resp.clone()).catch(() => {});
+        return resp;
+      }).catch(() => c.match("./index.html"))))
   );
 });

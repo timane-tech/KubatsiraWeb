@@ -346,7 +346,6 @@
             ${bioConta ? `<button class="login-bio" id="l-bio" type="button" title="Entrar com impressão digital · ${esc(bioConta.nome || "")}">${ICON_DIGITAL}</button>` : ""}
           </form>
         </div>
-        <div class="linha-link"><a id="l-trocar">Trocar de ligação</a></div>
       </div>
       <div class="verificador oculto" id="l-verif"><div class="cartao-verif" id="l-vcart">
         <img src="icons/icon-192.png" alt="" id="l-vlogo"><div class="vnome">Kubatsira</div>
@@ -357,9 +356,6 @@
     $("l-pt").onclick = () => mudarIdioma("pt");
     $("l-en").onclick = () => mudarIdioma("en");
     $("l-olho").onclick = () => { const s = $("l-senha"); s.type = s.type === "password" ? "text" : "password"; $("l-olho").innerHTML = icf(s.type === "password" ? "olhoaberto" : "olhofechado", 22); };
-    $("l-trocar").onclick = async () => {
-      if (await confirmar("Trocar de ligação", "Vai apagar a ligação atual deste aparelho e colar outro código.", "Trocar", true)) { DB.apagar(); verLigar(); }
-    };
     // Licença por pagar: aviso de manutenção (só a administração entra)
     Dados.licencaEstado().then((l) => { if (l.expirada && $("l-manut")) $("l-manut").classList.remove("oculto"); }).catch(() => {});
     // Bloqueio ativo (5 tentativas falhadas): mostra quanto falta
@@ -813,8 +809,9 @@
     const nome = S.user.nome || S.user.utilizador;
     const c = novoConteudo();
     c.innerHTML = spinner;
-    const sinoOn = await Dados.sinoAtivo().catch(() => true);
-    if (!c.isConnected) return;   // entretanto o utilizador abriu outro ecrã
+    // O sino aparece já; se o Administrador o tiver desligado, sai quando a resposta chegar (não atrasa o ecrã)
+    const sinoOn = true;
+    Dados.sinoAtivo().then((on) => { if (!on && $("cb-sino")) $("cb-sino").remove(); }).catch(() => {});   // entretanto o utilizador abriu outro ecrã
     $("cabecalho").className = "cabecalho cab-painel";
     $("cabecalho").innerHTML = `
       <div class="cab-topo">
@@ -851,6 +848,11 @@
 
       // ---------------- Administrador ----------------
       const verFin = pode("CAIXA") || pode("BALANCO");
+      // Tudo pedido ao mesmo tempo (antes eram três rondas seguidas)
+      const pBal = pode("BALANCO") ? Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa()]) : null;
+      const pCob = pode("COBRANCAS") ? Dados.listarCobrancas(hoje) : null;
+      if (pBal) pBal.catch(() => {});
+      if (pCob) pCob.catch(() => {});
       const [pendentes, porPagar, saldo, lic] = await Promise.all([
         pode("APROVACOES") ? Dados.listarPendentes() : [], Dados.listarPorPagar(),
         verFin ? Dados.saldoCaixa() : null, Dados.licencaEstado().catch(() => null)]);
@@ -874,7 +876,7 @@
 
       let balanco = "", dadosBal = null;
       if (pode("BALANCO")) {
-        dadosBal = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa()]);
+        dadosBal = await pBal;
         const [ind, cob, es, ev] = dadosBal;
         balanco = `
           <div class="linha-seccao"><div class="seccao-titulo">Balanço</div>
@@ -885,7 +887,7 @@
 
       let cobrancas = "", aCobrar = [];
       if (pode("COBRANCAS")) {
-        aCobrar = await Dados.listarCobrancas(hoje);
+        aCobrar = await pCob;
         cobrancas = `<div class="linha-seccao"><div class="seccao-titulo">Cobrar hoje e em atraso (${aCobrar.length})</div>
             ${aCobrar.length > 5 ? `<button class="pilula-btn" id="ini-todas">Ver todas ›</button>` : ""}</div>
           ${aCobrar.length ? aCobrar.slice(0, 5).map((p) => cartaoCobranca(p, hoje)).join("") : `<div class="vazio" style="padding:20px">✓ Não há cobranças para hoje.</div>`}`;
@@ -2661,12 +2663,6 @@
         <div style="font-size:.92rem;line-height:1.5">Versão instalada: <b>${esc(window.KUB_VER || "—")}</b><br>
           As novas versões são procuradas sozinhas ao abrir a app. Também pode procurar agora.</div>
         <button class="btn contorno" id="cfg-atualizar">🔄 Procurar atualizações</button>
-      </div>
-
-      <div class="cartao"><div class="titulo-cfg">🔌 Ligação à base de dados</div>
-        <div class="explica" style="margin:0 0 4px">Servidor</div>
-        <div style="font-size:.82rem;font-weight:600;word-break:break-all;margin-bottom:6px">${esc(DB.servidorAtual() || "—")}</div>
-        <button class="btn contorno-vermelho" id="cfg-ligacao">Trocar de ligação</button>
       </div>`;
     pintarAvatar($("cfg-avatar"), S.user.foto);
 
@@ -2770,21 +2766,27 @@
     if ($("cfg-users")) $("cfg-users").onclick = () => verUtilizadores();
     $("cfg-termos").onclick = () => verTermos(false);
     $("cfg-atualizar").onclick = procurarAtualizacoes;
-    $("cfg-ligacao").onclick = async () => {
-      if (await confirmar("Trocar de ligação", "Vai sair e apagar a ligação deste aparelho.", "Trocar", true)) { DB.apagar(); verLigar(); }
-    };
   }
 
   // Procura uma versão nova (service worker) e recarrega se houver
   async function procurarAtualizacoes() {
     try {
-      const r = await fetch("index.html?v=" + Date.now(), { cache: "no-store" });
+      const r = await fetch("index.html?novo=" + Date.now(), { cache: "no-store" });
       const t = await r.text();
       const m = /KUB_VER\s*=\s*"([^"]+)"/.exec(t);
       const nova = m ? m[1] : null;
       if (nova && nova !== window.KUB_VER) {
         if (await confirmar("Nova versão " + nova + " disponível", "Quer atualizar agora? A app volta a abrir (terá de entrar outra vez).", "Atualizar")) {
-          try { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch (e) {}
+          toast("A descarregar a versão nova…");
+          try {
+            const reg = await navigator.serviceWorker.getRegistration();
+            if (reg) {
+              // espera que a versão nova fique instalada (até 15 s) e só depois recarrega
+              const pronta = new Promise((res) => { navigator.serviceWorker.addEventListener("controllerchange", res, { once: true }); setTimeout(res, 15000); });
+              await reg.update();
+              await pronta;
+            }
+          } catch (e) {}
           location.reload();
         }
       } else toast("Já tem a versão mais recente (" + (window.KUB_VER || "") + ").");
@@ -3132,6 +3134,11 @@
     } else { elem.style.backgroundImage = ""; elem.style.color = ""; }
   }
 
+  // Os botões ↻ (Atualizar) vão sempre buscar dados novos à base (limpam a memória de leituras)
+  document.addEventListener("click", (ev) => {
+    if (ev.target.closest && ev.target.closest('#cb-atualizar, [id$="-atu"]')) DB.limparCache();
+  }, true);
+
   // Avatar HTML com foto (se houver) ou iniciais. Para o utilizador atual usa S.user.foto.
   function avatarFoto(nome, foto, extra) {
     const ini = esc(R.iniciais(nome));
@@ -3178,8 +3185,9 @@
     const nome = S.user.nome || S.user.utilizador;
     const c = novoConteudo();
     c.innerHTML = spinner;
-    const sinoOn = await Dados.sinoAtivo().catch(() => true);
-    if (!c.isConnected) return;
+    // O sino aparece já; se o Administrador o tiver desligado, sai quando a resposta chegar (não atrasa o ecrã)
+    const sinoOn = true;
+    Dados.sinoAtivo().then((on) => { if (!on && $("cb-sino")) $("cb-sino").remove(); }).catch(() => {});
     $("cabecalho").className = "cabecalho cab-painel";
     $("cabecalho").innerHTML = `
       <div class="cab-topo">

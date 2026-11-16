@@ -191,6 +191,10 @@ const Dados = (() => {
 
   // ---------- Balanço (Administrador) ----------
   async function balanco() {
+    // as três consultas ao mesmo tempo (antes eram seguidas)
+    const pPagas = DB.consultar("SELECT COUNT(*) AS n FROM prestacoes WHERE status='PAGO'", []);
+    const pPorPagar = listarPorPagar();
+    pPagas.catch(() => {}); pPorPagar.catch(() => {});
     const r = (await DB.consultar(
       "SELECT " +
       "COALESCE(SUM(CASE WHEN status IN ('APROVADO','PAGO') THEN valor_solicitado END),0) AS capital," +
@@ -209,9 +213,9 @@ const Dados = (() => {
       rejeitados: Number(r.rejeitados), cancelados: Number(r.cancelados),
       totalAReceber: 0, emAtraso: 0, prestacoesPagas: 0, prestacoesNoPrazo: 0, prestacoesAtrasadas: 0,
     };
-    ind.prestacoesPagas = Number((await DB.consultar("SELECT COUNT(*) AS n FROM prestacoes WHERE status='PAGO'", []))[0].n);
+    ind.prestacoesPagas = Number((await pPagas)[0].n);
     const hoje = Regras.hojeISO();
-    for (const p of await listarPorPagar()) {
+    for (const p of await pPorPagar) {
       ind.totalAReceber += Regras.emFalta(p, hoje);
       if (Regras.diasAtraso(p.vencimento, hoje) > 0) { ind.prestacoesAtrasadas++; ind.emAtraso += Regras.emFalta(p, hoje); }
       else ind.prestacoesNoPrazo++;
@@ -270,11 +274,12 @@ const Dados = (() => {
 
   // Evolução do saldo em caixa nos últimos 30 dias (saldo acumulado por dia)
   async function graficoEvolucaoCaixa() {
-    const inicial = Number((await DB.consultar(
-      "SELECT COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END),0) AS s FROM caixa WHERE data_movimento < CURRENT_DATE - interval '29 days'", []))[0].s);
-    const diarios = await DB.consultar(
+    const [ini, diarios] = await Promise.all([DB.consultar(
+      "SELECT COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END),0) AS s FROM caixa WHERE data_movimento < CURRENT_DATE - interval '29 days'", []),
+      DB.consultar(
       "SELECT data_movimento::date AS dia, SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END) AS net " +
-      "FROM caixa WHERE data_movimento >= CURRENT_DATE - interval '29 days' GROUP BY dia ORDER BY dia", []);
+      "FROM caixa WHERE data_movimento >= CURRENT_DATE - interval '29 days' GROUP BY dia ORDER BY dia", [])]);
+    const inicial = Number(ini[0].s);
     const mapa = {}; diarios.forEach((r) => mapa[Regras.dataBase(r.dia)] = Number(r.net));
     const out = []; let saldo = inicial;
     for (let i = 29; i >= 0; i--) {
@@ -309,12 +314,17 @@ const Dados = (() => {
 
   async function listarClientes(filtro) {
     const f = "%" + (filtro || "").trim() + "%";
-    const lista = (await DB.consultar(SELECT_CLIENTE +
-      "WHERE c.nome ILIKE ? OR u.telefone ILIKE ? OR c.local_negocio ILIKE ? OR c.tipo_negocio ILIKE ? ORDER BY c.nome", [f, f, f, f]))
-      .map(lerCliente);
+    // as três consultas ao mesmo tempo
+    const [rows, porPagar, contagens] = await Promise.all([
+      DB.consultar(SELECT_CLIENTE +
+        "WHERE c.nome ILIKE ? OR u.telefone ILIKE ? OR c.local_negocio ILIKE ? OR c.tipo_negocio ILIKE ? ORDER BY c.nome", [f, f, f, f]),
+      listarPorPagar(),
+      DB.consultar("SELECT cliente_id, COUNT(*) AS n FROM emprestimos WHERE status IN ('APROVADO','PAGO') GROUP BY cliente_id", []),
+    ]);
+    const lista = rows.map(lerCliente);
     const porId = new Map(lista.map((c) => [c.id, c]));
     const hoje = Regras.hojeISO();
-    for (const p of await listarPorPagar()) {
+    for (const p of porPagar) {
       const c = porId.get(p.clienteId);
       if (!c) continue;
       c.emDivida += Regras.emFalta(p, hoje);
@@ -322,8 +332,7 @@ const Dados = (() => {
       if (Regras.diasAtraso(p.vencimento, hoje) > 0) c.prestacoesEmAtraso++;
     }
     for (const c of lista) c.emDivida = Regras.arredondar(c.emDivida);
-    for (const r of await DB.consultar(
-      "SELECT cliente_id, COUNT(*) AS n FROM emprestimos WHERE status IN ('APROVADO','PAGO') GROUP BY cliente_id", [])) {
+    for (const r of contagens) {
       const c = porId.get(Number(r.cliente_id));
       if (c) c.emprestimos = Number(r.n);
     }
