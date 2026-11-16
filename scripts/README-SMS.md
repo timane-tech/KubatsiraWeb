@@ -29,8 +29,12 @@ No repositório → **Actions → "SMS de cobranca Kubatsira" → Run workflow**
 Mostra quem receberia e o texto, **sem enviar nem gravar**. (Em dry-run nem precisa das credenciais AT.)
 
 ## 4. Ligar o envio automático
-Depois de confirmares o dry-run, os horários (08h/12h/14h MZ) já correm sozinhos.
-Podes correr à mão a qualquer hora em **Run workflow** (sem marcar dry_run).
+O horário (08h/12h/14h MZ) já está ativo no GitHub, mas **só envia** quando:
+1. os Secrets acima estão configurados, **e**
+2. o interruptor **Configurações › SMS de cobrança automático** está **ligado** na app (web, telemóvel ou computador).
+
+Para parar, basta desligar o interruptor na app. Correr à mão em **Run workflow** (sem dry_run) é o
+"Enviar a todos agora": envia mesmo com o interruptor desligado.
 
 ## Importante
 - **Escolhe UM só remetente:** ou o telemóvel Android (como até agora) **ou** este gateway — para não enviar/cobrar a dobrar.

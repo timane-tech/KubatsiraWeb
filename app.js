@@ -2620,7 +2620,7 @@
     }
     if ($("cfg-sms")) {
       const textoSms = () => { $("cfg-sms-txt").innerHTML = $("cfg-sms").checked
-        ? "Ligado: todos os dias às 08:00, 12:00 e 14:00 cada cliente com prestação a vencer hoje ou em atraso recebe um SMS com as prestações em dívida e o total. Os SMS saem pelo cartão SIM do telemóvel de envio.<br>Para um telemóvel enviar: na app Android, Mais › SMS aos clientes › Autorizar este telemóvel."
+        ? "Ligado: todos os dias às 08:00, 12:00 e 14:00 cada cliente com prestação a vencer hoje ou em atraso recebe um SMS com as prestações em dívida e o total. Os SMS são enviados pelo serviço de SMS na Internet (não precisa de telemóvel ligado)."
         : "Desligado: não é enviado nenhum SMS automático (pode enviar à mão em Mais › SMS aos clientes)."; };
       textoSms();
       $("cfg-sms").onchange = async (e) => {

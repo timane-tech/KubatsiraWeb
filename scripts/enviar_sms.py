@@ -12,8 +12,15 @@ Variáveis de ambiente (vêm dos GitHub Secrets — nunca ficam no código):
   AT_API_KEY    chave da API
   AT_FROM       (opcional) sender ID / shortcode registado (ex.: "Kubatsira")
   AT_ENV        (opcional) "sandbox" para o ambiente de testes; senão produção
-  TURNO         (opcional) 0=08h, 1=12h, 2=14h; por omissão calcula pela hora (UTC+2)
+  TURNO         (opcional) 8, 12 ou 14 (como a app: o número da hora); 0 = envio manual "a todos agora"
   DRY_RUN       (opcional) "1" = só mostra quem receberia e o texto; não envia nem grava
+  EVENTO        "schedule" (horário automático) ou "workflow_dispatch" (à mão)
+
+Regras (iguais à app Android, SmsCobranca):
+  - O horário automático SÓ envia se o "SMS de cobrança automático" estiver LIGADO nas Configurações
+    (configuracoes_sistema.sms_automatico = '1') e a hora já for depois de o terem ligado.
+  - Correr à mão (Actions -> Run workflow) é o "Enviar a todos agora": envia mesmo com o interruptor desligado.
+  - Sem as credenciais ainda configuradas, termina sem erro (não envia nada).
 """
 import os, sys, json, datetime, decimal, urllib.request, urllib.parse, urllib.error
 
@@ -23,6 +30,7 @@ AT_API_KEY = os.environ.get("AT_API_KEY", "").strip()
 AT_FROM = os.environ.get("AT_FROM", "").strip()
 AT_ENV = os.environ.get("AT_ENV", "").strip().lower()
 DRY_RUN = os.environ.get("DRY_RUN", "").strip() == "1"
+EVENTO = os.environ.get("EVENTO", "").strip()
 
 MARCA = "Kubatsira Microcredito"
 MULTA_DIA = decimal.Decimal("0.02")
@@ -61,7 +69,9 @@ def neon(sql, params=None):
     return [dict(zip(cols, row)) for row in j.get("rows", [])]
 
 # ---------- Datas / multa ----------
-HOJE = datetime.date.today()
+# Hora de Moçambique (UTC+2): o GitHub corre em UTC, e às 00h-02h o "hoje" seria o dia anterior
+AGORA_MZ = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) + datetime.timedelta(hours=2)
+HOJE = AGORA_MZ.date()
 def d(s):
     return datetime.date.fromisoformat(s[:10]) if s else None
 def dias_atraso(venc):
@@ -166,19 +176,49 @@ def marcar(id_sms, estado, erro=None):
     neon("UPDATE sms_cobranca SET estado=?, erro=? WHERE id=?", [estado, erro, id_sms])
 
 # ---------- Principal ----------
+HORAS = (8, 12, 14)   # como a app Android (SmsCobranca.HORAS); 0 = envio manual
+
 def turno_atual():
     if os.environ.get("TURNO", "").strip() != "":
         return int(os.environ["TURNO"])
-    h = (datetime.datetime.utcnow().hour + 2) % 24   # Moçambique = UTC+2
-    return 0 if h < 11 else (1 if h < 13 else 2)
+    if EVENTO != "schedule":
+        return 0                       # à mão = "Enviar a todos agora" (SmsCobrancaDao.MANUAL)
+    h = AGORA_MZ.hour
+    return 8 if h < 11 else (12 if h < 13 else 14)
+
+def config(chave):
+    try:
+        r = neon("SELECT valor FROM configuracoes_sistema WHERE chave = ?", [chave])
+        return r[0]["valor"] if r else None
+    except Exception:
+        return None
+
+def registar_acesso(detalhe):
+    # Fica no Controlo de Acesso, como o envio feito pelo telemóvel
+    try:
+        neon("INSERT INTO registo_acessos (data_hora, utilizador, usuario_id, perfil, evento, dispositivo, aparelho, detalhe) "
+             "VALUES (?::timestamp, 'gateway', NULL, NULL, 'MENSAGEM', 'COMPUTADOR', 'Gateway de SMS (Internet)', ?)",
+             [AGORA_MZ.replace(microsecond=0).isoformat(sep=" "), detalhe[:255]])
+    except Exception:
+        pass
 
 def main():
     if not NEON_URL:
-        print("Falta NEON_URL."); sys.exit(1)
+        print("Ainda não configurado: falta o Secret NEON_URL. Nada enviado."); return
     if not DRY_RUN and (not AT_USERNAME or not AT_API_KEY):
-        print("Faltam AT_USERNAME/AT_API_KEY."); sys.exit(1)
+        print("Ainda não configurado: faltam os Secrets AT_USERNAME/AT_API_KEY. Nada enviado."); return
     turno = turno_atual()
-    agora = datetime.datetime.now().replace(microsecond=0).isoformat(sep=" ")
+    # O horário automático respeita o interruptor das Configurações (web, telemóvel ou computador)
+    if turno in HORAS and not DRY_RUN:
+        if config("sms_automatico") != "1":
+            print("SMS de cobrança automático DESLIGADO nas Configurações. Nada enviado."); return
+        desde = config("sms_automatico_desde")
+        try:
+            if desde and datetime.datetime.fromisoformat(desde.replace(" ", "T")) > AGORA_MZ.replace(hour=turno, minute=59, second=59):
+                print("Ligado depois das %02d:00 de hoje: este horário não é enviado." % turno); return
+        except ValueError:
+            pass
+    agora = AGORA_MZ.replace(microsecond=0).isoformat(sep=" ")
     print("Turno %s · dia %s · %s" % (turno, HOJE, "DRY_RUN" if DRY_RUN else "envio real"))
 
     # Prestações que vencem hoje ou em atraso (candidatas a cobrança)
@@ -214,6 +254,9 @@ def main():
             marcar(id_sms, "FALHOU", str(info)[:200]); falhados += 1; print("  FALHOU %s: %s" % (nome, info))
 
     print("\nResumo: %d enviado(s), %d falhado(s), %d ja tinham recebido." % (enviados, falhados, pulados))
+    if enviados and not DRY_RUN:
+        registar_acesso(("SMS de cobrança automático das %02d:00: " % turno if turno in HORAS else "SMS de cobrança a todos: ")
+                        + "%d cliente(s)" % enviados)
 
 if __name__ == "__main__":
     main()
