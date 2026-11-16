@@ -302,79 +302,199 @@
     };
   }
 
+  // ECRÃ: ENTRAR — igual ao LoginActivity do Android:
+  //  marca (logótipo, nome, MICROCRÉDITO, slogan) + PT/EN; cartão "ACESSO / Bem-vindo";
+  //  verificador de credenciais com as 4 etapas; 5 senhas erradas seguidas bloqueiam 30 segundos.
   // ============================================================
-  // ECRÃ: ENTRAR (login)
-  // ============================================================
+  const MAX_TENTATIVAS = 5, BLOQUEIO_MS = 30000, PASSO_MS = 420;
+  const ETAPAS = ["A verificar a base de dados", "A verificar a licença", "A validar as suas credenciais", "A preparar o seu painel"];
+  const lerFalhas = () => { try { return JSON.parse(localStorage.getItem("kub_falhas") || "{}"); } catch (e) { return {}; } };
+  const gravarFalhas = (o) => { try { localStorage.setItem("kub_falhas", JSON.stringify(o)); } catch (e) {} };
+  const bloqueadoMs = () => Math.max(0, (lerFalhas().ate || 0) - Date.now());
+  const ICON_PESSOA = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
+  const ICON_CADEADO = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>';
+  const ICON_DIGITAL = '<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2a.506.506 0 0 1 .2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67a.49.49 0 0 1-.44.28zM3.5 9.72a.499.499 0 0 1-.41-.79c.99-1.4 2.25-2.5 3.75-3.27C9.98 4.04 14 4.03 17.15 5.65c1.5.77 2.76 1.86 3.75 3.25a.5.5 0 0 1-.12.7c-.23.16-.54.11-.7-.12a9.388 9.388 0 0 0-3.39-2.94c-2.87-1.47-6.54-1.47-9.4.01-1.36.7-2.5 1.7-3.4 2.96-.08.14-.23.21-.39.21zm6.25 12.07a.47.47 0 0 1-.35-.15c-.87-.87-1.34-1.43-2.01-2.64-.69-1.23-1.05-2.73-1.05-4.34 0-2.97 2.54-5.39 5.66-5.39s5.66 2.42 5.66 5.39c0 .28-.22.5-.5.5s-.5-.22-.5-.5c0-2.42-2.09-4.39-4.66-4.39-2.57 0-4.66 1.97-4.66 4.39 0 1.44.32 2.77.93 3.85.64 1.15 1.08 1.64 1.85 2.42.19.2.19.51 0 .71-.11.1-.24.15-.37.15zm7.17-1.85c-1.19 0-2.24-.3-3.1-.89-1.49-1.01-2.38-2.65-2.38-4.39 0-.28.22-.5.5-.5s.5.22.5.5c0 1.41.72 2.74 1.94 3.56.71.48 1.54.71 2.54.71.24 0 .64-.03 1.04-.1.27-.05.53.13.58.41.05.27-.13.53-.41.58-.57.11-1.07.12-1.21.12zM14.91 22c-.04 0-.09-.01-.13-.02-1.59-.44-2.63-1.03-3.72-2.1a7.297 7.297 0 0 1-2.17-5.22c0-1.62 1.38-2.94 3.08-2.94 1.7 0 3.08 1.32 3.08 2.94 0 1.07.93 1.94 2.08 1.94s2.08-.87 2.08-1.94c0-3.77-3.25-6.83-7.25-6.83-2.84 0-5.44 1.58-6.61 4.03-.39.81-.59 1.76-.59 2.8 0 .78.07 2.01.67 3.61.1.26-.03.55-.29.64-.26.1-.55-.04-.64-.29a11.14 11.14 0 0 1-.73-3.96c0-1.2.23-2.29.68-3.24 1.33-2.79 4.28-4.6 7.51-4.6 4.55 0 8.25 3.51 8.25 7.83 0 1.62-1.38 2.94-3.08 2.94s-3.08-1.32-3.08-2.94c0-1.07-.93-1.94-2.08-1.94s-2.08.87-2.08 1.94c0 1.71.66 3.31 1.87 4.51.95.94 1.86 1.46 3.27 1.85.27.07.42.35.35.61-.05.23-.26.38-.47.38z"/></svg>';
+
   function verLogin() {
     // Primeira utilização neste aparelho: tem de aceitar os Termos e Condições (como na app)
     if (!termosAceites()) { verTermos(true, verLogin); return; }
     mostrar("ecra-login");
     const bioConta = Bio.contaEntrada();
+    const en = Idioma.emIngles();
     $("ecra-login").innerHTML = `
-      <div class="centro">
-        <div class="marca">
-          <img src="icons/icon-192.png" alt="Kubatsira">
-          <div class="nome">Kubatsira</div>
-          <div class="slogan">Microcrédito</div>
+      <div class="login">
+        <div class="login-marca">
+          <div class="login-idioma"><button id="l-pt" class="${en ? "" : "ativo"}">PT</button><button id="l-en" class="${en ? "ativo" : ""}">EN</button></div>
+          <div class="login-logo"><img src="icons/icon-192.png" alt="Kubatsira"><div><div class="nome">Kubatsira</div><div class="micro">MICROCRÉDITO</div></div></div>
+          <div class="slogan">Mais oportunidades para o seu negócio.</div>
         </div>
-        <div class="cartao">
+        <div class="login-cartao">
+          <div class="acesso">ACESSO</div>
+          <div class="bemvindo">Bem-vindo</div>
+          <div class="nota">Clientes: entram com o número de telefone.</div>
+          <div class="aviso-painel oculto" id="l-manut" style="color:var(--laranja);background:var(--laranja-bg);font-weight:700;margin:12px 0 0">🔧 Sistema em manutenção. De momento só a administração pode entrar.</div>
           <form id="login-form" autocomplete="on">
-            <div class="campo">
-              <label>Utilizador</label>
-              <input id="l-user" type="text" autocomplete="username" autocapitalize="none" placeholder="utilizador ou telefone">
-            </div>
-            <div class="campo">
-              <label>Senha</label>
-              <input id="l-senha" type="password" autocomplete="current-password" placeholder="a sua senha">
-            </div>
+            <label class="campo-icone"><span class="ic">${ICON_PESSOA}</span>
+              <input id="l-user" type="text" autocomplete="username" autocapitalize="none" placeholder="Utilizador ou telefone"></label>
+            <label class="campo-icone"><span class="ic">${ICON_CADEADO}</span>
+              <input id="l-senha" type="password" autocomplete="current-password" placeholder="Senha ou código de acesso">
+              <button type="button" class="olho" id="l-olho" title="Mostrar a senha">${icf("olhoaberto", 22)}</button></label>
             <div class="erro-msg" id="l-erro"></div>
-            <button class="btn" id="l-btn" type="submit">Entrar</button>
-            ${bioConta ? `<button class="btn contorno" id="l-bio" type="button" title="${esc(bioConta.nome || "")}">👆 Entrar com Face ID / impressão digital</button>` : ""}
+            <button class="btn login-entrar" id="l-btn" type="submit">Entrar</button>
+            ${bioConta ? `<button class="login-bio" id="l-bio" type="button" title="Entrar com impressão digital · ${esc(bioConta.nome || "")}">${ICON_DIGITAL}</button>` : ""}
           </form>
         </div>
-        <div class="linha-link"><a id="l-idioma">🌐 ${Idioma.emIngles() ? "Português" : "English"}</a> · <a id="l-trocar">Trocar de ligação</a></div>
-      </div>`;
-    $("l-idioma").onclick = () => { Idioma.definir(Idioma.emIngles() ? "pt" : "en"); verLogin(); };
-    if ($("l-bio")) $("l-bio").onclick = async () => {
-      $("l-erro").textContent = "";
-      try {
-        await Bio.verificar(bioConta.uid);
-        const user = await Dados.obterUtilizador(bioConta.uid);
-        if (!user) { Bio.desligarEntrada(); $("l-erro").textContent = "A conta ligada ao Face ID / impressão digital já não existe. Entre com o utilizador e a senha."; return; }
-        await entrar(user);
-      } catch (e) { $("l-erro").textContent = e && e.name === "NotAllowedError" ? "Cancelado." : (e.message || "Não foi possível confirmar a identidade."); }
-    };
+        <div class="linha-link"><a id="l-trocar">Trocar de ligação</a></div>
+      </div>
+      <div class="verificador oculto" id="l-verif"><div class="cartao-verif" id="l-vcart">
+        <img src="icons/icon-192.png" alt="" id="l-vlogo"><div class="vnome">Kubatsira</div>
+        <div class="vprog"><span id="l-vbar"></span></div>
+        <div id="l-etapas">${ETAPAS.map((t, i) => `<div class="etapa" data-i="${i}"><span class="bola">○</span><span class="txt">${t}</span></div>`).join("")}</div>
+        <div class="vres oculto" id="l-vres"></div></div></div>`;
+    const mudarIdioma = (l) => { if (Idioma.atual() !== l) { Idioma.definir(l); verLogin(); } };
+    $("l-pt").onclick = () => mudarIdioma("pt");
+    $("l-en").onclick = () => mudarIdioma("en");
+    $("l-olho").onclick = () => { const s = $("l-senha"); s.type = s.type === "password" ? "text" : "password"; $("l-olho").innerHTML = icf(s.type === "password" ? "olhoaberto" : "olhofechado", 22); };
     $("l-trocar").onclick = async () => {
-      if (await confirmar("Trocar de ligação", "Vai apagar a ligação atual deste aparelho e colar outro código.", "Trocar", true)) {
-        DB.apagar(); verLigar();
-      }
+      if (await confirmar("Trocar de ligação", "Vai apagar a ligação atual deste aparelho e colar outro código.", "Trocar", true)) { DB.apagar(); verLigar(); }
     };
-    $("login-form").onsubmit = async (ev) => {
+    // Licença por pagar: aviso de manutenção (só a administração entra)
+    Dados.licencaEstado().then((l) => { if (l.expirada && $("l-manut")) $("l-manut").classList.remove("oculto"); }).catch(() => {});
+    // Bloqueio ativo (5 tentativas falhadas): mostra quanto falta
+    const mostrarBloqueio = () => {
+      const ms = bloqueadoMs();
+      if (!$("l-btn")) return;
+      if (ms > 0) {
+        $("l-btn").disabled = true; $("l-btn").textContent = `Aguarde ${Math.ceil(ms / 1000)} s`;
+        setTimeout(mostrarBloqueio, 1000);
+      } else { $("l-btn").disabled = false; $("l-btn").textContent = Idioma.T("Entrar"); }
+    };
+    mostrarBloqueio();
+
+    $("login-form").onsubmit = (ev) => {
       ev.preventDefault();
+      if (bloqueadoMs() > 0) return;
       const u = $("l-user").value.trim(), s = $("l-senha").value;
-      if (!u || !s) { $("l-erro").textContent = "Escreva o utilizador e a senha."; return; }
-      $("l-btn").disabled = true; $("l-erro").textContent = "";
-      try {
-        const user = await Dados.autenticar(u, s);
-        if (!user) { $("l-erro").textContent = "Utilizador ou senha incorretos."; $("l-btn").disabled = false; return; }
-        await entrar(user);
-        if ($("l-btn")) $("l-btn").disabled = false;
-      } catch (e) {
-        $("l-erro").textContent = e.message || "Sem ligação. Verifique a Internet.";
-        $("l-btn").disabled = false;
-      }
+      if (!u || !s) { $("l-erro").textContent = "Preencha o utilizador e a senha."; return; }
+      $("l-erro").textContent = "";
+      verificar(() => Dados.autenticar(u, s), false, u);
+    };
+    if ($("l-bio")) $("l-bio").onclick = async () => {
+      if (bloqueadoMs() > 0) return;
+      $("l-erro").textContent = "";
+      try { await Bio.verificar(bioConta.uid); }
+      catch (e) { $("l-erro").textContent = e && e.name === "NotAllowedError" ? "Cancelado." : "Não foi possível confirmar a identidade."; return; }
+      verificar(async () => {
+        const user = await Dados.obterUtilizador(bioConta.uid);
+        if (!user) Bio.desligarEntrada();
+        return user;
+      }, true, bioConta.nome);
     };
   }
 
-  // Depois de confirmada a identidade: conta ativa? licença? (como o LoginActivity)
+  // O verificador: base de dados → licença → credenciais → painel (LoginActivity.verificar)
+  async function verificar(credenciais, biometria, nomeTentado) {
+    const pausa = () => new Promise((r) => setTimeout(r, PASSO_MS));
+    const etapa = (i, estado, texto) => {   // 0 por fazer, 1 a decorrer, 2 feita, 3 falhou, 4 aviso
+      const e = $("l-etapas").querySelector(`[data-i="${i}"]`); if (!e) return;
+      e.className = "etapa e" + estado;
+      e.querySelector(".bola").textContent = ["○", "◔", "✓", "✕", "!"][estado];
+      if (texto) e.querySelector(".txt").textContent = Idioma.T(texto);
+    };
+    const prog = (p) => { $("l-vbar").style.width = p + "%"; };
+    const esconder = () => { $("l-verif").classList.add("oculto"); };
+    const recusar = async (i, titulo, msg) => {
+      etapa(i, 3);
+      $("l-vcart").classList.remove("abana"); void $("l-vcart").offsetWidth; $("l-vcart").classList.add("abana");
+      await new Promise((r) => setTimeout(r, 700));
+      esconder();
+      $("l-erro").textContent = msg;
+    };
+    $("l-verif").classList.remove("oculto");
+    $("l-vres").classList.add("oculto");
+    ETAPAS.forEach((t, i) => etapa(i, 0, t));
+    prog(0);
+    $("l-vlogo").classList.remove("gira"); void $("l-vlogo").offsetWidth; $("l-vlogo").classList.add("gira");
+    if (biometria) etapa(2, 0, "A confirmar a impressão digital");
+    try {
+      // 1. Base de dados
+      etapa(0, 1); await pausa();
+      await Dados.idAdminPrincipal();
+      etapa(0, 2); prog(25);
+      // 2. Licença (expirada: a entrada continua, mas só o Administrador passa)
+      etapa(1, 1); await pausa();
+      let lic = null; try { lic = await Dados.licencaEstado(); } catch (e) {}
+      const expirada = !!(lic && lic.expirada);
+      if (expirada) etapa(1, 4, "Sistema em manutenção"); else etapa(1, 2);
+      prog(50);
+      // 3. Credenciais
+      etapa(2, 1); await pausa();
+      const u = await credenciais();
+      if (!u && biometria) { await recusar(2, "Impressão digital", "A conta ligada à impressão digital já não existe. Entre com o utilizador e a senha."); return; }
+      if (!u) { await falhou(nomeTentado, recusar); return; }
+      if (biometria) etapa(2, 1, "Impressão digital confirmada");
+      if (!u.ativo) {
+        Dados.registarAcesso("CONTA_DESATIVADA", u.utilizador, u.id, u.perfil, "Conta desativada: entrada recusada");
+        await recusar(2, "Conta desativada", "A sua conta está desativada. Fale com o Administrador."); return;
+      }
+      if (u.perfil === "CLIENTE" && !u.clienteId) { await recusar(2, "Aviso", "Esta conta de cliente não tem ficha associada. Fale com o Administrador."); return; }
+      gravarFalhas({});
+      Dados.registarAcesso("ENTRADA", u.utilizador, u.id, u.perfil, (biometria ? "Entrou com Face ID / impressão digital" : "Entrou com senha") +
+        (expirada && u.perfil !== "ADMIN" ? " (sistema em manutenção)" : "") + " · web");
+      etapa(2, 2); prog(75);
+      // Licença por pagar e não é o Administrador: "Sistema em manutenção"
+      if (expirada && u.perfil !== "ADMIN") {
+        etapa(3, 4, "Sistema em manutenção");
+        $("l-vres").textContent = "🔧 " + Idioma.T("Sistema em manutenção"); $("l-vres").style.color = "var(--laranja)"; $("l-vres").classList.remove("oculto");
+        await new Promise((r) => setTimeout(r, 900));
+        esconder(); verManutencao(); return;
+      }
+      // 4. Painel (ou, para o Administrador com a licença expirada, a licença)
+      if (expirada) etapa(3, 0, "A abrir a licença do sistema");
+      etapa(3, 1); await pausa();
+      u.principal = u.id === (await Dados.idAdminPrincipal());
+      etapa(3, 2); prog(100);
+      const nome = (u.nome && u.nome.trim()) || u.utilizador;
+      $("l-vres").textContent = Idioma.T("Bem-vindo, " + nome.split(/\s+/)[0] + "!");
+      $("l-vres").style.color = "var(--verde)"; $("l-vres").classList.remove("oculto");
+      await new Promise((r) => setTimeout(r, 800));
+      esconder();
+      iniciarSessao(u);
+      if (expirada) verLicenca(true);   // o Administrador tem de pagar antes de usar o sistema
+    } catch (e) {
+      esconder();
+      $("l-erro").textContent = e.message || "Sem ligação. Verifique a Internet.";
+    }
+  }
+
+  // Senha errada: conta a tentativa; à 5.ª bloqueia 30 segundos neste aparelho e avisa a administração
+  async function falhou(utilizador, recusar) {
+    const f = lerFalhas();
+    const n = (f.n || 0) + 1;
+    const bloqueio = n >= MAX_TENTATIVAS;
+    gravarFalhas(bloqueio ? { n: 0, ate: Date.now() + BLOQUEIO_MS } : { n });
+    if (bloqueio) {
+      Dados.avisarEntradaBloqueada(utilizador, MAX_TENTATIVAS, BLOQUEIO_MS / 1000);
+      Dados.registarAcesso("BLOQUEIO", utilizador, null, null, `${MAX_TENTATIVAS} tentativas falhadas seguidas: entrada bloqueada ${BLOQUEIO_MS / 1000} segundos neste aparelho`);
+    } else {
+      Dados.registarAcesso("FALHADA", utilizador, null, null, `Utilizador ou senha errados (restam ${MAX_TENTATIVAS - n} tentativa(s))`);
+    }
+    if ($("l-senha")) $("l-senha").value = "";
+    await recusar(2, "Acesso recusado", bloqueio
+      ? `Demasiadas tentativas falhadas. Aguarde ${BLOQUEIO_MS / 1000} segundos.`
+      : `Utilizador ou senha incorretos. Tentativas restantes: ${MAX_TENTATIVAS - n}.`);
+    if (bloqueio) verLogin();
+  }
+
+  // Entrada direta (usada no arranque de testes): conta ativa? licença?
   async function entrar(user) {
-    if (!user.ativo) { $("l-erro").textContent = "Esta conta está desativada. Contacte o Administrador."; return; }
+    if (!user.ativo) return;
     user.principal = user.id === (await Dados.idAdminPrincipal());
     let lic = null;
     try { lic = await Dados.licencaEstado(); } catch (e) {}
     if (lic && lic.expirada && user.perfil !== "ADMIN") { verManutencao(); return; }
     iniciarSessao(user);
-    if (lic && lic.expirada) verLicenca(true);   // o Administrador tem de pagar antes de usar o sistema
+    if (lic && lic.expirada) verLicenca(true);
   }
 
   function iniciarSessao(user) {

@@ -52,6 +52,28 @@ const Dados = (() => {
     return u;
   }
 
+  // ---------- Controlo de Acesso (RegistoAcessoDao): entradas, saídas, falhas e bloqueios ----------
+  async function registarAcesso(evento, utilizador, usuarioId, perfil, detalhe) {
+    try {
+      await DB.executar("INSERT INTO registo_acessos (data_hora, utilizador, usuario_id, perfil, evento, dispositivo, aparelho, detalhe) " +
+        "VALUES (?::timestamp, ?, ?::int, ?, ?, 'TELEMOVEL', ?, ?)",
+        [Regras.agoraLocal(), String(utilizador || "(vazio)").trim().slice(0, 100) || "(vazio)", usuarioId || null, perfil || null, evento,
+          ("Web · " + (navigator.userAgent.match(/iPhone|iPad|Android|Windows|Mac OS X|Linux/) || ["navegador"])[0]).slice(0, 100),
+          String(detalhe || "").slice(0, 300)]);
+    } catch (e) { /* o registo nunca impede a entrada */ }
+  }
+  // Bloqueio por senhas erradas: aviso de segurança no sino da administração (NotificacaoDao.avisarEntradaBloqueada)
+  async function avisarEntradaBloqueada(utilizador, tentativas, segundos) {
+    try {
+      if (!(await sinoAtivo())) return;
+      const agora = Regras.agoraLocal();
+      await DB.executar("INSERT INTO notificacoes (tipo, titulo, mensagem, de_nome, para_perfil, chave, criada_em) VALUES (?, ?, ?, ?, 'ADMIN', ?, ?::timestamp) ON CONFLICT DO NOTHING",
+        ["SEGURANCA", "Entrada bloqueada por senhas erradas",
+          tentativas + " tentativas falhadas seguidas" + (utilizador ? ` com o utilizador "${utilizador}"` : "") + ". A entrada ficou bloqueada " + segundos +
+          " segundos (" + agora.substring(0, 16) + "). Se não foi um utilizador legítimo, considere mudar as senhas.", "Kubatsira", "bloqueio:" + agora, agora]);
+    } catch (e) {}
+  }
+
   // A conta ligada ao Face ID / impressão digital deste aparelho (a identidade já foi confirmada pelo aparelho)
   async function obterUtilizador(id) {
     const rows = await DB.consultar(SELECT_USER + "WHERE u.id = ?", [id]);
@@ -1200,7 +1222,7 @@ const Dados = (() => {
   }
 
   return {
-    autenticar, obterUtilizador, idAdminPrincipal, balanco, cobrancasPrevistas, topClientes,
+    autenticar, obterUtilizador, idAdminPrincipal, registarAcesso, avisarEntradaBloqueada, balanco, cobrancasPrevistas, topClientes,
     graficoEntradasSaidas, graficoEvolucaoCaixa,
     listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo, listarPagas,
     movimentosPeriodo,
