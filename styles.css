@@ -448,6 +448,8 @@ input, select, textarea, .campo input, .campo select, .campo textarea, .pesquisa
 .sub-secao { font-size: .74rem; font-weight: 700; letter-spacing: .05em; color: var(--texto-suave); margin: 4px 0 8px; }
 .btn.azul { background: var(--accent); }
 .btn.contorno { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn.verde-contorno { background: var(--verde); color: #fff; }
+.tel-ligar { color: var(--accent); font-weight: 700; text-decoration: none; cursor: pointer; }
 .btn.contorno-vermelho { background: transparent; color: var(--vermelho); border: 1.5px solid var(--vermelho); }
 
 /* Termos e Condições */

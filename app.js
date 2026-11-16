@@ -510,7 +510,8 @@
     else navegar(pode("BALANCO") ? "inicio" : (pode("COBRANCAS") ? "cobrancas" : "clientes"));
   }
 
-  function sair() {
+  function sair(motivo) {
+    if (S.user) Dados.registarAcesso("SAIDA", S.user.utilizador, S.user.id, S.user.perfil, (motivo || "Saiu") + " · web");
     S.user = null; S.perms = new Set();
     $("barra-inferior").classList.remove("escondida");
     fecharFolha();
@@ -924,7 +925,7 @@
       : `${p.numero}ª prestação · ${dias > 0 ? "venceu" : "vence"} ${R.data(p.vencimento)}` + (dias > 0 ? `\n${dias} ${dias === 1 ? "dia" : "dias"} de atraso` : "");
     const multa = paga ? 0 : R.multaPrestacao(p, hoje);
     const linhas = [];
-    if (p.telefoneCliente) linhas.push(`<div>${icf("telefone", 15)}<span>${esc(p.telefoneCliente)}</span></div>`);
+    if (p.telefoneCliente) linhas.push(`<div>${icf("telefone", 15)}<a class="tel-ligar" data-ligar="${p.id}">${esc(p.telefoneCliente)}</a></div>`);
     if (p.localNegocio) linhas.push(`<div>${icf("local", 15)}<span>${esc(p.localNegocio)}</span></div>`);
     if (multa > 0) linhas.push(`<div>${icf("aviso", 15)}<span>Multa: ${vmt(multa)}</span></div>`);
     if (p.valorPago > 0 && !paga) linhas.push(`<div>${icf("visto", 15)}<span>Já pago: ${vmt(p.valorPago)}</span></div>`);
@@ -939,6 +940,12 @@
   function ligarCartoesCobranca(raiz, lista, recarregar) {
     raiz.querySelectorAll(".cl[data-pid]").forEach((b) =>
       b.onclick = () => abrirPrestacao(lista.find((x) => x.id == b.dataset.pid), recarregar));
+    // Tocar no número liga logo ao cliente
+    raiz.querySelectorAll("[data-ligar]").forEach((a) => a.onclick = (ev) => {
+      ev.stopPropagation();
+      const p = lista.find((x) => x.id == a.dataset.ligar);
+      if (p) ligarCliente(p.nomeCliente, p.telefoneCliente);
+    });
   }
 
   // ============================================================
@@ -1097,7 +1104,12 @@
       <div class="linha-dados"><span class="r">Já pago</span><span class="v">${R.mt(p.valorPago)}</span></div>
       <div class="linha-dados"><span class="r">Multa (2%/dia)</span><span class="v">${R.mt(multa)}${p.multaAlteradaPor ? " (alterada)" : ""}</span></div>
       <div class="linha-dados"><span class="r">Em falta</span><span class="v" style="color:var(--vermelho)">${R.mt(falta)}</span></div>
-      ${p.telefoneCliente ? `<div class="linha-dados"><span class="r">Telefone</span><span class="v"><a href="tel:${esc(p.telefoneCliente)}">${esc(p.telefoneCliente)}</a></span></div>` : ""}
+      ${p.telefoneCliente ? `<div class="linha-dados"><span class="r">Telefone</span><span class="v">${esc(p.telefoneCliente)}</span></div>
+        <div class="btn-linha" style="margin-top:12px">
+          <button class="btn verde-contorno" id="pg-ligar">📞 Ligar ao cliente</button>
+          ${p.estado !== "PAGO" ? `<button class="btn contorno" id="pg-sms">💬 Enviar SMS</button>` : ""}
+        </div>
+        ${p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-copiar" style="margin-top:10px">📋 Copiar a mensagem de cobrança</button>` : ""}` : ""}
       ${podePagar ? `
         <div class="campo" style="margin-top:16px"><label>Valor a pagar</label>
           <input id="pg-valor" type="number" inputmode="decimal" step="0.01" value="${falta.toFixed(2)}"></div>
@@ -1107,10 +1119,11 @@
         (p.estado === "PAGO" ? `<p class="sub" style="text-align:center;margin-top:14px">Prestação paga.</p>` : "")}
       ${podeMulta ? `<button class="btn secundario" id="pg-multa" style="margin-top:10px">Perdoar / reduzir multa</button>` : ""}
       ${pode("ANULAR_EMPRESTIMO") && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-venc" style="margin-top:10px">Alterar data de vencimento</button>` : ""}
-      ${p.telefoneCliente && p.estado !== "PAGO" ? `<button class="btn secundario" id="pg-sms" style="margin-top:10px">${ic("sms", 16)} Enviar SMS de cobrança</button>` : ""}
       ${pode("REMOVER_MULTA") && p.multaAlteradaPor ? `<div class="aviso-caixa" style="margin:12px 0 6px">A multa desta prestação foi alterada por <b>${esc(p.multaAlteradaPor)}</b>.</div><button class="btn" id="pg-repor">Repor a multa (anular remoção)</button>` : ""}
     `);
-    if ($("pg-sms")) $("pg-sms").onclick = () => abrirSMS(p.telefoneCliente, mensagemCobranca(p));
+    if ($("pg-ligar")) $("pg-ligar").onclick = () => ligarCliente(p.nomeCliente, p.telefoneCliente);
+    if ($("pg-sms")) $("pg-sms").onclick = () => abrirSMS(p.telefoneCliente, mensagemCobranca(p), p.nomeCliente);
+    if ($("pg-copiar")) $("pg-copiar").onclick = () => copiarMensagem(mensagemCobranca(p), p.nomeCliente, p.numero);
     if ($("pg-repor")) $("pg-repor").onclick = async () => {
       if (!(await confirmar("Repor a multa", "A multa volta a ser calculada normalmente (2% por dia de atraso). Serve para anular uma remoção feita por engano. Vale em todos os dispositivos.", "Repor"))) return;
       const r = await comErro(() => Dados.reporMulta(p.id));
@@ -1237,7 +1250,10 @@
       : `<p class="sub" style="color:var(--texto-suave)">Sem empréstimos.</p>`;
     abrirFolha(`
       <h3>${esc(cl.nome)}</h3><div class="sub">${esc(cl.classificacao || "Cliente")}</div>
-      <div class="linha-dados"><span class="r">Telefone</span><span class="v"><a href="tel:${esc(cl.telefone)}">${esc(cl.telefone || "—")}</a></span></div>
+      <div class="linha-dados"><span class="r">Telefone</span><span class="v">${esc(cl.telefone || "—")}</span></div>
+      ${cl.telefone ? `<div class="btn-linha" style="margin:10px 0 4px">
+        <button class="btn verde-contorno" id="cl-ligar">📞 Ligar</button>
+        <button class="btn contorno" id="cl-sms2">💬 SMS</button></div>` : ""}
       <div class="linha-dados"><span class="r">Morada</span><span class="v">${esc(cl.morada || "—")}</span></div>
       <div class="linha-dados"><span class="r">Negócio</span><span class="v">${esc(cl.tipoNegocio || "—")}${cl.localNegocio ? " · " + esc(cl.localNegocio) : ""}</span></div>
       <div class="linha-dados"><span class="r">Renda diária</span><span class="v">${vmt(cl.rendaDiaria)}</span></div>
@@ -1256,14 +1272,17 @@
       </div>`);
     $("folha").querySelectorAll("[data-eid]").forEach((b) =>
       b.onclick = () => abrirEmprestimo(emprestimos.find((x) => x.id == b.dataset.eid), () => abrirCliente(cl)));
-    if ($("cl-sms")) $("cl-sms").onclick = async () => {
+    const smsCobrancaCliente = async () => {
       try {
         const ps = (await Dados.listarPorPagar()).filter((p) => p.clienteId === cl.id);
-        if (!ps.length) { toast("Este cliente não tem prestações por pagar.", true); return; }
+        if (!ps.length) { abrirSMS(cl.telefone, "Ola " + primeiroNome(cl.nome) + ", ", cl.nome); return; }
         const total = ps.reduce((s, p) => s + R.emFalta(p, R.hojeISO()), 0);
-        abrirSMS(cl.telefone, mensagemCobrancaGrupo(ps, total));
+        abrirSMS(cl.telefone, mensagemCobrancaGrupo(ps, total), cl.nome);
       } catch (e) { toast(e.message, true); }
     };
+    if ($("cl-sms")) $("cl-sms").onclick = smsCobrancaCliente;
+    if ($("cl-sms2")) $("cl-sms2").onclick = smsCobrancaCliente;
+    if ($("cl-ligar")) $("cl-ligar").onclick = () => ligarCliente(cl.nome, cl.telefone);
     if ($("cl-pedir")) $("cl-pedir").onclick = () => formPedido(cl);
     if ($("cl-editar")) $("cl-editar").onclick = () => formCliente(cl);
     if ($("cl-codigo")) $("cl-codigo").onclick = async () => {
@@ -2072,21 +2091,74 @@
   }
 
   // ---------- Acessos ----------
+  // Controlo de Acesso (AcessosActivity): só o perfil Administrador
+  let acPer = 1, acEv = 0;
   async function verAcessos() {
-    cabecalho("Acessos", "Entradas e saídas");
+    if (S.user.perfil !== "ADMIN") { toast("Sem permissão.", true); return; }
+    mostrar("ecra-app");
+    cabecalho("Controlo de Acesso", "Entradas e saídas no telemóvel e no computador");
     const c = novoConteudo();
-    c.innerHTML = spinner;
+    const PERIODOS = ["Hoje", "7 dias", "30 dias", "90 dias", "1 ano"], DIAS = [0, 6, 29, 89, 364];
+    const EVENTOS = ["Todos", "Entradas", "Falhadas", "Saídas", "Ligações a clientes"];
+    const chips = (id, ops, at) => `<div class="chips" id="${id}" style="padding-bottom:6px">${ops.map((o, i) => `<button class="chip ${i === at ? "ativo" : ""}" data-i="${i}">${o}</button>`).join("")}</div>`;
+    c.innerHTML = chips("ac-per", PERIODOS, acPer) + chips("ac-ev", EVENTOS, acEv) + `<div id="ac-lista">${spinner}</div>`;
+    ["ac-per", "ac-ev"].forEach((id) => $(id).querySelectorAll(".chip").forEach((b) => b.onclick = () => {
+      if (id === "ac-per") acPer = Number(b.dataset.i); else acEv = Number(b.dataset.i);
+      verAcessos();
+    }));
+    const NOME_EV = { ENTRADA: "Entrou", SAIDA: "Saiu", FALHADA: "Tentativa falhada", BLOQUEIO: "Conta bloqueada", CONTA_DESATIVADA: "Conta desativada",
+      REGISTOS_LIMPOS: "Registos limpos", LIGACAO: "📞 Ligou", MENSAGEM: "💬 Mensagem" };
     try {
-      const lista = await Dados.acessosListar(100);
-      if (!lista.length) { c.innerHTML = vazio("acessos", "Sem registos de acesso."); return; }
-      const cor = { ENTRADA: "var(--verde)", SAIDA: "var(--texto-suave)", FALHADA: "var(--vermelho)", BLOQUEIO: "var(--vermelho)", CONTA_DESATIVADA: "var(--vermelho)" };
-      c.innerHTML = lista.map((a) => `<div class="item" style="cursor:default">
-        <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${ic(a.dispositivo === "TELEMOVEL" ? "telemovel" : "computador", 18)}</span>
-        <span class="meio"><span class="nome">${esc(a.utilizador || "—")}</span>
-          <span class="det">${esc(a.perfil || "")}${a.detalhe ? " · " + esc(a.detalhe) : ""}</span>
-          <span class="det" style="font-size:.74rem">${R.dataHora(a.dataHora)}</span></span>
-        <span class="fim"><span class="etiqueta e-neutro" style="color:${cor[a.evento] || "var(--texto-suave)"}">${esc(a.evento)}</span></span></div>`).join("");
-    } catch (e) { c.innerHTML = erroEcra(e, verAcessos); }
+      const hoje = R.hojeISO();
+      const todos = await Dados.acessosListar(R.somaDias(hoje, -DIAS[acPer]), hoje);
+      let entradas = 0, falhadas = 0, bloqueios = 0, ligacoes = 0, mensagens = 0; const pessoas = new Set();
+      todos.forEach((a) => {
+        if (a.evento === "ENTRADA") { entradas++; pessoas.add((a.utilizador || "").toLowerCase()); }
+        else if (a.evento === "FALHADA") falhadas++;
+        else if (a.evento === "BLOQUEIO") bloqueios++;
+        else if (a.evento === "LIGACAO") ligacoes++;
+        else if (a.evento === "MENSAGEM") mensagens++;
+      });
+      const lista = todos.filter((a) => {
+        const entra = a.evento === "ENTRADA", sai = a.evento === "SAIDA";
+        const falha = ["FALHADA", "BLOQUEIO", "CONTA_DESATIVADA"].includes(a.evento);
+        const contacto = a.evento === "LIGACAO" || a.evento === "MENSAGEM";
+        return !((acEv === 1 && !entra) || (acEv === 2 && !falha) || (acEv === 3 && !sai) || (acEv === 4 && !contacto));
+      }).slice(0, 500);
+      const cores = (ev) => ev === "ENTRADA" ? CORES.verde : ev === "SAIDA" ? CORES.cinzento : (ev === "LIGACAO" || ev === "MENSAGEM" || ev === "REGISTOS_LIMPOS") ? CORES.azul
+        : ev === "FALHADA" ? CORES.laranja : CORES.vermelho;
+      const perfil = (p) => ({ ADMIN: "Administrador", AGENTE: "Agente", CLIENTE: "Cliente" }[p] || p || "");
+      $("ac-lista").innerHTML = `
+        <div class="aviso-painel" style="color:var(--accent);background:var(--accent-bg)"><b>${entradas}</b> entradas de <b>${pessoas.size}</b> utilizador(es) · <b>${falhadas}</b> tentativas falhadas · <b>${bloqueios}</b> bloqueios · <b>${ligacoes}</b> ligações e <b>${mensagens}</b> mensagens a clientes</div>
+        <div class="btn-linha" style="margin-bottom:12px"><button class="btn contorno" id="ac-limpar" style="color:var(--laranja);border-color:var(--laranja)">🧹 Limpar registos antigos</button>
+          <button class="btn contorno-vermelho" id="ac-esvaziar">🗑 Esvaziar registos</button></div>
+        ${lista.length ? lista.map((a) => {
+          const quando = R.data(a.dataHora.slice(0, 10)) + " " + a.dataHora.slice(11, 16);
+          return `<div class="cl" style="cursor:default"><div class="cl-topo"><div class="cl-meio">
+            <div class="cl-tit">${esc(a.utilizador || "—")}</div>
+            <div class="cl-sub">${a.dispositivo === "TELEMOVEL" ? "Telemóvel" : "Computador"} · ${quando}${perfil(a.perfil) ? " · " + perfil(a.perfil) : ""}</div></div>
+            <div class="cl-fim">${pilula(NOME_EV[a.evento] || a.evento, cores(a.evento))}</div></div>
+            ${a.detalhe || a.aparelho ? `<div class="cl-det"><div><span style="white-space:pre-line">${esc(a.detalhe)}${a.aparelho ? "\n" + esc(a.aparelho) : ""}</span></div></div>` : ""}</div>`;
+        }).join("") : `<div class="vazio" style="padding:20px">Sem acessos registados neste período.</div>`}`;
+      const apagar = async (antes) => {
+        try {
+          const n = await Dados.acessosApagar(antes, S.user);
+          toast(n === 0 ? "Não havia registos para apagar." : n === 1 ? "1 registo apagado." : n + " registos apagados.");
+        } catch (e) { toast("Não foi possível limpar os registos: " + e.message, true); }
+        verAcessos();
+      };
+      $("ac-limpar").onclick = () => {
+        const dias = [7, 30, 90, 180, 365];
+        abrirFolha(`<h3>Apagar os registos com…</h3>${dias.map((d) => `<button class="btn secundario" data-d="${d}" style="margin-top:8px">Mais de ${d} dias (antes de ${R.data(R.somaDias(hoje, -d))})</button>`).join("")}`);
+        $("folha").querySelectorAll("[data-d]").forEach((b) => b.onclick = async () => {
+          const antes = R.somaDias(hoje, -Number(b.dataset.d));
+          if (await confirmar("Limpar registos", "Apagar de vez os registos de acesso anteriores a " + R.data(antes) + "?", "Apagar", true)) apagar(antes);
+        });
+      };
+      $("ac-esvaziar").onclick = async () => {
+        if (await confirmar("Esvaziar registos", "TODOS os registos de acesso (de todos os utilizadores, no telemóvel e no computador) vão ser apagados de vez.\n\nFica só um registo a dizer que foi limpo por si.", "Esvaziar", true)) apagar(null);
+      };
+    } catch (e) { $("ac-lista").innerHTML = erroEcra(e, verAcessos); }
   }
 
   // ---------- Assistente de IA ----------
@@ -2156,7 +2228,9 @@
         "Aviso nos últimos 10 dias; se expirar, os agentes e clientes veem 'Sistema em manutenção' e o Administrador é levado ao ecrã da licença ao entrar.\n" +
         "- **Poupança de Clientes**, **Lixeira**, **Controlo de Acesso**, **SMS aos clientes**, **Configurações** (tema, idioma, sino, SMS automático).\n" +
         "- Exportar listas em PDF. A sessão termina após 5 minutos sem uso.\n" +
-        (pode("BALANCO") || pode("CAIXA") ? "- Pode analisar a situação financeira e dar recomendações com base nos indicadores do contexto.\n"
+        (pode("BALANCO") || pode("CAIXA") ? "- Pode analisar a situação financeira e dar recomendações com base nos indicadores do contexto.\n" +
+          "- Responde com os números exatos da secção CAIXA: quanto entrou/saiu hoje, ontem e este mês, quem pagou hoje e cada lançamento de hoje.\n" +
+          "- A secção ATIVIDADE DE HOJE diz quem entrou na app e quem ligou ou mandou mensagem a clientes (só para o Administrador).\n"
           : "- SEGURANÇA: este Administrador NÃO tem acesso às finanças (Balanço/Caixa). Não fales de saldos, lucros nem totais da empresa.\n");
     }
     // As permissões exatas desta conta (o Administrador pode ter tirado algumas)
@@ -2211,12 +2285,47 @@
           `- Saldo em caixa: ${R.mt(caixa.saldo)} (entradas ${R.mt(caixa.entradas)}, saídas ${R.mt(caixa.saidas)})\n` +
           `- Dívida total em aberto: ${R.mt(emDivida)}; em atraso: ${R.mt(emAtraso)} (${atrasadas} prestações)\n` +
           `- Pedidos pendentes: ${pendentes.length}\n`;
+        // Caixa de hoje (e ontem / este mês): o que entrou e saiu, lançamento a lançamento
+        const ontem = R.somaDias(hoje, -1), iniMes = hoje.slice(0, 8) + "01";
+        const [cxHoje, cxOntem, movHoje, pagasHoje, movMes] = await Promise.all([Dados.caixaDoDia(hoje), Dados.caixaDoDia(ontem),
+          Dados.movimentosDoDia(hoje), Dados.listarPagas(hoje, hoje), Dados.movimentosPeriodo(iniMes, hoje, false)]);
+        const linhaDia = (nome, d) => `- ${nome}: saldo de abertura ${R.mt(d.abertura)}; ENTROU ${R.mt(d.prestacoes + d.outras)} ` +
+          `(prestações recebidas ${R.mt(d.prestacoes)}, outras entradas ${R.mt(d.outras)}); SAIU ${R.mt(d.emprestimos + d.despesas)} ` +
+          `(empréstimos concedidos ${R.mt(d.emprestimos)}, despesas ${R.mt(d.despesas)}); saldo de fecho ${R.mt(d.fecho)}\n`;
+        let entMes = 0, saiMes = 0;
+        movMes.forEach((m) => { if (m.tipo === "ENTRADA") entMes += m.valor; else saiMes += m.valor; });
+        s += "--- CAIXA (FLUXO DE CAIXA) ---\n" + linhaDia("HOJE " + R.data(hoje), cxHoje) + linhaDia("ONTEM " + R.data(ontem), cxOntem) +
+          `- ESTE MÊS (desde ${R.data(iniMes)}): entrou ${R.mt(entMes)}, saiu ${R.mt(saiMes)}, diferença ${R.mt(entMes - saiMes)} (${movMes.length} lançamentos)\n`;
+        s += `--- LANÇAMENTOS DE HOJE (${movHoje.length}) ---\n`;
+        movHoje.slice(0, 40).forEach((m) => { s += `- ${m.hora} | ${m.tipo === "ENTRADA" ? "ENTRADA +" : "SAÍDA −"}${R.mt(m.valor)} | ${movCurto(m)} | ${m.justificativa || "-"}${m.registadoPor ? " | registado por " + m.registadoPor : ""}\n`; });
+        if (!movHoje.length) s += "- (nenhum lançamento hoje)\n";
+        s += `--- PRESTAÇÕES PAGAS HOJE (${pagasHoje.length}) ---\n`;
+        pagasHoje.slice(0, 40).forEach((p) => { s += `- ${p.nomeCliente} | empréstimo ${p.emprestimoId} | ${p.numero}ª prestação | pago ${R.mt(p.valorPago)}\n`; });
+        if (!pagasHoje.length) s += "- (nenhuma prestação paga hoje)\n";
         if (pode("BALANCO")) {
           const ind = await Dados.balanco();
           s += `- Capital investido: ${R.mt(ind.capitalInvestido)}; margem de lucro esperada: ${R.mt(ind.margemLucro)}\n` +
             `- Empréstimos: ${ind.emCurso} em curso, ${ind.pagos} pagos, ${ind.pendentes} pendentes, ${ind.rejeitados} rejeitados, ${ind.cancelados} cancelados\n` +
             `- Prestações: ${ind.prestacoesPagas} pagas, ${ind.prestacoesNoPrazo} no prazo, ${ind.prestacoesAtrasadas} em atraso\n`;
         }
+      }
+      if (u.perfil === "ADMIN") {
+        try {
+          const ac = await Dados.acessosListar(hoje, hoje);
+          const porPessoa = {};
+          ac.forEach((a) => {
+            const k = a.utilizador || "?"; const x = porPessoa[k] = porPessoa[k] || { ent: 0, lig: [], msg: [] };
+            if (a.evento === "ENTRADA") x.ent++;
+            else if (a.evento === "LIGACAO") x.lig.push(a.dataHora.slice(11, 16) + " " + a.detalhe);
+            else if (a.evento === "MENSAGEM") x.msg.push(a.dataHora.slice(11, 16) + " " + a.detalhe);
+          });
+          s += "--- ATIVIDADE DE HOJE (Controlo de Acesso) ---\n";
+          Object.entries(porPessoa).forEach(([k, x]) => {
+            s += `- ${k}: ${x.ent} entrada(s), ${x.lig.length} ligação(ões), ${x.msg.length} mensagem(ns)` +
+              (x.lig.length ? "; ligações: " + x.lig.slice(0, 10).join("; ") : "") + (x.msg.length ? "; mensagens: " + x.msg.slice(0, 10).join("; ") : "") + "\n";
+          });
+          if (!ac.length) s += "- (sem registos hoje)\n";
+        } catch (e) {}
       }
       if (lic) s += "--- LICENÇA DO SISTEMA ---\n- " + (lic.expirada
         ? `EXPIRADA desde ${R.data(lic.expiracao)} (agentes e clientes veem 'Sistema em manutenção'; pagar no botão Licença)`
@@ -2515,7 +2624,10 @@
         : "Desligado: não é enviado nenhum SMS automático (pode enviar à mão em Mais › SMS aos clientes)."; };
       textoSms();
       $("cfg-sms").onchange = async (e) => {
-        try { await Dados.definirSmsAutomatico(e.target.checked); textoSms(); }
+        try {
+          await Dados.definirSmsAutomatico(e.target.checked); textoSms();
+          registarContacto("MENSAGEM", (e.target.checked ? "Ligou" : "Desligou") + " o SMS de cobrança automático");
+        }
         catch (err) { e.target.checked = !e.target.checked; toast("Não foi possível gravar: " + err.message, true); }
       };
       $("cfg-sms-abrir").onclick = () => verSms();
@@ -2667,7 +2779,7 @@
   ["pointerdown", "keydown", "scroll", "touchstart"].forEach((ev) => window.addEventListener(ev, () => { ultimoUso = Date.now(); }, { passive: true, capture: true }));
   setInterval(() => {
     if (S.user && Date.now() - ultimoUso > SESSAO_MS) {
-      sair();
+      sair("Sessão terminada por inatividade");
       toast("A sessão terminou depois de 5 minutos sem uso. Entre outra vez.");
     }
   }, 15000);
@@ -2715,12 +2827,30 @@
   const nomeRegisto = () => S.user.nome || S.user.utilizador;
   const ehApple = () => /iPad|iPhone|iPod|Macintosh/.test(navigator.userAgent);
 
-  // Abre a app de Mensagens já preenchida (usa o SIM do telemóvel; o utilizador carrega em Enviar).
-  function abrirSMS(tel, texto) {
+  // Contactos com clientes (como ListaActivity.ligar / .sms): fica registado no Controlo de Acesso
+  const registarContacto = (evento, detalhe) => {
+    if (S.user) Dados.registarAcesso(evento, S.user.utilizador, S.user.id, S.user.perfil, detalhe);
+  };
+  // Abre o marcador do telefone com o número do cliente
+  function ligarCliente(nome, tel) {
     const num = (tel || "").replace(/\s/g, "");
     if (!num) { toast("Este cliente não tem telefone.", true); return; }
+    registarContacto("LIGACAO", "Ligou para " + (nome || "cliente") + " (" + num + ")");
+    window.location.href = "tel:" + num;
+  }
+  // Abre a app de Mensagens já preenchida (usa o SIM do telemóvel; o utilizador carrega em Enviar).
+  function abrirSMS(tel, texto, nome) {
+    const num = (tel || "").replace(/\s/g, "");
+    if (!num) { toast("Este cliente não tem telefone.", true); return; }
+    registarContacto("MENSAGEM", "Enviou SMS a " + (nome || "cliente") + " (" + num + ")");
     const sep = ehApple() ? "&" : "?";
     window.location.href = `sms:${num}${sep}body=${encodeURIComponent(texto)}`;
+  }
+  // Copiar a mensagem de cobrança (para WhatsApp, por exemplo)
+  async function copiarMensagem(texto, nome, numero) {
+    try { await navigator.clipboard.writeText(texto); toast("Mensagem copiada."); }
+    catch (e) { toast("Não foi possível copiar neste aparelho.", true); return; }
+    registarContacto("MENSAGEM", "Copiou a mensagem de cobrança de " + (nome || "cliente") + (numero ? " (" + numero + "ª prestação)" : ""));
   }
 
   // Mensagem agrupada: todas as prestações em dívida de um cliente (igual ao gateway/Android).
@@ -2787,7 +2917,7 @@
           <button class="btn secundario" id="ct-salta">Saltar</button>
           <button class="btn secundario" id="ct-fim">Terminar</button>
         </div>`);
-      $("ct-env").onclick = () => { abrirSMS(x.tel, x.texto); i++; setTimeout(render, 500); };
+      $("ct-env").onclick = () => { abrirSMS(x.tel, x.texto, x.nome); i++; setTimeout(render, 500); };
       $("ct-salta").onclick = () => { i++; render(); };
       $("ct-fim").onclick = fecharFolha;
     };

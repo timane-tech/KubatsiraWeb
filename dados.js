@@ -993,13 +993,34 @@ const Dados = (() => {
   }
 
   // ---------- Acessos (registo de entradas) ----------
-  async function acessosListar(limite) {
+  // Registos entre duas datas (inclusive), mais recentes primeiro (RegistoAcessoDao.listar)
+  async function acessosListar(deISO, ateISO) {
+    const hoje = Regras.hojeISO();
     return (await DB.consultar(
-      "SELECT id, data_hora, COALESCE(utilizador,'') AS utilizador, COALESCE(perfil,'') AS perfil, evento, " +
+      "SELECT id, to_char(data_hora, 'YYYY-MM-DD HH24:MI:SS') AS data_hora, COALESCE(utilizador,'') AS utilizador, COALESCE(perfil,'') AS perfil, evento, " +
       "COALESCE(dispositivo,'') AS dispositivo, COALESCE(aparelho,'') AS aparelho, COALESCE(detalhe,'') AS detalhe " +
-      "FROM registo_acessos ORDER BY id DESC LIMIT ?", [limite || 100]))
+      "FROM registo_acessos WHERE data_hora >= ?::date AND data_hora < ?::date + 1 ORDER BY data_hora DESC, id DESC LIMIT 2000",
+      [deISO || Regras.somaDias(hoje, -6), ateISO || hoje]))
       .map((r) => ({ id: Number(r.id), dataHora: r.data_hora, utilizador: r.utilizador, perfil: r.perfil,
         evento: r.evento, dispositivo: r.dispositivo, aparelho: r.aparelho, detalhe: r.detalhe }));
+  }
+  // Apaga todos (antesDe = null) ou só os anteriores a esse dia; fica um registo a dizer quem limpou
+  async function acessosApagar(antesDeISO, quem) {
+    const r = await DB.consultar("WITH apagados AS (DELETE FROM registo_acessos" + (antesDeISO ? " WHERE data_hora < ?::date" : "") +
+      " RETURNING 1) SELECT COUNT(*) AS n FROM apagados", antesDeISO ? [antesDeISO] : []);
+    const n = Number(r[0].n);
+    await registarAcesso("REGISTOS_LIMPOS", quem.utilizador, quem.id, quem.perfil,
+      antesDeISO ? "Apagou " + n + " registo(s) anteriores a " + Regras.data(antesDeISO) : "Esvaziou o registo de acessos (" + n + " registo(s) apagados)");
+    return n;
+  }
+
+  // Entradas de um dia, uma a uma (para a IA responder "quanto entrou hoje / quem pagou")
+  async function movimentosDoDia(diaISO) {
+    return (await DB.consultar(
+      "SELECT id, tipo, valor, COALESCE(justificativa,'') AS justificativa, COALESCE(categoria,'') AS categoria, " +
+      "to_char(data_movimento::timestamp,'HH24:MI') AS hora, COALESCE(registado_por,'') AS registado_por FROM caixa " +
+      "WHERE data_movimento::date = ?::date AND NOT COALESCE(oculto,false) ORDER BY data_movimento, id", [diaISO]))
+      .map((m) => ({ id: Number(m.id), tipo: m.tipo, valor: Number(m.valor), justificativa: m.justificativa, categoria: m.categoria, hora: m.hora, registadoPor: m.registado_por }));
   }
 
   // ---------- Multa de uma prestação (remover / reduzir) ----------
@@ -1236,7 +1257,7 @@ const Dados = (() => {
     poupancaSaldos, poupancaMovimentos,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
-    acessosListar, smsEnviadosListar,
+    acessosListar, acessosApagar, movimentosDoDia, smsEnviadosListar,
     alterarMulta, reporMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
     alterarVencimento, alterarDataDesembolso, reconciliar, iaPerguntar,
     porPagarDoCliente, emprestimosDoCliente,
