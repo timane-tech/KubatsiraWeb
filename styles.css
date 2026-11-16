@@ -11,6 +11,7 @@
   --laranja: #b26a00;
   --laranja-bg: #fff0d6;
   --roxo: #6e3cb4;
+  --roxo-bg: #f0e9fc;
   --fundo: #f2f4f8;
   --cartao: #ffffff;
   --texto: #1c2430;
@@ -191,7 +192,8 @@ button { font-family: inherit; }
   color: var(--texto-suave); font-size: .72rem; font-weight: 500; font-family: inherit;
   display: flex; flex-direction: column; align-items: center; gap: 3px;
 }
-.barra-inferior button .ic { line-height: 1; padding: 6px 18px; border-radius: 18px; transition: background .15s, color .15s; display: inline-flex; color: #3a4556; }
+.barra-inferior button .ic { line-height: 1; padding: 6px 18px; border-radius: 18px; transition: background .15s, color .15s; display: inline-flex; color: var(--texto); opacity: .78; }
+.barra-inferior button.ativo .ic { opacity: 1; }
 .barra-inferior button.ativo { color: var(--accent); font-weight: 700; }
 .barra-inferior button.ativo .ic { background: var(--accent-bg); color: var(--accent); }
 .barra-inferior.escondida { display: none; }
@@ -414,6 +416,67 @@ textarea { resize: vertical; min-height: 44px; }
 
 /* Campos de texto sempre a 16px: abaixo disso o iPhone faz zoom ao tocar no campo */
 input, select, textarea, .campo input, .campo select, .campo textarea, .pesquisa input, .campo-linha { font-size: 16px; }
+
+/* ---------- Indicadores do Balanço Geral (dois por linha, como no Android) ---------- */
+.ind-grelha { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.ind { background: var(--cartao); border: 1px solid var(--borda); border-radius: 14px; box-shadow: var(--sombra); padding: 12px 14px; min-width: 0; }
+.ind .t { font-size: .74rem; color: var(--texto-suave); }
+.ind .v { font-size: 1.12rem; font-weight: 800; margin: 4px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ind .d { font-size: .68rem; color: var(--texto-suave); line-height: 1.3; }
+
+/* Barras horizontais (Top 5 clientes) */
+.barra-h { display: grid; grid-template-columns: minmax(0, 38%) 1fr; gap: 10px; align-items: center; margin: 9px 0; font-size: .84rem; }
+.barra-h .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--texto); }
+.barra-h .tr { position: relative; height: 22px; }
+.barra-h .pr { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 4px; background: var(--accent); }
+.barra-h .vl { position: absolute; top: 2px; font-size: .74rem; color: var(--texto-suave); white-space: nowrap; }
+
+/* Aviso no painel (caixa vazio, licença a expirar) */
+.aviso-painel { border-radius: 14px; padding: 12px 14px; font-size: .9rem; margin: 4px 0 12px; line-height: 1.4; cursor: default; }
+
+/* Interruptor (MaterialSwitch) */
+.interruptor { display: flex; align-items: center; justify-content: space-between; gap: 14px; font-size: .98rem; padding: 4px 0; cursor: pointer; }
+.interruptor input { appearance: none; -webkit-appearance: none; width: 52px; height: 32px; border-radius: 16px; flex: none; margin: 0;
+  background: var(--cinzento-claro); border: 2px solid var(--texto-suave); position: relative; cursor: pointer; transition: background .15s; }
+.interruptor input::after { content: ""; position: absolute; top: 5px; left: 6px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--texto-suave); transition: transform .15s, background .15s; }
+.interruptor input:checked { background: var(--accent); border-color: var(--accent); }
+.interruptor input:checked::after { background: #fff; transform: translateX(18px) scale(1.25); }
+.interruptor input:disabled { opacity: .45; }
+.explica { font-size: .8rem; color: var(--texto-suave); margin-top: 6px; line-height: 1.4; }
+.cartao .titulo-cfg { font-weight: 700; font-size: 1.02rem; margin: 0 0 12px; }
+.sub-secao { font-size: .74rem; font-weight: 700; letter-spacing: .05em; color: var(--texto-suave); margin: 4px 0 8px; }
+.btn.azul { background: var(--accent); }
+.btn.contorno { background: transparent; color: var(--accent); border: 1.5px solid var(--accent); }
+.btn.contorno-vermelho { background: transparent; color: var(--vermelho); border: 1.5px solid var(--vermelho); }
+
+/* Termos e Condições */
+.termos { white-space: pre-wrap; font-size: .95rem; line-height: 1.5; }
+
+/* Ecrã "Sistema em manutenção" */
+.manutencao { text-align: center; padding: 60px 24px; }
+.manutencao .grande { font-size: 3.2rem; }
+
+/* ---------- Tema escuro (as mesmas cores do values-night/colors.xml da app) ---------- */
+:root { --campo: #ffffff; }
+:root[data-tema="escuro"] {
+  --accent: #4A93F0; --accent-bg: #1B2D47; --verde: #3CC27A; --verde-bg: #16332A; --vermelho: #EF5350; --vermelho-bg: #3A1E22;
+  --laranja: #F0A63A; --laranja-bg: #3A2C16; --roxo: #A585E8; --roxo-bg: #2A2242; --texto: #E6EBF2; --texto-suave: #9AA6B5;
+  --fundo: #0E141D; --cartao: #18212D; --campo: #131B26; --borda: #2B3646; --cinzento-claro: #243042; --navy: #4A93F0;
+  --sombra: 0 1px 3px rgba(0,0,0,.4); color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-tema="sistema"] {
+    --accent: #4A93F0; --accent-bg: #1B2D47; --verde: #3CC27A; --verde-bg: #16332A; --vermelho: #EF5350; --vermelho-bg: #3A1E22;
+    --laranja: #F0A63A; --laranja-bg: #3A2C16; --roxo: #A585E8; --roxo-bg: #2A2242; --texto: #E6EBF2; --texto-suave: #9AA6B5;
+    --fundo: #0E141D; --cartao: #18212D; --campo: #131B26; --borda: #2B3646; --cinzento-claro: #243042; --navy: #4A93F0;
+    --sombra: 0 1px 3px rgba(0,0,0,.4); color-scheme: dark;
+  }
+}
+.campo input, .campo select, .campo textarea, .pesquisa input, .campo-linha { background: var(--campo); color: var(--texto); }
+.campo-linha { border-color: var(--texto-suave); }
+.btn.secundario { color: var(--texto); }
+.fab-ia { background: #16304f; }
 
 /* Badge do sino */
 .cabecalho .badge-sino { border-color: #1f4fa0; }

@@ -19,8 +19,10 @@
     ["CAIXA_EDITAR", "Editar / apagar no caixa", true], ["CAIXA_OCULTAR", "Ocultar operações do caixa", true],
     ["CAIXA_RECONCILIAR", "Reconciliar o caixa", true],
     ["EXPORTAR", "Exportar relatórios", false], ["SMS_VER", "Ver SMS enviados", false],
+    ["SMS_AUTOMATICO", "SMS de cobrança automático", false],
   ];
-  const RESERVADAS = new Set(["UTILIZADORES"]);
+  // Não vêm no padrão do Administrador (Permissoes.FORA_DO_PADRAO + as reservadas ao principal)
+  const RESERVADAS = new Set(["UTILIZADORES", "SMS_AUTOMATICO"]);
   function permsPadrao(perfil) {
     const s = new Set();
     if (perfil === "ADMIN") CAT.forEach(([c]) => { if (!RESERVADAS.has(c)) s.add(c); });
@@ -79,6 +81,13 @@
       return true;
     },
     desativar(uid) { try { localStorage.removeItem(this.chave(uid)); } catch (e) {} },
+    // Entrar sem senha: a conta ligada a este aparelho (só uma, como no Android)
+    ligarEntrada(uid, nome) { try { localStorage.setItem("kub_bio_entrada", JSON.stringify({ uid, nome })); } catch (e) {} },
+    desligarEntrada() { try { localStorage.removeItem("kub_bio_entrada"); } catch (e) {} },
+    contaEntrada() {
+      try { const c = JSON.parse(localStorage.getItem("kub_bio_entrada") || "null"); return c && this.ativa(c.uid) ? c : null; }
+      catch (e) { return null; }
+    },
   };
 
   // ---------- Utilitários DOM ----------
@@ -185,14 +194,20 @@
   }
   const avatar = (nome, tam) => `<span class="av" style="background:${corAvatar(nome)}${tam ? `;width:${tam}px;height:${tam}px` : ""}">${esc(R.iniciais(nome))}</span>`;
 
+  // Pares [texto, fundo] (seguem o tema claro/escuro, como as cores do colors.xml)
+  const CORES = {
+    azul: ["var(--accent)", "var(--accent-bg)"], verde: ["var(--verde)", "var(--verde-bg)"],
+    vermelho: ["var(--vermelho)", "var(--vermelho-bg)"], laranja: ["var(--laranja)", "var(--laranja-bg)"],
+    roxo: ["var(--roxo)", "var(--roxo-bg)"], cinzento: ["var(--texto-suave)", "var(--cinzento-claro)"],
+  };
   // Cores [texto, fundo] de uma situação (Ui.coresSituacao)
   function coresSituacao(sit) {
     switch (sit) {
-      case "Em curso": case "Por pagar": case "No prazo": return ["#2F80ED", "#E8F1FD"];
-      case "Com atraso": case "Em atraso": case "Rejeitado": return ["#C62828", "#FDE6E6"];
-      case "Por aprovar": case "Vence hoje": return ["#B26A00", "#FFF0D6"];
-      case "Concluído": case "Paga": case "Pago": return ["#1E9A55", "#DEF5E6"];
-      default: return ["#6E7887", "#EEF1F5"];
+      case "Em curso": case "Por pagar": case "No prazo": return CORES.azul;
+      case "Com atraso": case "Em atraso": case "Rejeitado": return CORES.vermelho;
+      case "Por aprovar": case "Vence hoje": return CORES.laranja;
+      case "Concluído": case "Paga": case "Pago": return CORES.verde;
+      default: return CORES.cinzento;
     }
   }
   const pilula = (texto, cores) => `<span class="pilula" style="color:${cores[0]};background:${cores[1]}">${esc(texto)}</span>`;
@@ -291,7 +306,10 @@
   // ECRÃ: ENTRAR (login)
   // ============================================================
   function verLogin() {
+    // Primeira utilização neste aparelho: tem de aceitar os Termos e Condições (como na app)
+    if (!termosAceites()) { verTermos(true, verLogin); return; }
     mostrar("ecra-login");
+    const bioConta = Bio.contaEntrada();
     $("ecra-login").innerHTML = `
       <div class="centro">
         <div class="marca">
@@ -311,10 +329,21 @@
             </div>
             <div class="erro-msg" id="l-erro"></div>
             <button class="btn" id="l-btn" type="submit">Entrar</button>
+            ${bioConta ? `<button class="btn contorno" id="l-bio" type="button" title="${esc(bioConta.nome || "")}">👆 Entrar com Face ID / impressão digital</button>` : ""}
           </form>
         </div>
-        <div class="linha-link"><a id="l-trocar">Trocar de ligação</a></div>
+        <div class="linha-link"><a id="l-idioma">🌐 ${Idioma.emIngles() ? "Português" : "English"}</a> · <a id="l-trocar">Trocar de ligação</a></div>
       </div>`;
+    $("l-idioma").onclick = () => { Idioma.definir(Idioma.emIngles() ? "pt" : "en"); verLogin(); };
+    if ($("l-bio")) $("l-bio").onclick = async () => {
+      $("l-erro").textContent = "";
+      try {
+        await Bio.verificar(bioConta.uid);
+        const user = await Dados.obterUtilizador(bioConta.uid);
+        if (!user) { Bio.desligarEntrada(); $("l-erro").textContent = "A conta ligada ao Face ID / impressão digital já não existe. Entre com o utilizador e a senha."; return; }
+        await entrar(user);
+      } catch (e) { $("l-erro").textContent = e && e.name === "NotAllowedError" ? "Cancelado." : (e.message || "Não foi possível confirmar a identidade."); }
+    };
     $("l-trocar").onclick = async () => {
       if (await confirmar("Trocar de ligação", "Vai apagar a ligação atual deste aparelho e colar outro código.", "Trocar", true)) {
         DB.apagar(); verLigar();
@@ -328,14 +357,24 @@
       try {
         const user = await Dados.autenticar(u, s);
         if (!user) { $("l-erro").textContent = "Utilizador ou senha incorretos."; $("l-btn").disabled = false; return; }
-        if (!user.ativo) { $("l-erro").textContent = "Esta conta está desativada. Contacte o Administrador."; $("l-btn").disabled = false; return; }
-        user.principal = user.id === (await Dados.idAdminPrincipal());
-        iniciarSessao(user);
+        await entrar(user);
+        if ($("l-btn")) $("l-btn").disabled = false;
       } catch (e) {
         $("l-erro").textContent = e.message || "Sem ligação. Verifique a Internet.";
         $("l-btn").disabled = false;
       }
     };
+  }
+
+  // Depois de confirmada a identidade: conta ativa? licença? (como o LoginActivity)
+  async function entrar(user) {
+    if (!user.ativo) { $("l-erro").textContent = "Esta conta está desativada. Contacte o Administrador."; return; }
+    user.principal = user.id === (await Dados.idAdminPrincipal());
+    let lic = null;
+    try { lic = await Dados.licencaEstado(); } catch (e) {}
+    if (lic && lic.expirada && user.perfil !== "ADMIN") { verManutencao(); return; }
+    iniciarSessao(user);
+    if (lic && lic.expirada) verLicenca(true);   // o Administrador tem de pagar antes de usar o sistema
   }
 
   function iniciarSessao(user) {
@@ -353,6 +392,8 @@
 
   function sair() {
     S.user = null; S.perms = new Set();
+    $("barra-inferior").classList.remove("escondida");
+    fecharFolha();
     verLogin();
   }
 
@@ -401,6 +442,7 @@
       f.onclick = () => (S.cliente ? verAssistente() : verAssistente());
       $("ecra-app").appendChild(f);
     }
+    $("fab-ia-btn").classList.toggle("oculto", !usarIA());   // Configurações › Assistente de IA
   }
 
   function animarLogo() {
@@ -473,7 +515,7 @@
     let off = 0;
     const aneis = segs.filter((s) => s.valor > 0).map((s) => {
       const len = (s.valor / total) * C;
-      const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.cor}" stroke-width="18"
+      const el = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" style="stroke:${s.cor}" stroke-width="18"
         stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}"
         transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.rotulo)}: ${s.valor}</title></circle>`;
       off += len; return el;
@@ -483,10 +525,10 @@
       <div><div class="t">${esc(s.rotulo)}</div><div class="n">${s.valor} · ${Math.round((s.valor / total) * 100)}%</div></div></div>`).join("");
     return `<div style="display:flex;gap:18px;align-items:center">
       <svg viewBox="0 0 140 140" width="150" height="150" style="flex:none">
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--fundo)" stroke-width="18"></circle>
+        <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" style="stroke:var(--cinzento-claro)" stroke-width="18"></circle>
         ${aneis}
-        <text x="${cx}" y="${cy + 3}" text-anchor="middle" font-size="22" font-weight="800" fill="var(--texto)">${centroValor}</text>
-        <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="9" fill="var(--texto-suave)">${esc(centroTitulo)}</text>
+        <text x="${cx}" y="${cy + 3}" text-anchor="middle" font-size="22" font-weight="800" style="fill:var(--texto)">${centroValor}</text>
+        <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="9" style="fill:var(--texto-suave)">${esc(centroTitulo)}</text>
       </svg>
       <div class="leg-donut" style="flex:1;min-width:0">${legenda}</div></div>`;
   }
@@ -515,8 +557,8 @@
     let svg = "";
     for (let i = 0; i <= 4; i++) {
       const v = passo * i, yy = y(v).toFixed(1);
-      svg += `<line x1="${x0}" y1="${yy}" x2="${x1}" y2="${yy}" stroke="#e6eaf0" stroke-width="1"/>` +
-        `<text x="${x0 - 6}" y="${(+yy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" fill="#6e7887">${numCurto(v)}</text>`;
+      svg += `<line x1="${x0}" y1="${yy}" x2="${x1}" y2="${yy}" style="stroke:var(--borda)" stroke-width="1"/>` +
+        `<text x="${x0 - 6}" y="${(+yy + 3.5).toFixed(1)}" text-anchor="end" font-size="10" style="fill:var(--texto-suave)">${numCurto(v)}</text>`;
     }
     return { svg, y };
   }
@@ -530,6 +572,7 @@
     const dias = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
     const meses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
     const d = new Date();
+    if (Idioma.emIngles()) return d.toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long" });
     return `${dias[d.getDay()]}, ${d.getDate()} de ${meses[d.getMonth()]}`;
   }
 
@@ -547,7 +590,7 @@
     let datas = "";
     for (let i = 0; i < n; i += 6) {
       const d = pontos[i].dia || "";
-      datas += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#6e7887">${d.slice(8, 10)}/${d.slice(5, 7)}</text>`;
+      datas += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" style="fill:var(--texto-suave)">${d.slice(8, 10)}/${d.slice(5, 7)}</text>`;
     }
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">
       <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f80ed" stop-opacity=".22"/><stop offset="1" stop-color="#2f80ed" stop-opacity=".02"/></linearGradient></defs>
@@ -564,18 +607,18 @@
     const g = grelhaY(max, x0, x1, yTopo, yBase);
     const gw = (x1 - x0) / dados.length;
     const bw = Math.min(11, gw / 4.2);
-    const cores = ["#1e9a55", "#6e3cb4", "#c62828"];
+    const cores = ["var(--verde)", "var(--roxo)", "var(--vermelho)"];
     let barras = "", rotulos = "";
     dados.forEach((d, i) => {
       const gx = x0 + i * gw + gw / 2;
       [d.entradas, d.emprestimos, d.despesas].forEach((v, j) => {
         const yy = g.y(Math.max(0, v));
         const bx = gx - (bw * 3 + 2.4) / 2 + j * (bw + 1.2);
-        barras += `<rect x="${bx.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, yBase - yy).toFixed(1)}" rx="1.5" fill="${cores[j]}"/>`;
+        barras += `<rect x="${bx.toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, yBase - yy).toFixed(1)}" rx="1.5" style="fill:${cores[j]}"/>`;
       });
-      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#6e7887">${esc(d.mes)}</text>`;
+      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" style="fill:var(--texto-suave)">${esc(d.mes)}</text>`;
     });
-    return `<div class="legenda-grafico"><span><i style="background:#1e9a55"></i>Entradas</span><span><i style="background:#6e3cb4"></i>Empréstimos</span><span><i style="background:#c62828"></i>Despesas</span></div>
+    return `<div class="legenda-grafico"><span><i style="background:var(--verde)"></i>Entradas</span><span><i style="background:var(--roxo)"></i>Empréstimos</span><span><i style="background:var(--vermelho)"></i>Despesas</span></div>
       <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">${g.svg}${barras}${rotulos}</svg>`;
   }
 
@@ -592,12 +635,25 @@
       const gx = x0 + i * gw + gw / 2;
       if (v > 0) {
         const yy = g.y(v);
-        barras += `<rect x="${(gx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(yBase - yy).toFixed(1)}" rx="1.5" fill="${rot === "Atraso" ? "#c62828" : "#2f80ed"}"/>` +
-          `<text x="${gx.toFixed(1)}" y="${(yy - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" fill="#6e7887">${numCurto(v)}</text>`;
+        barras += `<rect x="${(gx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(yBase - yy).toFixed(1)}" rx="1.5" style="fill:${i === 0 ? "var(--vermelho)" : "var(--roxo)"}"/>` +
+          `<text x="${gx.toFixed(1)}" y="${(yy - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" style="fill:var(--texto-suave)">${numCurto(v)}</text>`;
       }
-      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" fill="#6e7887">${esc(rot)}</text>`;
+      rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" style="fill:var(--texto-suave)">${esc(rot)}</text>`;
     });
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">${g.svg}${barras}${rotulos}</svg>`;
+  }
+
+  // Barras horizontais (Top 5 clientes: GraficoBarrasH). lista = [{nome, total}]
+  function barrasHorizontais(lista) {
+    if (!lista.length) return `<div class="vazio" style="padding:20px">Sem dados.</div>`;
+    const max = Math.max(1, ...lista.map((x) => x.total));
+    return lista.map((x) => {
+      const pct = Math.max(2, (x.total / max) * 100);
+      const dentro = pct > 62;   // o valor vai dentro da barra quando ela é comprida
+      return `<div class="barra-h"><span class="n">${esc(x.nome)}</span><span class="tr">
+        <span class="pr" style="width:${pct.toFixed(1)}%"></span>
+        <span class="vl" style="${dentro ? `right:${(100 - pct + 1).toFixed(1)}%;color:#fff` : `left:calc(${pct.toFixed(1)}% + 6px)`}">${numCurto(x.total)}</span></span></div>`;
+    }).join("");
   }
 
   const ocultoCartao = () => `<div style="text-align:center;color:var(--texto-suave);padding:26px 0 30px;font-weight:500">🔒 Valores ocultos</div>`;
@@ -605,79 +661,139 @@
   // ============================================================
   // ECRÃ: INÍCIO (Balanço ou Cobranças)
   // ============================================================
+  // Painel inicial: Administrador (PainelAdminActivity) ou Agente (PainelAgenteActivity), como no Android.
   async function verInicio() {
-    if (!pode("BALANCO")) { cabecalho("Início", ""); verCobrancas(); return; }
     const nome = S.user.nome || S.user.utilizador;
+    const c = novoConteudo();
+    c.innerHTML = spinner;
+    const sinoOn = await Dados.sinoAtivo().catch(() => true);
+    if (!c.isConnected) return;   // entretanto o utilizador abriu outro ecrã
     $("cabecalho").className = "cabecalho cab-painel";
     $("cabecalho").innerHTML = `
       <div class="cab-topo">
         <div class="avatar" id="cb-avatar" style="background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
         <div class="cab-saud"><div class="ola">${esc(saudacao())},</div><div class="data">${esc(dataExtenso())}</div></div>
         <button class="icone" id="cb-atualizar" title="Atualizar">${icf("atualizar", 21)}</button>
-        <button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>
+        ${sinoOn ? `<button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>` : ""}
         <button class="icone" id="cb-sair" title="Sair">${icf("porta", 21)}</button>
       </div>
       <span class="pilula-perfil">Painel do ${esc(perfilNome(S.user.perfil))}</span>`;
     pintarAvatar($("cb-avatar"), S.user.foto);
     $("cb-atualizar").onclick = () => verInicio();
-    $("cb-sino").onclick = () => { marcarNotificacoesVistas(); verNotificacoes(); };
+    if ($("cb-sino")) $("cb-sino").onclick = () => verNotificacoes();
     $("cb-sair").onclick = async () => { if (await confirmar("Terminar sessão", "Quer sair da sua conta?", "Sair")) sair(); };
-    atualizarBadgeSino();
-    const c = novoConteudo();
-    c.innerHTML = spinner;
+    if (sinoOn) atualizarBadgeSino();
+    const hoje = R.hojeISO();
+    const aviso = (texto, cores, id) => `<div class="aviso-painel"${id ? ` id="${id}" style="cursor:pointer;color:${cores[0]};background:${cores[1]}"` : ` style="color:${cores[0]};background:${cores[1]}"`}>${texto}</div>`;
+    const kpi = (rot, txt, cor) => `<div class="kpi-card" style="--cor:${cor}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
     try {
-      const hoje = R.hojeISO();
-      const [ind, cob, saldo, es, ev, aCobrar] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(),
-        Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa(), pode("COBRANCAS") ? Dados.listarCobrancas(hoje) : Promise.resolve([])]);
-      const kpis = [
-        { rot: "Saldo em caixa", txt: vmt(saldo.saldo), cor: "#2f80ed" },
-        { rot: "Por aprovar", txt: String(ind.pendentes), cor: "#1e9a55" },
-        { rot: "Em curso", txt: String(ind.emCurso), cor: "#6e3cb4" },
-        { rot: "Em dívida", txt: vmt(ind.totalAReceber), cor: "#6e3cb4" },
-        { rot: "Em atraso", txt: vmt(ind.emAtraso), cor: "#c62828" },
-        { rot: "Margem (juros)", txt: vmt(ind.margemLucro), cor: "#1e9a55" },
-      ];
-      const kpisHtml = kpis.map((k) => `<div class="kpi-card" style="--cor:${k.cor}"><div class="rotulo">${esc(k.rot)}</div><div class="valor">${k.txt}</div></div>`).join("");
-      const donut = donutSVG([
-        { rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "#1e9a55" },
-        { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "#2f80ed" },
-        { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "#c62828" },
-      ], "prestações", ind.prestacoesPagas + ind.prestacoesNoPrazo + ind.prestacoesAtrasadas);
-      c.innerHTML = `
-        <div class="kpis-scroll">${kpisHtml}</div>
-        <div class="linha-seccao"><div class="seccao-titulo">Balanço</div>
-          <button class="pilula-btn" id="bal-olho">${ic(S.ocultar ? "olho" : "olhoff", 15)} ${S.ocultar ? "Mostrar valores" : "Ocultar"}</button></div>
-        <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">Últimos 6 meses · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
-        <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
-        <div class="grafico-cartao"><h3>Situação das prestações</h3><div class="sub">Pagas, no prazo e em atraso</div>${donut}</div>
-        <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : svgBarrasVert(cob)}</div>
-        <button class="btn-contorno" id="bal-completo">${icf("balanco", 18)} Ver o balanço completo</button>
-        ${pode("COBRANCAS") ? `
-          <div class="linha-seccao"><div class="seccao-titulo">Cobrar hoje e em atraso (${aCobrar.length})</div>
-            <button class="pilula-btn" id="ini-todas">Ver todas ›</button></div>
-          ${aCobrar.length ? aCobrar.slice(0, 5).map((p) => cartaoCobranca(p, hoje)).join("") : vazio("ok", "Nada para cobrar hoje.")}` : ""}`;
-      $("bal-olho").onclick = () => alternarValores(verInicio);
-      $("bal-completo").onclick = () => verBalanco();
+      // ---------------- Agente ----------------
+      if (S.user.perfil === "AGENTE") {
+        const [cobrar, clientes] = await Promise.all([pode("COBRANCAS") ? Dados.listarCobrancas(hoje) : [], Dados.listarClientes("")]);
+        const atrasadas = cobrar.filter((p) => R.diasAtraso(p.vencimento, hoje) > 0).length;
+        c.innerHTML = `
+          <div class="kpis-scroll">${kpi("Cobrar hoje", String(cobrar.length - atrasadas), "var(--accent)")}${kpi("Em atraso", String(atrasadas), atrasadas > 0 ? "var(--vermelho)" : "var(--verde)")}${kpi("Clientes", String(clientes.length), "var(--roxo)")}</div>
+          ${atrasadas > 0 ? aviso(`⚠ Há <b>${atrasadas} prestação(ões) em atraso</b>. Comece pelas mais antigas (estão no topo da lista).`, CORES.vermelho) : ""}
+          <div class="seccao-titulo">Cobrar hoje e em atraso</div>
+          ${cobrar.length ? cobrar.slice(0, 8).map((p) => cartaoCobranca(p, hoje)).join("") : `<div class="vazio" style="padding:20px">✓ Não há cobranças para hoje.</div>`}`;
+        ligarCartoesCobranca(c, cobrar, verInicio);
+        return;
+      }
+
+      // ---------------- Administrador ----------------
+      const verFin = pode("CAIXA") || pode("BALANCO");
+      const [pendentes, porPagar, saldo, lic] = await Promise.all([
+        pode("APROVACOES") ? Dados.listarPendentes() : [], Dados.listarPorPagar(),
+        verFin ? Dados.saldoCaixa() : null, Dados.licencaEstado().catch(() => null)]);
+      let emDivida = 0, emAtraso = 0;
+      porPagar.forEach((p) => { const f = R.emFalta(p, hoje); emDivida += f; if (R.diasAtraso(p.vencimento, hoje) > 0) emAtraso += f; });
+      let kpis = "", avisos = "";
+      if (verFin) {
+        kpis += kpi("Saldo em caixa", vmt(saldo.saldo), saldo.saldo >= 0 ? "var(--accent)" : "var(--vermelho)");
+        if (saldo.saldo <= 0 && saldo.entradas === 0)
+          avisos += aviso("💡 O caixa está vazio. Registe o <b>capital investido</b> no <b>Caixa</b> antes de aprovar créditos.", CORES.azul);
+      }
+      if (pode("APROVACOES")) kpis += kpi("Por aprovar", String(pendentes.length), pendentes.length ? "var(--laranja)" : "var(--verde)");
+      if (pode("BALANCO")) {
+        kpis += kpi("Em dívida", vmt(emDivida), "var(--roxo)");
+        kpis += kpi("Em atraso", vmt(emAtraso), emAtraso > 0 ? "var(--vermelho)" : "var(--verde)");
+      }
+      if (lic && lic.aExpirar && S.user.perfil === "ADMIN") {
+        const quando = lic.diasRestantes === 0 ? "hoje" : lic.diasRestantes === 1 ? "amanhã" : "daqui a " + lic.diasRestantes + " dias";
+        avisos += aviso(`⚠ A licença do sistema expira <b>${quando}</b> (${R.data(lic.expiracao)}). Pague em <b>Mais › Licença</b> para evitar que o sistema entre em manutenção.`, CORES.laranja, "ini-lic");
+      }
+
+      let balanco = "", dadosBal = null;
+      if (pode("BALANCO")) {
+        dadosBal = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa()]);
+        const [ind, cob, es, ev] = dadosBal;
+        balanco = `
+          <div class="linha-seccao"><div class="seccao-titulo">Balanço</div>
+            <button class="pilula-btn" id="bal-olho">${icf(S.ocultar ? "olhoaberto" : "olhofechado", 15)} ${S.ocultar ? "Mostrar valores" : "Ocultar"}</button></div>
+          ${graficosBalanco(ind, cob, es, ev)}
+          <button class="btn-contorno" id="bal-completo">${icf("balanco", 18)} Ver o balanço completo</button>`;
+      }
+
+      let cobrancas = "", aCobrar = [];
+      if (pode("COBRANCAS")) {
+        aCobrar = await Dados.listarCobrancas(hoje);
+        cobrancas = `<div class="linha-seccao"><div class="seccao-titulo">Cobrar hoje e em atraso (${aCobrar.length})</div>
+            ${aCobrar.length > 5 ? `<button class="pilula-btn" id="ini-todas">Ver todas ›</button>` : ""}</div>
+          ${aCobrar.length ? aCobrar.slice(0, 5).map((p) => cartaoCobranca(p, hoje)).join("") : `<div class="vazio" style="padding:20px">✓ Não há cobranças para hoje.</div>`}`;
+      }
+
+      const pedidos = pode("APROVACOES") ? `<div class="seccao-titulo">Pedidos à espera de aprovação (${pendentes.length})</div>
+        ${pendentes.length ? pendentes.map(cartaoEmprestimo).join("") : `<div class="vazio" style="padding:20px">✓ Não há pedidos à espera de aprovação.</div>`}` : "";
+
+      c.innerHTML = `${kpis ? `<div class="kpis-scroll">${kpis}</div>` : ""}${avisos}${balanco}${cobrancas}${pedidos}`;
+      if ($("bal-olho")) $("bal-olho").onclick = () => alternarValores(verInicio);
+      if ($("bal-completo")) $("bal-completo").onclick = () => verBalanco();
       if ($("ini-todas")) $("ini-todas").onclick = () => navegar("cobrancas");
+      if ($("ini-lic")) $("ini-lic").onclick = () => verLicenca(false);
       ligarCartoesCobranca(c, aCobrar, verInicio);
+      c.querySelectorAll(".cl[data-eid]").forEach((b) => b.onclick = () => abrirEmprestimo(pendentes.find((x) => x.id == b.dataset.eid), verInicio));
     } catch (e) { c.innerHTML = erroEcra(e, verInicio); }
   }
 
-  // ---------- Sino: quantas notificações ainda não foram vistas neste aparelho ----------
-  const chaveVistas = () => "kub_notif_vista_" + (S.user ? S.user.id : 0);
+  // Os 4 gráficos principais do balanço (ecrã inicial e Balanço Geral)
+  function graficosBalanco(ind, cob, es, ev) {
+    const donut = donutSVG([
+      { rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "var(--verde)" },
+      { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "var(--accent)" },
+      { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "var(--vermelho)" },
+    ], "prestações", ind.prestacoesPagas + ind.prestacoesNoPrazo + ind.prestacoesAtrasadas);
+    return `
+      <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">Últimos 6 meses · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
+      <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
+      <div class="grafico-cartao"><h3>Situação das prestações</h3><div class="sub">Pagas, no prazo e em atraso</div>${S.ocultar ? ocultoCartao() : donut}</div>
+      <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : svgBarrasVert(cob)}</div>`;
+  }
+
+  // Cartão de um empréstimo/pedido (ListaActivity.itemEmprestimo)
+  function cartaoEmprestimo(e) {
+    const sit = R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso);
+    const sub = `Empréstimo nº ${e.id}\n` + (e.estado === "PENDENTE"
+      ? "Aprovar até " + R.data(R.limiteAprovacao(e.dataPedido))
+      : (e.totalPrestacoes === 0 ? "Sem prestações" : `${e.prestacoesPagas} de ${e.totalPrestacoes} prestações pagas`));
+    const linhas = [`<div>📝<span>Pedido em ${R.data(e.dataPedido)}</span></div>`];
+    if (e.dataAprovacao) linhas.push(`<div>💸<span>Desembolso em ${R.data(e.dataAprovacao)}</span></div>`);
+    linhas.push(`<div>📆<span>${e.modalidade === "PARCELADO" ? "6 prestações de 5 em 5 dias" : "Prestação única aos 30 dias"}</span></div>`);
+    if (e.bensGarantia && e.bensGarantia.trim()) linhas.push(`<div>🔒<span>Garantia: ${esc(e.bensGarantia.trim())}</span></div>`);
+    return `<div class="cl" data-eid="${e.id}">
+      <div class="cl-topo">${avatar(e.nomeCliente)}
+        <div class="cl-meio"><div class="cl-tit">${esc(e.nomeCliente)}</div><div class="cl-sub">${esc(sub)}</div></div>
+        <div class="cl-fim"><div class="cl-valor">${vmt(e.capital)}</div>${pilula(sit, coresSituacao(sit))}</div>
+      </div><div class="cl-det">${linhas.join("")}</div></div>`;
+  }
+
+  // ---------- Sino: notificações por ler (notificacoes_lidas, como no Android) ----------
   async function atualizarBadgeSino() {
     try {
-      const lista = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
-      let vista = 0; try { vista = Number(localStorage.getItem(chaveVistas()) || 0); } catch (e) {}
-      const n = lista.filter((x) => x.id > vista).length;
+      const n = await Dados.contarNaoLidas(S.user.id, S.user.perfil);
       const b = $("cb-badge"); if (!b) return;
-      b.textContent = n > 9 ? "9+" : String(n);
+      b.textContent = n > 99 ? "99+" : String(n);
       b.classList.toggle("oculto", n === 0);
-      atualizarBadgeSino._max = lista.length ? lista[0].id : 0;
     } catch (e) {}
-  }
-  function marcarNotificacoesVistas() {
-    try { if (atualizarBadgeSino._max) localStorage.setItem(chaveVistas(), String(atualizarBadgeSino._max)); } catch (e) {}
   }
 
   // ---------- Cartão de uma prestação a cobrar (ListaActivity.itemCobranca) ----------
@@ -712,40 +828,61 @@
   // ============================================================
   async function verBalanco() {
     mostrar("ecra-app");
-    cabecalho("Balanço Geral", "Indicadores, gráficos e maiores clientes", (pode("EXPORTAR") ? btnPdf("bg-pdf") : "") + btnAtualizar("bg-atu"));
-    $("bg-atu").onclick = () => verBalanco();
+    if (!pode("BALANCO")) { toast("Sem permissão.", true); return; }
+    cabecalho("Balanço Geral", "Indicadores e gráficos da empresa",
+      `<button class="pilula-cab" id="bg-olho">${S.ocultar ? "👁 Mostrar" : "🙈 Ocultar"}</button>`);
+    $("bg-olho").onclick = () => alternarValores(verBalanco);
     const c = novoConteudo();
     c.innerHTML = spinner;
     try {
-      const [ind, cob, saldo, es, ev, top] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(),
-        Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa(), Dados.topClientes()]);
-      const linhas = [
-        ["Saldo em caixa", vmt(saldo.saldo), "var(--accent)"],
-        ["Capital investido", vmt(ind.capitalInvestido)],
-        ["Margem (juros)", vmt(ind.margemLucro), "var(--verde)"],
-        ["Total a receber", vmt(ind.totalAReceber)],
-        ["Em atraso", vmt(ind.emAtraso), "var(--vermelho)"],
-        ["Empréstimos em curso", String(ind.emCurso)],
-        ["Empréstimos pagos", String(ind.pagos)],
-        ["Pedidos por aprovar", String(ind.pendentes)],
-        ["Cancelados", String(ind.cancelados)],
-      ].map(([r, v, cor]) => `<div class="linha-dados"><span class="r">${r}</span><span class="v" style="${cor ? "color:" + cor : ""}">${v}</span></div>`).join("");
-      const donut = donutSVG([
-        { rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "#1e9a55" },
-        { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "#2f80ed" },
-        { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "#c62828" },
-      ], "prestações", ind.prestacoesPagas + ind.prestacoesNoPrazo + ind.prestacoesAtrasadas);
+      const [ind, cob, saldo, es, ev, top, hoje, ultimos] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(),
+        Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa(), Dados.topClientes(), Dados.caixaDoDia(R.hojeISO()), Dados.ultimosMovimentos(6)]);
+      const num = (v) => S.ocultar ? "••••" : R.mt(v).replace(/\s*MT$/, "");
+      const entHoje = hoje.prestacoes + hoje.outras, saiHoje = hoje.emprestimos + hoje.despesas;
+      // Os 6 indicadores: {título, valor, cor, linha de detalhe}
+      const cartoes = [
+        ["Valor investido (capital)", ind.capitalInvestido, "#19969F", null],
+        ["Total a receber", ind.totalAReceber, "var(--verde)", ind.emAtraso > 0 ? "em atraso: " + vmt(ind.emAtraso) : null],
+        ["Margem de lucro esperada", ind.margemLucro, "#B8860B", "juros de 30%"],
+        ["↓ Entradas de hoje", entHoje, "var(--verde)", "prestações " + num(hoje.prestacoes) + " · outras " + num(hoje.outras)],
+        ["↑ Saídas de hoje", saiHoje, "var(--vermelho)", "empréstimos " + num(hoje.emprestimos) + " · despesas " + num(hoje.despesas)],
+        ["Saldo atual em caixa", saldo.saldo, "var(--roxo)", "entrou " + num(saldo.entradas) + " · saiu " + num(saldo.saidas)],
+      ];
+      const estados = [
+        { rotulo: "Aprovados", valor: ind.emCurso + ind.pagos, cor: "var(--verde)" },
+        { rotulo: "Pendentes", valor: ind.pendentes, cor: "#F39C12" },
+        { rotulo: "Rejeitados", valor: ind.rejeitados, cor: "var(--vermelho)" },
+      ];
+      if (ind.cancelados > 0) estados.push({ rotulo: "Cancelados", valor: ind.cancelados, cor: "var(--texto-suave)" });
       c.innerHTML = `
-        <div class="cartao">${linhas}</div>
-        <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">Últimos 6 meses · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
-        <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
-        <div class="grafico-cartao"><h3>Situação das prestações</h3><div class="sub">Pagas, no prazo e em atraso</div>${donut}</div>
-        <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : svgBarrasVert(cob)}</div>
-        <div class="seccao-titulo">Maiores clientes</div>
-        ${top.map((t) => `<div class="cl" style="cursor:default"><div class="cl-topo">${avatar(t.nome)}<div class="cl-meio"><div class="cl-tit">${esc(t.nome)}</div><div class="cl-sub">Capital emprestado</div></div><div class="cl-fim"><div class="cl-valor">${vmt(t.total)}</div></div></div></div>`).join("") || vazio("clientes", "Sem empréstimos.")}`;
+        <div class="ind-grelha">${cartoes.map(([t, v, cor, d]) => `<div class="ind"><div class="t">${esc(t)}</div>
+          <div class="v" style="color:${cor}">${vmt(v)}</div>${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`).join("")}</div>
+        ${graficosBalanco(ind, cob, es, ev)}
+        <div class="grafico-cartao"><h3>Empréstimos por estado</h3><div class="sub">Aprovados, pendentes e rejeitados</div>${S.ocultar ? ocultoCartao() : donutSVG(estados, "empréstimos", estados.reduce((s, x) => s + x.valor, 0))}</div>
+        <div class="grafico-cartao"><h3>Top 5 clientes</h3><div class="sub">Maior capital emprestado (aprovados)</div>${S.ocultar ? ocultoCartao() : barrasHorizontais(top)}</div>
+        <div class="cartao"><div class="titulo-cfg">Últimos lançamentos no caixa</div>
+          ${ultimos.length ? ultimos.map((m) => {
+            const ent = m.tipo === "ENTRADA";
+            return `<div class="linha-dados" style="align-items:flex-start;gap:10px"><span style="min-width:0;flex:1">
+              <b style="display:block">${esc(movLongo(m))}</b>
+              <span class="r" style="font-size:.8rem;white-space:pre-line">${esc(String(m.dataMovimento || "").substring(0, 16))}\n${esc(m.justificativa || "")}</span></span>
+              <span class="v" style="color:${ent ? "var(--verde)" : "var(--vermelho)"};white-space:nowrap;flex:none">${ent ? "+ " : "− "}${vmt(m.valor)}</span></div>`;
+          }).join("") : `<div class="vazio" style="padding:14px">Ainda não há lançamentos.</div>`}
+        </div>
+        ${pode("EXPORTAR") ? `<button class="btn contorno" id="bg-pdf">📄 Exportar o balanço em PDF</button>` : ""}`;
       if ($("bg-pdf")) $("bg-pdf").onclick = () => exportarPDF("Balanço Geral", ["Indicador", "Valor"],
-        [["Saldo em caixa", R.mt(saldo.saldo)], ["Capital investido", R.mt(ind.capitalInvestido)], ["Total a receber", R.mt(ind.totalAReceber)], ["Em atraso", R.mt(ind.emAtraso)], ["Margem (juros)", R.mt(ind.margemLucro)], ["Em curso", String(ind.emCurso)], ["Pagos", String(ind.pagos)], ["Pendentes", String(ind.pendentes)]], []);
+        cartoes.map(([t, v]) => [t, R.mt(v)]).concat([
+          ["Prestações pagas / no prazo / em atraso", ind.prestacoesPagas + " / " + ind.prestacoesNoPrazo + " / " + ind.prestacoesAtrasadas],
+          ["Empréstimos em curso / pagos / pendentes", ind.emCurso + " / " + ind.pagos + " / " + ind.pendentes]]), []);
     } catch (e) { c.innerHTML = erroEcra(e, verBalanco); }
+  }
+
+  // Tipo de movimento por extenso (CaixaDao.Movimento.movimento)
+  function movLongo(m) {
+    const ent = m.tipo === "ENTRADA";
+    return ({ PRESTACAO: "Pagamento de prestação", DESEMBOLSO: "Desembolso de empréstimo", AJUSTE: "Ajuste de reconciliação",
+      LICENCA: "Pagamento da licença", POUPANCA: ent ? "Depósito na poupança do cliente" : "Uso da poupança do cliente" }[m.categoria])
+      || (ent ? "Outra entrada" : "Despesa / outra saída");
   }
 
   // ============================================================
@@ -922,7 +1059,7 @@
     return `<div class="cl" data-cid="${cl.id}">
       <div class="cl-topo">${avatar(cl.nome)}
         <div class="cl-meio"><div class="cl-tit">${esc(cl.nome)}</div><div class="cl-sub" style="white-space:normal">${sub}</div></div>
-        <div class="cl-fim">${valor}${pilula(bom ? "★ " + classe : classe, bom ? ["#1E9A55", "#DEF5E6"] : ["#2F80ED", "#E8F1FD"])}</div>
+        <div class="cl-fim">${valor}${pilula(bom ? "★ " + classe : classe, bom ? CORES.verde : CORES.azul)}</div>
       </div>
       ${det.trim() ? `<div class="cl-det"><div>${icf("local", 15)}<span>${esc(det)}</span></div></div>` : ""}</div>`;
   }
@@ -1242,7 +1379,7 @@
     cabecalho("Mais", "");
     $("cabecalho").classList.add("oculto");   // o Menu do Android não tem cabeçalho azul
     const c = novoConteudo();
-    const AZ = ["#2F80ED", "#E8F1FD"], VE = ["#1E9A55", "#DEF5E6"], RO = ["#6E3CB4", "#F0E9FC"], LA = ["#B26A00", "#FFF0D6"];
+    const AZ = CORES.azul, VE = CORES.verde, RO = CORES.roxo, LA = CORES.laranja;
     const op = (id, icone, cores, texto) => `<button class="op-menu" data-op="${id}">
       <span class="bola" style="background:${cores[1]};color:${cores[0]}">${icf(icone, 22)}</span>${esc(texto)}
       <span class="seta"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></span></button>`;
@@ -1257,6 +1394,7 @@
       ${pode("CAIXA") ? op("lixeira", "lixo", RO, "Lixeira") : ""}
       ${admin ? op("acessos", "escudo", LA, "Controlo de Acesso") : ""}
       ${pode("COBRANCAS") || pode("SMS_VER") ? op("sms", "mensagem", AZ, "SMS aos clientes") : ""}
+      ${admin ? op("licenca", "chave", VE, "Licença") : ""}
       ${op("valores", S.ocultar ? "olhoaberto" : "olhofechado", RO, S.ocultar ? "Mostrar valores" : "Ocultar valores")}
       ${op("config", "engrenagem", LA, "Configurações")}`;
     c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => {
@@ -1288,6 +1426,7 @@
     if (op === "todos") return verEmprestimos("todos");
     if (op === "aprovar") return verEmprestimos("pendentes");
     if (op === "valores") return alternarValores(verMais);
+    if (op === "licenca") return verLicenca(false);
     if (op === "config") return verConfiguracoes();
     if (op === "emprestimos") return verEmprestimos();
     if (op === "caixa") return verCaixa();
@@ -1324,7 +1463,7 @@
   const DIAS_SEMANA = ["DOMINGO", "SEGUNDA-FEIRA", "TERÇA-FEIRA", "QUARTA-FEIRA", "QUINTA-FEIRA", "SEXTA-FEIRA", "SÁBADO"];
   const movCurto = (m) => ({ PRESTACAO: "Prestação", DESEMBOLSO: "Desembolso", AJUSTE: "Ajuste", LICENCA: "Licença", POUPANCA: "Poupança" }[m.categoria]
     || (m.tipo === "ENTRADA" ? "Entrada" : "Despesa"));
-  const coresMov = (m) => m.tipo === "ENTRADA" ? ["#1E9A55", "#DEF5E6"] : m.categoria === "DESEMBOLSO" ? ["#6E3CB4", "#F0E9FC"] : ["#C62828", "#FDE6E6"];
+  const coresMov = (m) => m.tipo === "ENTRADA" ? CORES.verde : m.categoria === "DESEMBOLSO" ? CORES.roxo : CORES.vermelho;
 
   async function verCaixa() {
     mostrar("ecra-app");
@@ -1636,10 +1775,20 @@
     c.innerHTML = spinner;
     try {
       const lista = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
-      c.innerHTML = lista.length ? lista.map((n) => `<div class="item" style="cursor:default">
-        <span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic("notificacoes", 18)}</span>
-        <span class="meio"><span class="nome">${esc(n.titulo || "Notificação")}</span><span class="det" style="white-space:normal">${esc(n.mensagem || "")}</span>
-          <span class="det" style="font-size:.74rem">${R.dataHora(n.data)}</span></span></div>`).join("") : vazio("notificacoes", "Sem notificações.");
+      const cor = (t) => t === "SEGURANCA" ? CORES.vermelho : t === "ATUALIZACAO" ? CORES.verde : t === "RECADO" ? CORES.roxo : CORES.azul;
+      c.innerHTML = lista.length ? lista.map((n) => `<div class="cl" style="cursor:default;${n.lida ? "" : "border-left:4px solid var(--accent)"}">
+        <div class="cl-topo"><span class="circ-ic" style="background:${cor(n.tipo)[1]};color:${cor(n.tipo)[0]};width:42px;height:42px">${icf("sino", 20)}</span>
+          <div class="cl-meio"><div class="cl-tit">${esc(n.titulo || "Notificação")}${n.lida ? "" : ` ${pilula("Nova", CORES.azul)}`}</div>
+            <div class="cl-sub" style="white-space:pre-line">${esc(n.mensagem || "")}</div>
+            <div class="cl-sub" style="font-size:.76rem;margin-top:4px">${R.dataHora(n.data)}${n.autor ? " · " + esc(n.autor) : ""}</div></div>
+          <button class="icone" data-rem="${n.id}" title="Remover" style="background:none;border:0;color:var(--texto-suave);cursor:pointer;font-size:1.1rem">✕</button>
+        </div></div>`).join("") : vazio("notificacoes", "Sem notificações.");
+      c.querySelectorAll("[data-rem]").forEach((b) => b.onclick = async () => {
+        try { await Dados.removerNotificacao(S.user.id, Number(b.dataset.rem)); b.closest(".cl").remove(); } catch (e) { toast(e.message, true); }
+      });
+      // Abrir o sino marca tudo como lido (o número vermelho desaparece)
+      const porLer = lista.filter((n) => !n.lida).map((n) => n.id);
+      if (porLer.length) Dados.marcarLidas(S.user.id, porLer).catch(() => {});
     } catch (e) { c.innerHTML = vazio("notificacoes", "Sem notificações."); }
   }
 
@@ -1896,88 +2045,369 @@
   }
 
   // ---------- Configurações (A minha conta) ----------
+  // ============================================================
+  // CONFIGURAÇÕES (como o ConfiguracoesActivity do Android)
+  // ============================================================
+  const chaveIA = () => "kub_ia_" + String(S.user ? S.user.utilizador : "").toLowerCase();
+  function usarIA() { try { return localStorage.getItem(chaveIA()) !== "0"; } catch (e) { return true; } }
+  function definirUsarIA(sim) {
+    try { localStorage.setItem(chaveIA(), sim ? "1" : "0"); } catch (e) {}
+    const f = $("fab-ia-btn"); if (f) f.classList.toggle("oculto", !sim);
+  }
+  const temaAtual = () => document.documentElement.dataset.tema || "sistema";
+  function definirTema(t) {
+    document.documentElement.dataset.tema = t;
+    try { localStorage.setItem("kub_tema", t); } catch (e) {}
+  }
+
   async function verConfiguracoes() {
+    mostrar("ecra-app");
     cabecalho("Configurações", "A minha conta e preferências");
     const c = novoConteudo();
     c.innerHTML = spinner;
-    const bioDisp = await Bio.disponivel();
-    const bioOn = Bio.ativa(S.user.id);
+    const admin = S.user.perfil === "ADMIN";
+    const [bioDisp, sinoOn, smsOn, lic] = await Promise.all([
+      Bio.disponivel(), admin ? Dados.sinoAtivo() : true,
+      pode("SMS_AUTOMATICO") ? Dados.smsAutomaticoAtivo() : false,
+      admin ? Dados.licencaEstado().catch(() => null) : null]);
+    const nome = S.user.nome || S.user.utilizador;
+    const sw = (id, texto, on, dis) => `<label class="interruptor"><span>${esc(texto)}</span><input type="checkbox" id="${id}" ${on ? "checked" : ""} ${dis ? "disabled" : ""}></label>`;
+    const chips = (id, opcoes, ativa) => `<div class="chips" id="${id}" style="padding-bottom:4px">${opcoes.map((o, i) => `<button class="chip ${i === ativa ? "ativo" : ""}" data-i="${i}">${o}</button>`).join("")}</div>`;
+    const temas = ["sistema", "claro", "escuro"];
     c.innerHTML = `
-      <div class="cartao">
-        <div class="seccao-titulo" style="margin:0 0 12px">A minha conta</div>
-        <div style="display:flex;align-items:center;gap:16px">
-          <div class="avatar" id="cfg-avatar" style="width:76px;height:76px;font-size:1.5rem;background:var(--navy)">${esc(R.iniciais(S.user.nome || S.user.utilizador))}</div>
-          <div style="flex:1">
-            <div style="font-weight:800;font-size:1.1rem">${esc(S.user.nome || S.user.utilizador)}</div>
-            <div class="det" style="color:var(--texto-suave)">${perfilNome(S.user.perfil)}${S.user.principal ? " principal" : ""} · ${esc(S.user.utilizador)}</div>
+      <div class="cartao"><div class="titulo-cfg">👤 A minha conta</div>
+        <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
+          <div class="avatar" id="cfg-avatar" style="width:92px;height:92px;font-size:2rem;flex:none;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;background-size:cover;background-position:center;background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0">
+            <button class="btn contorno" id="cfg-foto" style="margin:0;padding:10px">🖼 Escolher da galeria</button>
+            <button class="btn contorno" id="cfg-camara" style="margin:0;padding:10px">📷 Tirar foto</button>
+            <button class="btn contorno-vermelho" id="cfg-remfoto" style="margin:0;padding:10px">🗑 Remover foto</button>
           </div>
         </div>
-        <div class="btn-linha" style="margin-top:14px">
-          <button class="btn secundario" id="cfg-foto">Escolher foto</button>
-          <button class="btn secundario" id="cfg-remfoto">Remover</button>
-        </div>
+        <div style="font-size:.95rem;line-height:1.6">Utilizador (para entrar): <b>${esc(S.user.utilizador)}</b><br>Perfil: <b>${esc(perfilNome(S.user.perfil))}</b></div>
+        <div class="campo" style="margin:12px 0 0"><label>Nome a mostrar</label><input id="cfg-nome" value="${esc(S.user.nome || "")}"></div>
+        <div class="erro-msg" id="cfg-nerro" style="min-height:0"></div>
+        <button class="btn btn-verde" id="cfg-gnome">✓ Guardar nome</button>
+        <div class="explica" style="margin-top:10px"><i>O nome a mostrar não muda o utilizador com que entra na app.</i></div>
       </div>
-      <div class="cartao">
-        <div class="seccao-titulo" style="margin:0 0 10px">Nome a mostrar</div>
-        <div class="campo" style="margin:0"><input id="cfg-nome" value="${esc(S.user.nome || "")}"></div>
-        <button class="btn secundario" id="cfg-gnome" style="margin-top:10px">Guardar nome</button>
-      </div>
-      <div class="cartao">
-        <div class="seccao-titulo" style="margin:0 0 10px">Alterar senha</div>
-        <div class="campo"><label>Senha atual</label><input id="cfg-sat" type="password"></div>
-        <div class="campo"><label>Nova senha</label><input id="cfg-snova" type="password"></div>
+
+      <div class="cartao"><div class="titulo-cfg">🔑 Alterar a senha</div>
+        <div class="campo"><label>Senha atual</label><input id="cfg-sat" type="password" autocomplete="current-password"></div>
+        <div class="campo"><label>Nova senha (mín. 6)</label><input id="cfg-snova" type="password" autocomplete="new-password"></div>
+        <div class="campo"><label>Confirmar nova senha</label><input id="cfg-sconf" type="password" autocomplete="new-password"></div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:.88rem;color:var(--texto-suave);margin:-4px 0 6px"><input type="checkbox" id="cfg-ver" style="width:18px;height:18px"> Mostrar as senhas</label>
         <div class="erro-msg" id="cfg-serro"></div>
-        <button class="btn secundario" id="cfg-gsenha">Alterar senha</button>
+        <button class="btn azul" id="cfg-gsenha">Alterar senha</button>
       </div>
-      ${bioDisp ? `<div class="cartao">
-        <div class="seccao-titulo" style="margin:0 0 10px">Segurança</div>
-        <label style="display:flex;align-items:center;justify-content:space-between;font-size:.95rem">
-          <span>Entrar / mostrar valores com Face ID / Touch ID</span>
-          <input type="checkbox" id="cfg-bio" ${bioOn ? "checked" : ""} style="width:auto;transform:scale(1.4)">
-        </label></div>` : ""}
-      <div class="cartao">
-        <div class="seccao-titulo" style="margin:0 0 10px">Sistema</div>
-        <div class="linha-dados"><span class="r">Servidor</span><span class="v" style="font-size:.78rem">${esc(DB.servidorAtual() || "—")}</span></div>
-        <div class="linha-dados"><span class="r">Versão</span><span class="v">${window.KUB_VER || "—"}</span></div>
-        <button class="btn secundario" id="cfg-ligacao" style="margin-top:12px">Trocar de ligação</button>
+
+      <div class="cartao"><div class="titulo-cfg">👆 Face ID / impressão digital</div>
+        ${sw("cfg-bio", "Entrar com Face ID / impressão digital", bioDisp && Bio.ativa(S.user.id), !bioDisp)}
+        <div class="explica" id="cfg-bio-txt"></div>
+      </div>
+
+      <div class="cartao"><div class="titulo-cfg">🤖 Assistente de Inteligência Artificial</div>
+        ${sw("cfg-ia", "Usar o assistente de IA", usarIA())}
+        <div class="explica" id="cfg-ia-txt"></div>
+      </div>
+
+      <div class="cartao"><div class="titulo-cfg">🎨 Aparência</div>
+        <div class="sub-secao">TEMA</div>
+        ${chips("cfg-tema", ["📱 Sistema", "☀ Claro", "🌙 Escuro"], Math.max(0, temas.indexOf(temaAtual())))}
+        <div class="explica"><i>O tema "Sistema" segue o modo claro/escuro do telemóvel.</i></div>
+      </div>
+
+      <div class="cartao"><div class="titulo-cfg">🌐 Idioma</div>
+        <div class="sub-secao">IDIOMA</div>
+        ${chips("cfg-idioma", ["🇲🇿 Português", "🇬🇧 English"], Idioma.emIngles() ? 1 : 0)}
+        <div class="explica"><i>A app inteira muda de idioma, incluindo mensagens, relatórios PDF e o assistente de IA.</i></div>
+      </div>
+
+      ${admin && lic ? `<div class="cartao"><div class="titulo-cfg">🔑 Licença do Sistema</div>
+        <div style="font-size:.95rem;line-height:1.6;color:${lic.expirada ? "var(--vermelho)" : lic.aExpirar ? "var(--laranja)" : "var(--texto)"}">
+          ${lic.expirada ? "✕ <b>Expirada</b> desde " + R.data(lic.expiracao) : "Válida até <b>" + R.data(lic.expiracao) + "</b>"}<br>Plano: <b>${esc(lic.nomePlano)}</b></div>
+        <button class="btn contorno" id="cfg-lic">Pagar / renovar a licença</button>
+      </div>` : ""}
+
+      ${admin ? `<div class="cartao"><div class="titulo-cfg">🔔 Notificações</div>
+        ${sw("cfg-sino", "Mostrar o sino de notificações", sinoOn)}
+        <div class="explica" id="cfg-sino-txt"></div>
+      </div>` : ""}
+
+      ${pode("SMS_AUTOMATICO") ? `<div class="cartao"><div class="titulo-cfg">💬 SMS de cobrança automático</div>
+        ${sw("cfg-sms", "Enviar às 08:00, 12:00 e 14:00", smsOn)}
+        <div class="explica" id="cfg-sms-txt"></div>
+        <button class="btn contorno" id="cfg-sms-abrir">Abrir SMS aos clientes</button>
+      </div>` : ""}
+
+      ${pode("UTILIZADORES") ? `<div class="cartao"><div class="titulo-cfg">🔐 Utilizadores do sistema</div>
+        <div class="explica" style="margin:0 0 8px;font-size:.88rem">Criar agentes e administradores, definir permissões, ativar ou desativar contas.</div>
+        <button class="btn contorno" id="cfg-users">Gerir utilizadores e permissões</button>
+      </div>` : ""}
+
+      <div class="cartao"><div class="titulo-cfg">📄 Ajuda e documentos</div>
+        <button class="btn contorno" id="cfg-termos">Termos e Condições (versão ${esc(Idioma.versaoTermos())})</button>
+        <div class="explica" style="margin-top:12px">Kubatsira Microcrédito · app web versão ${esc(window.KUB_VER || "—")}<br>
+          Dados na base Neon (PostgreSQL), partilhada com o Kubatsira. A sessão termina após 5 minutos sem uso.</div>
+      </div>
+
+      <div class="cartao"><div class="titulo-cfg">🔄 Versão e atualizações</div>
+        <div style="font-size:.92rem;line-height:1.5">Versão instalada: <b>${esc(window.KUB_VER || "—")}</b><br>
+          As novas versões são procuradas sozinhas ao abrir a app. Também pode procurar agora.</div>
+        <button class="btn contorno" id="cfg-atualizar">🔄 Procurar atualizações</button>
+      </div>
+
+      <div class="cartao"><div class="titulo-cfg">🔌 Ligação à base de dados</div>
+        <div class="explica" style="margin:0 0 4px">Servidor</div>
+        <div style="font-size:.82rem;font-weight:600;word-break:break-all;margin-bottom:6px">${esc(DB.servidorAtual() || "—")}</div>
+        <button class="btn contorno-vermelho" id="cfg-ligacao">Trocar de ligação</button>
       </div>`;
     pintarAvatar($("cfg-avatar"), S.user.foto);
 
-    $("cfg-foto").onclick = () => escolherFoto(async (b64) => {
+    // --- Foto ---
+    const guardarFoto = async (b64) => {
       try {
         await Dados.guardarFoto(S.user.id, b64);
-        S.user.foto = b64; pintarAvatar($("cfg-avatar"), b64); pintarAvatar($("cb-avatar"), b64);
+        S.user.foto = b64; pintarAvatar($("cfg-avatar"), b64);
         toast("Foto de perfil atualizada.");
       } catch (e) { toast(e.message, true); }
-    });
+    };
+    $("cfg-foto").onclick = () => escolherFoto(guardarFoto, false);
+    $("cfg-camara").onclick = () => escolherFoto(guardarFoto, true);
     $("cfg-remfoto").onclick = async () => {
       if (!S.user.foto) { toast("Não há foto para remover."); return; }
-      if (!(await confirmar("Remover foto", "A foto de perfil será removida.", "Remover", true))) return;
-      try { await Dados.removerFoto(S.user.id); S.user.foto = ""; pintarAvatar($("cfg-avatar"), ""); pintarAvatar($("cb-avatar"), ""); toast("Foto removida."); }
+      try { await Dados.removerFoto(S.user.id); S.user.foto = ""; pintarAvatar($("cfg-avatar"), ""); toast("Foto removida."); }
       catch (e) { toast(e.message, true); }
     };
+    // --- Nome ---
     $("cfg-gnome").onclick = async () => {
-      const r = await comErro(() => Dados.alterarNome(S.user.id, $("cfg-nome").value));
-      S.user.nome = $("cfg-nome").value.trim(); toast(r.msg); cabecalho("Configurações", "A minha conta e preferências"); pintarAvatar($("cb-avatar"), S.user.foto);
+      try {
+        const r = await Dados.alterarNome(S.user.id, $("cfg-nome").value);
+        if (r.ok === false) { $("cfg-nerro").textContent = r.msg; return; }
+        S.user.nome = $("cfg-nome").value.trim(); Dados._nome = S.user.nome || S.user.utilizador;
+        $("cfg-nerro").textContent = ""; toast(r.msg || "Nome guardado.");
+      } catch (e) { $("cfg-nerro").textContent = e.message; }
     };
+    // --- Senha ---
+    $("cfg-ver").onchange = (e) => ["cfg-sat", "cfg-snova", "cfg-sconf"].forEach((id) => { $(id).type = e.target.checked ? "text" : "password"; });
     $("cfg-gsenha").onclick = async () => {
+      if ($("cfg-snova").value !== $("cfg-sconf").value) { $("cfg-serro").textContent = "A confirmação da nova senha não coincide."; return; }
       $("cfg-gsenha").disabled = true;
       try {
         const r = await Dados.alterarSenha(S.user.id, $("cfg-sat").value, $("cfg-snova").value);
         if (!r.ok) { $("cfg-serro").textContent = r.msg; $("cfg-gsenha").disabled = false; return; }
-        $("cfg-sat").value = ""; $("cfg-snova").value = ""; $("cfg-gsenha").disabled = false; toast(r.msg);
+        ["cfg-sat", "cfg-snova", "cfg-sconf"].forEach((id) => { $(id).value = ""; });
+        $("cfg-serro").textContent = ""; $("cfg-gsenha").disabled = false; toast(r.msg);
       } catch (e) { $("cfg-serro").textContent = e.message; $("cfg-gsenha").disabled = false; }
     };
-    if ($("cfg-bio")) $("cfg-bio").onchange = async (e) => {
-      if (e.target.checked) {
-        try { await Bio.registar(S.user.id, S.user.nome || S.user.utilizador); toast("Face ID / Touch ID ativado."); }
-        catch (err) { e.target.checked = false; toast("Não foi possível ativar a biometria.", true); }
-      } else { Bio.desativar(S.user.id); toast("Biometria desativada."); }
+    // --- Face ID / impressão digital (WebAuthn, como a Biometria do Android) ---
+    const textoBio = () => {
+      $("cfg-bio-txt").innerHTML = !bioDisp ? "⚠ Este aparelho ou navegador não tem Face ID / impressão digital disponível."
+        : $("cfg-bio").checked ? "Ativada: no ecrã de entrada toque em <b>Entrar com Face ID / impressão digital</b> — não precisa de escrever a senha. Também é pedida para mostrar os valores."
+        : "Desativada. Ao ativar, a sua conta fica ligada ao Face ID / impressão digital deste aparelho (a senha continua a funcionar).";
     };
+    textoBio();
+    $("cfg-bio").onchange = async (e) => {
+      if (!e.target.checked) { Bio.desativar(S.user.id); Bio.desligarEntrada(); textoBio(); return; }
+      const outro = Bio.contaEntrada();
+      if (outro && outro.uid !== S.user.id &&
+        !(await confirmar("Face ID / impressão digital", `Este aparelho está ligado à conta "${outro.nome}". Quer ligá-lo à sua conta em vez disso?`, "Ligar"))) {
+        e.target.checked = false; textoBio(); return;
+      }
+      try {
+        await Bio.registar(S.user.id, S.user.nome || S.user.utilizador);
+        Bio.ligarEntrada(S.user.id, S.user.utilizador);
+        textoBio(); toast("Ativada. Na próxima entrada já pode usá-la.");
+      } catch (err) { e.target.checked = false; textoBio(); toast("Não foi possível ativar neste aparelho.", true); }
+    };
+    // --- IA ---
+    const textoIA = () => { $("cfg-ia-txt").textContent = $("cfg-ia").checked
+      ? "Ligado: o botão do assistente aparece no painel. As perguntas são enviadas pela Internet para o Google Gemini (só os dados do seu perfil)."
+      : "Desligado: o botão do assistente desaparece e nenhuma pergunta é enviada."; };
+    textoIA();
+    $("cfg-ia").onchange = (e) => { definirUsarIA(e.target.checked); textoIA(); };
+    // --- Tema e idioma ---
+    const ligarChips = (id, fn) => $(id).querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+      $(id).querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch)); fn(Number(ch.dataset.i));
+    });
+    ligarChips("cfg-tema", (i) => definirTema(temas[i]));
+    ligarChips("cfg-idioma", (i) => {
+      Idioma.definir(i === 1 ? "en" : "pt");
+      construirBarra(); verConfiguracoes();   // os ecrãs são desenhados de novo no idioma escolhido
+    });
+    // --- Licença, sino, SMS, utilizadores, termos, versão, ligação ---
+    if ($("cfg-lic")) $("cfg-lic").onclick = () => verLicenca(false);
+    if ($("cfg-sino")) {
+      const textoSino = () => { $("cfg-sino-txt").textContent = $("cfg-sino").checked
+        ? "Ligado: o sino aparece no cabeçalho de todos os painéis, com o número de notificações por ler (avisos, atualizações e recados)."
+        : "Desligado: o sino desaparece para todos os utilizadores e não são criados avisos nem recados novos."; };
+      textoSino();
+      $("cfg-sino").onchange = async (e) => {
+        try { await Dados.configGravar("sino_ativo", e.target.checked ? "1" : "0"); textoSino(); }
+        catch (err) { e.target.checked = !e.target.checked; toast("Não foi possível gravar: " + err.message, true); }
+      };
+    }
+    if ($("cfg-sms")) {
+      const textoSms = () => { $("cfg-sms-txt").innerHTML = $("cfg-sms").checked
+        ? "Ligado: todos os dias às 08:00, 12:00 e 14:00 cada cliente com prestação a vencer hoje ou em atraso recebe um SMS com as prestações em dívida e o total. Os SMS saem pelo cartão SIM do telemóvel de envio.<br>Para um telemóvel enviar: na app Android, Mais › SMS aos clientes › Autorizar este telemóvel."
+        : "Desligado: não é enviado nenhum SMS automático (pode enviar à mão em Mais › SMS aos clientes)."; };
+      textoSms();
+      $("cfg-sms").onchange = async (e) => {
+        try { await Dados.definirSmsAutomatico(e.target.checked); textoSms(); }
+        catch (err) { e.target.checked = !e.target.checked; toast("Não foi possível gravar: " + err.message, true); }
+      };
+      $("cfg-sms-abrir").onclick = () => verSms();
+    }
+    if ($("cfg-users")) $("cfg-users").onclick = () => verUtilizadores();
+    $("cfg-termos").onclick = () => verTermos(false);
+    $("cfg-atualizar").onclick = procurarAtualizacoes;
     $("cfg-ligacao").onclick = async () => {
       if (await confirmar("Trocar de ligação", "Vai sair e apagar a ligação deste aparelho.", "Trocar", true)) { DB.apagar(); verLigar(); }
     };
   }
+
+  // Procura uma versão nova (service worker) e recarrega se houver
+  async function procurarAtualizacoes() {
+    try {
+      const r = await fetch("index.html?v=" + Date.now(), { cache: "no-store" });
+      const t = await r.text();
+      const m = /KUB_VER\s*=\s*"([^"]+)"/.exec(t);
+      const nova = m ? m[1] : null;
+      if (nova && nova !== window.KUB_VER) {
+        if (await confirmar("Nova versão " + nova + " disponível", "Quer atualizar agora? A app volta a abrir (terá de entrar outra vez).", "Atualizar")) {
+          try { const reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch (e) {}
+          location.reload();
+        }
+      } else toast("Já tem a versão mais recente (" + (window.KUB_VER || "") + ").");
+    } catch (e) { toast("Sem Internet: não foi possível procurar atualizações.", true); }
+  }
+
+  // ============================================================
+  // TERMOS E CONDIÇÕES (TermosActivity)
+  // ============================================================
+  const termosAceites = () => { try { return localStorage.getItem("kub_termos_versao") === Idioma.versaoTermos(); } catch (e) { return true; } };
+  // Texto com **negrito** -> HTML
+  const markdown = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/_(.+?)_/g, "<i>$1</i>");
+  function htmlTermos(aceitacao) {
+    return `<div class="cartao termos">${markdown(Idioma.termos())}</div>
+      ${aceitacao ? `<div class="cartao">
+        <label style="display:flex;align-items:center;gap:10px;font-size:.98rem"><input type="checkbox" id="tm-li" style="width:22px;height:22px"> Li e aceito os Termos e Condições</label>
+        <button class="btn btn-verde" id="tm-ok" disabled>✓ Aceito</button></div>` : ""}`;
+  }
+  function verTermos(aceitacao, depois) {
+    if (aceitacao) {
+      // Primeira utilização neste aparelho: antes de entrar (ecrã próprio, sem barra)
+      mostrar("ecra-login");
+      $("ecra-login").innerHTML = `<header class="cabecalho"><div style="flex:1;min-width:0"><div class="titulo">Termos e Condições</div>
+        <div class="sub">Leia com atenção antes de usar a app</div></div>
+        <div class="cab-acoes"><button class="pilula-cab" id="tm-idioma">🌐 ${Idioma.emIngles() ? "PT" : "EN"}</button></div></header>
+        <div class="conteudo" style="padding-bottom:30px">${htmlTermos(true)}</div>`;
+      $("tm-idioma").onclick = () => { Idioma.definir(Idioma.emIngles() ? "pt" : "en"); verTermos(true, depois); };
+      $("tm-li").onchange = (e) => { $("tm-ok").disabled = !e.target.checked; };
+      $("tm-ok").onclick = () => {
+        try { localStorage.setItem("kub_termos_versao", Idioma.versaoTermos()); localStorage.setItem("kub_termos_data", R.agoraLocal()); } catch (e) {}
+        (depois || verLogin)();
+      };
+      return;
+    }
+    mostrar("ecra-app");
+    cabecalho("Termos e Condições", "Leia com atenção antes de usar a app");
+    novoConteudo().innerHTML = htmlTermos(false);
+  }
+
+  // ============================================================
+  // LICENÇA DO SISTEMA (LicencaActivity) — só o Administrador
+  // ============================================================
+  let licPlano = 0, licMetodo = 0;
+  async function verLicenca(obrigatoria) {
+    if (S.user.perfil !== "ADMIN") return;
+    mostrar("ecra-app");
+    cabecalho("Licença do Sistema", "Pagamento e validade da licença");
+    $("barra-inferior").classList.toggle("escondida", !!obrigatoria);
+    const fab = $("fab-ia-btn"); if (fab && obrigatoria) fab.classList.add("oculto");
+    const c = novoConteudo();
+    c.innerHTML = spinner;
+    try {
+      const [e, hist] = await Promise.all([Dados.licencaEstado(), Dados.licencaHistorico()]);
+      const cor = e.expirada ? CORES.vermelho : e.aExpirar ? CORES.laranja : CORES.verde;
+      const titulo = e.expirada ? "✕ Licença expirada" : e.diasRestantes === 0 ? "⚠ A licença expira hoje"
+        : e.aExpirar ? "⚠ A licença expira daqui a " + e.diasRestantes + " dias" : "✓ Licença ativa";
+      c.innerHTML = `
+        <div class="cartao" style="background:${cor[1]};border-color:transparent">
+          <div style="font-weight:800;font-size:1.25rem;color:${cor[0]};margin-bottom:4px">${titulo}</div>
+          <div style="font-size:.95rem;line-height:1.6">${e.expirada ? "Expirou a: " : "Válida até: "}<b>${R.data(e.expiracao)}</b><br>Plano: <b>${esc(e.nomePlano)}</b></div>
+          ${e.expirada ? `<div style="color:var(--vermelho);font-size:.88rem;margin-top:10px">Enquanto a licença não for paga, os <b>Agentes e Clientes</b> veem <b>Sistema em manutenção</b> e não conseguem entrar.</div>` : ""}
+        </div>
+        <div class="cartao"><div class="titulo-cfg">💳 ${e.expirada ? "Pagar a licença" : "Renovar a licença"}</div>
+          <div class="sub-secao">1. PLANO</div><div class="chips" id="lc-plano" style="flex-wrap:wrap"></div>
+          <div class="sub-secao" style="margin-top:8px">2. MÉTODO DE PAGAMENTO</div><div class="chips" id="lc-metodo" style="flex-wrap:wrap"></div>
+          <div id="lc-instr" style="font-size:.9rem;margin:10px 0"></div>
+          <div class="campo"><label>Número / conta usado no pagamento</label><input id="lc-conta" type="tel" inputmode="tel"></div>
+          <div class="campo"><label>Referência da transação (ex.: 9JK4XL2M1Q)</label><input id="lc-ref" autocapitalize="characters" style="text-transform:uppercase"></div>
+          <label style="display:flex;align-items:center;gap:10px;font-size:.92rem"><input type="checkbox" id="lc-caixa" checked style="width:20px;height:20px"> Registar como despesa no Fluxo de Caixa</label>
+          <div id="lc-resumo" style="font-size:.95rem;margin:12px 0 4px"></div>
+          <div class="erro-msg" id="lc-erro"></div>
+          <button class="btn btn-verde" id="lc-ok">✓ Confirmar pagamento</button>
+        </div>
+        <div class="cartao"><div class="titulo-cfg">🧾 Pagamentos da licença</div>
+          ${hist.length ? hist.map((p) => `<div class="cl" style="cursor:default;box-shadow:none">
+            <div class="cl-topo"><div class="cl-meio"><div class="cl-tit">Plano ${esc(p.plano)} · ${p.dias} dias</div>
+              <div class="cl-sub">${esc(String(p.data || "").substring(0, 16))} · ${esc(p.pagoPor || "")}</div></div>
+              <div class="cl-fim"><div class="cl-valor" style="color:var(--verde)">${R.mt(p.valor)}</div>${pilula("até " + R.data(p.novaExpiracao), CORES.azul)}</div></div>
+            <div class="cl-det"><div><span>${esc(p.metodo)} · ref. ${esc(p.referencia)} · ${esc(p.conta || "")}</span></div></div></div>`).join("")
+            : `<div class="explica"><i>Ainda não há pagamentos registados.</i></div>`}
+        </div>
+        ${obrigatoria ? `<button class="btn contorno-vermelho" id="lc-sair">Terminar sessão</button>` : ""}`;
+      const desenhar = () => {
+        const p = Dados.PLANOS[licPlano];
+        $("lc-plano").innerHTML = Dados.PLANOS.map((x, i) => `<button class="chip ${i === licPlano ? "ativo" : ""}" data-i="${i}">${x.nome} · ${x.dias} dias · ${R.mt(x.preco)}</button>`).join("");
+        $("lc-metodo").innerHTML = Dados.METODOS.map((x, i) => `<button class="chip ${i === licMetodo ? "ativo" : ""}" data-i="${i}">${x}</button>`).join("");
+        $("lc-plano").querySelectorAll(".chip").forEach((b) => b.onclick = () => { licPlano = Number(b.dataset.i); desenhar(); });
+        $("lc-metodo").querySelectorAll(".chip").forEach((b) => b.onclick = () => { licMetodo = Number(b.dataset.i); desenhar(); });
+        $("lc-instr").innerHTML = `3. Envie <b>${R.mt(p.preco)}</b> por <b>${Dados.METODOS[licMetodo]}</b> para a conta do fornecedor do Kubatsira e escreva a referência que vem na mensagem de confirmação.`;
+        $("lc-resumo").innerHTML = `Nova validade: <b>${R.data(Dados.licencaNovaExpiracao(e, p))}</b> (+${p.dias} dias)`;
+      };
+      desenhar();
+      $("lc-ok").onclick = async () => {
+        const p = Dados.PLANOS[licPlano], metodo = Dados.METODOS[licMetodo];
+        const ref = $("lc-ref").value.trim().toUpperCase();
+        if (!(await confirmar("Confirmar pagamento", `Pagar a licença ${p.nome} (${R.mt(p.preco)}) por ${metodo}?\nReferência: ${ref}\nNova validade: ${R.data(Dados.licencaNovaExpiracao(e, p))}`, "Confirmar"))) return;
+        $("lc-ok").disabled = true;
+        try {
+          const r = await Dados.licencaPagar(p.codigo, metodo, ref, $("lc-conta").value, $("lc-caixa").checked, S.user.utilizador);
+          if (!r.ok) { $("lc-erro").textContent = r.msg; $("lc-ok").disabled = false; return; }
+          toast(r.msg);
+          $("barra-inferior").classList.remove("escondida");
+          if (fab && usarIA()) fab.classList.remove("oculto");
+          if (obrigatoria) navegar("inicio"); else verLicenca(false);
+        } catch (err) { $("lc-erro").textContent = err.message; $("lc-ok").disabled = false; }
+      };
+      if ($("lc-sair")) $("lc-sair").onclick = async () => {
+        if (await confirmar("Terminar sessão", "A licença continua por pagar. Quer sair da app?", "Sair", true)) sair();
+      };
+    } catch (err) { c.innerHTML = erroEcra(err, () => verLicenca(obrigatoria)); }
+  }
+
+  // Licença expirada: os Agentes e Clientes não entram (ManutencaoActivity)
+  function verManutencao() {
+    mostrar("ecra-login");
+    $("ecra-login").innerHTML = `<div class="centro"><div class="manutencao">
+      <div class="grande">🔧</div>
+      <h2 style="margin:10px 0 6px">Sistema em manutenção</h2>
+      <p style="color:var(--texto-suave)">O sistema está temporariamente indisponível. Tente mais tarde ou fale com o Administrador.</p>
+      <button class="btn" id="mn-sair" style="margin-top:18px">Voltar ao início</button></div></div>`;
+    $("mn-sair").onclick = () => { S.user = null; verLogin(); };
+  }
+
+  // ---------- Fim da sessão após 5 minutos sem uso (como na app) ----------
+  const SESSAO_MS = 5 * 60 * 1000;
+  let ultimoUso = Date.now();
+  ["pointerdown", "keydown", "scroll", "touchstart"].forEach((ev) => window.addEventListener(ev, () => { ultimoUso = Date.now(); }, { passive: true, capture: true }));
+  setInterval(() => {
+    if (S.user && Date.now() - ultimoUso > SESSAO_MS) {
+      sair();
+      toast("A sessão terminou depois de 5 minutos sem uso. Entre outra vez.");
+    }
+  }, 15000);
 
   // ---------- Perfil ----------
   function formNome() {
@@ -2131,9 +2561,10 @@
   }
 
   // Abre o seletor de imagem, recorta ao centro e reduz para 256px JPEG (base64).
-  function escolherFoto(aoPronto) {
+  function escolherFoto(aoPronto, camara) {
     const inp = document.createElement("input");
     inp.type = "file"; inp.accept = "image/*";
+    if (camara) inp.setAttribute("capture", "user");   // abre logo a câmara (telemóvel)
     inp.onchange = () => {
       const file = inp.files && inp.files[0]; if (!file) return;
       const img = new Image();

@@ -52,6 +52,12 @@ const Dados = (() => {
     return u;
   }
 
+  // A conta ligada ao Face ID / impressão digital deste aparelho (a identidade já foi confirmada pelo aparelho)
+  async function obterUtilizador(id) {
+    const rows = await DB.consultar(SELECT_USER + "WHERE u.id = ?", [id]);
+    return rows.length ? lerUser(rows[0]) : null;
+  }
+
   async function idAdminPrincipal() {
     const r = await DB.consultar("SELECT COALESCE(MIN(id),0) AS id FROM usuarios WHERE tipo_usuario='ADMIN' AND ativo", []);
     return r.length ? Number(r[0].id) : 0;
@@ -756,14 +762,135 @@ const Dados = (() => {
   }
 
   // ---------- Notificações ----------
+  // Como no Android (NotificacaoDao): visíveis para a pessoa, últimos 60 dias, sem as que ela escreveu;
+  // "lida"/"removida" ficam em notificacoes_lidas (a mesma notificação pode estar lida para uns e não para outros).
+  const VISIVEL =
+    "(n.para_usuario_id = ? OR (n.para_usuario_id IS NULL AND (n.para_perfil IS NULL OR n.para_perfil = ?)))" +
+    " AND (n.de_usuario_id IS NULL OR n.de_usuario_id <> ?) AND n.criada_em >= LOCALTIMESTAMP - INTERVAL '60 days'";
+
   async function listarNotificacoes(usuarioId, perfil) {
     try {
       return (await DB.consultar(
-        "SELECT id, tipo, titulo, mensagem, de_nome, para_perfil, criada_em FROM notificacoes " +
-        "WHERE para_usuario_id = ? OR para_perfil = ? OR (para_usuario_id IS NULL AND para_perfil IS NULL) " +
-        "ORDER BY id DESC LIMIT 50", [usuarioId, perfil]))
-        .map((r) => ({ id: Number(r.id), titulo: r.titulo, mensagem: r.mensagem, autor: r.de_nome, data: r.criada_em, tipo: r.tipo }));
+        "SELECT n.id, n.tipo, n.titulo, n.mensagem, COALESCE(n.de_nome,'') AS de_nome, n.criada_em, " +
+        "(l.usuario_id IS NOT NULL)::text AS lida FROM notificacoes n " +
+        "LEFT JOIN notificacoes_lidas l ON l.notificacao_id = n.id AND l.usuario_id = ? " +
+        "WHERE " + VISIVEL + " AND NOT COALESCE(l.removida, FALSE) ORDER BY n.criada_em DESC, n.id DESC LIMIT 60",
+        [usuarioId, usuarioId, perfil, usuarioId]))
+        .map((r) => ({ id: Number(r.id), titulo: r.titulo, mensagem: r.mensagem, autor: r.de_nome, data: r.criada_em, tipo: r.tipo,
+          lida: r.lida === "true" || r.lida === "t" }));
     } catch (e) { return []; }
+  }
+
+  // O número vermelho do sino
+  async function contarNaoLidas(usuarioId, perfil) {
+    try {
+      const r = await DB.consultar("SELECT COUNT(*) AS n FROM notificacoes n WHERE " + VISIVEL +
+        " AND NOT EXISTS (SELECT 1 FROM notificacoes_lidas l WHERE l.notificacao_id = n.id AND l.usuario_id = ?)",
+        [usuarioId, perfil, usuarioId, usuarioId]);
+      return Number(r[0].n);
+    } catch (e) { return 0; }
+  }
+
+  async function marcarLidas(usuarioId, ids) {
+    if (!ids.length) return;
+    await DB.executar("INSERT INTO notificacoes_lidas (notificacao_id, usuario_id) SELECT unnest(?::int[]), ? ON CONFLICT DO NOTHING",
+      ["{" + ids.join(",") + "}", usuarioId]);
+  }
+
+  async function removerNotificacao(usuarioId, id) {
+    await DB.executar("INSERT INTO notificacoes_lidas (notificacao_id, usuario_id, removida) VALUES (?, ?, TRUE) " +
+      "ON CONFLICT (notificacao_id, usuario_id) DO UPDATE SET removida = TRUE", [id, usuarioId]);
+  }
+
+  // ---------- Configurações do sistema (iguais no Android e no computador) ----------
+  async function configLer(chave) {
+    try {
+      const r = await DB.consultar("SELECT valor FROM configuracoes_sistema WHERE chave = ?", [chave]);
+      return r.length ? r[0].valor : null;
+    } catch (e) { return null; }
+  }
+  async function configGravar(chave, valor) {
+    await DB.executar("INSERT INTO configuracoes_sistema (chave, valor) VALUES (?, ?) " +
+      "ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor", [chave, valor]);
+  }
+  const sinoAtivo = async () => (await configLer("sino_ativo")) !== "0";
+  const smsAutomaticoAtivo = async () => (await configLer("sms_automatico")) === "1";
+  async function definirSmsAutomatico(ativo) {
+    await configGravar("sms_automatico", ativo ? "1" : "0");
+    if (ativo) await configGravar("sms_automatico_desde", Regras.agoraLocal());
+  }
+
+  // ---------- Licença do sistema (a MESMA do computador e da app: tabela licenca_sistema) ----------
+  const PLANOS = [
+    { codigo: "MENSAL", nome: "Mensal", dias: 30, preco: 3500 },
+    { codigo: "TRIMESTRAL", nome: "Trimestral", dias: 90, preco: 3 * 3500 },
+    { codigo: "ANUAL", nome: "Anual", dias: 365, preco: 12 * 3500 },
+  ];
+  const METODOS = ["M-Pesa", "e-Mola", "mKesh", "Transferência bancária"];
+  const DIAS_AVISO = 10;
+
+  async function licencaEstado() {
+    let r;
+    try {
+      r = await DB.consultar("SELECT data_expiracao, COALESCE(plano, CASE WHEN pago THEN 'PAGO' ELSE 'EXPERIENCIA' END) AS plano " +
+        "FROM licenca_sistema ORDER BY id DESC LIMIT 1", []);
+    } catch (e) {
+      r = await DB.consultar("SELECT data_expiracao, CASE WHEN pago THEN 'PAGO' ELSE 'EXPERIENCIA' END AS plano FROM licenca_sistema ORDER BY id DESC LIMIT 1", []);
+    }
+    const hoje = Regras.hojeISO();
+    const expiracao = r.length && r[0].data_expiracao ? Regras.dataBase(r[0].data_expiracao) : Regras.somaDias(hoje, -1);
+    const plano = r.length ? r[0].plano : "?";
+    const diasRestantes = Regras.diasEntre(hoje, expiracao);
+    const pl = PLANOS.find((p) => p.codigo === plano);
+    return {
+      expiracao, plano, diasRestantes,
+      expirada: diasRestantes < 0,
+      aExpirar: diasRestantes >= 0 && diasRestantes <= DIAS_AVISO,
+      nomePlano: plano === "EXPERIENCIA" ? "Experiência (30 dias)" : pl ? pl.nome : plano,
+    };
+  }
+  // Nova validade se o plano for pago hoje: soma à expiração atual (ou a ontem, se já expirou)
+  function licencaNovaExpiracao(estado, plano) {
+    const base = estado.expirada ? Regras.somaDias(Regras.hojeISO(), -1) : estado.expiracao;
+    return Regras.somaDias(base, plano.dias);
+  }
+  async function licencaHistorico() {
+    try {
+      return (await DB.consultar("SELECT data, plano, dias, valor, metodo, referencia, conta, pago_por, nova_expiracao FROM licenca_pagamentos ORDER BY id DESC", []))
+        .map((r) => { const pl = PLANOS.find((p) => p.codigo === r.plano);
+          return { data: r.data, plano: pl ? pl.nome : r.plano, dias: Number(r.dias), valor: Number(r.valor), metodo: r.metodo,
+            referencia: r.referencia, conta: r.conta, pagoPor: r.pago_por, novaExpiracao: Regras.dataBase(r.nova_expiracao) }; });
+    } catch (e) { return []; }
+  }
+  async function licencaPagar(codigoPlano, metodo, referencia, conta, registarNoCaixa, administrador) {
+    const p = PLANOS.find((x) => x.codigo === codigoPlano);
+    if (!p) return { ok: false, msg: "Escolha o plano da licença." };
+    if (!metodo) return { ok: false, msg: "Escolha o método de pagamento." };
+    const ref = (referencia || "").trim().toUpperCase().replace(/ /g, "");
+    if (!/^[A-Z0-9]{6,20}$/.test(ref))
+      return { ok: false, msg: "Indique a referência da transação (6 a 20 letras ou números, como aparece na mensagem de confirmação)." };
+    const numero = (conta || "").trim();
+    if (!numero) return { ok: false, msg: "Indique o número ou a conta de onde saiu o pagamento." };
+    const antes = await licencaEstado();
+    const nova = licencaNovaExpiracao(antes, p);
+    if ((await DB.consultar("SELECT 1 FROM licenca_pagamentos WHERE referencia = ?", [ref])).length)
+      return { ok: false, msg: "Esta referência de pagamento já foi usada. Confirme o código da transação." };
+    const pagamento = "INSERT INTO licenca_pagamentos (plano, dias, valor, metodo, referencia, conta, pago_por, expiracao_anterior, nova_expiracao, caixa_id) ";
+    const valores = [p.codigo, p.dias, p.preco, metodo, ref, numero, administrador, antes.expiracao, nova];
+    const comandos = [];
+    if (registarNoCaixa) {
+      comandos.push({ sql: "WITH despesa AS (INSERT INTO caixa (tipo, valor, justificativa, categoria, registado_por, data_movimento) " +
+        "VALUES ('SAIDA', ?::numeric, ?, 'LICENCA', ?, ?::timestamp) RETURNING id) " + pagamento +
+        "SELECT ?, ?::int, ?::numeric, ?, ?, ?, ?, ?::date, ?::date, despesa.id FROM despesa",
+        params: [p.preco, "Pagamento da licença Kubatsira (" + p.nome + ") - " + metodo + " " + ref, administrador, Regras.agoraLocal(), ...valores] });
+    } else {
+      comandos.push({ sql: pagamento + "VALUES (?, ?::int, ?::numeric, ?, ?, ?, ?, ?::date, ?::date, NULL)", params: valores });
+    }
+    comandos.push({ sql: "UPDATE licenca_sistema SET data_expiracao = ?::timestamp, pago = TRUE, plano = ? WHERE id = (SELECT MAX(id) FROM licenca_sistema)",
+      params: [nova + " 23:59:59", p.codigo] });
+    await DB.lote(comandos);
+    return { ok: true, msg: "Licença paga! Válida até " + Regras.data(nova) + "." +
+      (registarNoCaixa ? "\nO pagamento de " + Regras.mt(p.preco) + " foi registado como despesa no caixa." : "") };
   }
 
   // ---------- Poupança de Clientes ----------
@@ -1073,7 +1200,7 @@ const Dados = (() => {
   }
 
   return {
-    autenticar, idAdminPrincipal, balanco, cobrancasPrevistas, topClientes,
+    autenticar, obterUtilizador, idAdminPrincipal, balanco, cobrancasPrevistas, topClientes,
     graficoEntradasSaidas, graficoEvolucaoCaixa,
     listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo, listarPagas,
     movimentosPeriodo,
@@ -1081,7 +1208,9 @@ const Dados = (() => {
     registarCliente, atualizarCliente, novoCodigoAcesso, eliminarCliente, poupancaSaldo,
     pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,
     registarCaixa, listarUtilizadores, criarUtilizador, atualizarUtilizador, eliminarUtilizador,
-    alterarSenha, alterarNome, listarNotificacoes,
+    alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao,
+    configLer, configGravar, sinoAtivo, smsAutomaticoAtivo, definirSmsAutomatico,
+    PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
     poupancaSaldos, poupancaMovimentos,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,

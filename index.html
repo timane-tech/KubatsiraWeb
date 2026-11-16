@@ -16,6 +16,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <!-- Tema (Sistema / Claro / Escuro), escolhido nas Configurações: aplicado já, antes de desenhar -->
+  <script>try { document.documentElement.dataset.tema = localStorage.getItem("kub_tema") || "sistema"; } catch (e) { document.documentElement.dataset.tema = "sistema"; }</script>
 </head>
 <body>
   <!-- Ecrã: Ligar (setup) -->
@@ -58,8 +60,10 @@
       }, 1800);
     });
   </script>
-  <script>window.KUB_VER = "21";</script>
+  <script>window.KUB_VER = "22";</script>
 
+  <script src="dicionario.js"></script>
+  <script src="idioma.js"></script>
   <script src="regras.js"></script>
   <script src="db.js"></script>
   <script src="dados.js"></script>
