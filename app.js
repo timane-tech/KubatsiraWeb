@@ -1547,10 +1547,15 @@
     $("ap-ok").onclick = async () => {
       const valor = parseFloat($("ap-valor").value);
       const mod = $("ap-mod").value, data = $("ap-data").value;
+      // A confirmação usa a mesma folha: depois dela o formulário (e o botão "Aprovar") já não existe,
+      // por isso aqui não se mexe em $("ap-ok") — antes isso dava erro e o pedido nunca era aprovado.
       if (!(await confirmar("Aprovar pedido", `Vai aprovar ${R.mt(valor)} para ${e.nomeCliente}. Sai do caixa e gera as prestações.`, "Aprovar"))) return;
-      $("ap-ok").disabled = true;
-      try { const r = await Dados.aprovar(e, nomeRegisto(), valor, mod, data); fecharFolha(); toast(r.msg, !r.ok); if (r.ok && recarregar) recarregar(); }
-      catch (err) { toast(err.message, true); $("ap-ok").disabled = false; }
+      toast("A aprovar o pedido…");
+      try {
+        const r = await Dados.aprovar(e, nomeRegisto(), valor, mod, data);
+        fecharFolha(); toast(r.msg, !r.ok);
+        if (r.ok && recarregar) recarregar();
+      } catch (err) { toast(err.message || "Não foi possível aprovar.", true); }
     };
     $("ap-rej").onclick = async () => {
       if (!(await confirmar("Rejeitar pedido", "O pedido vai para a Lixeira.", "Rejeitar", true))) return;
