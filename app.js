@@ -1557,6 +1557,15 @@
     };
   }
 
+  // Cliente antigo: os bens de garantia do último pedido entram já no campo (pode alterá-los)
+  async function preencherGarantia(clienteId) {
+    const g = await Dados.ultimaGarantia(clienteId);
+    const campo = $("pd-garantia");
+    if (!g || !campo || campo.value.trim()) return;   // não apaga o que a pessoa já escreveu
+    campo.value = g;
+    campo.insertAdjacentHTML("afterend", `<div class="explica" id="pd-gar-nota">✓ Carregados do último empréstimo deste cliente. Pode alterar.</div>`);
+  }
+
   function formPedido(cl) {
     abrirFolha(`
       <h3>Novo crédito</h3><div class="sub">${esc(cl.nome)}</div>
@@ -1567,6 +1576,7 @@
       <div id="pd-sim" class="cartao" style="display:none;background:var(--fundo)"></div>
       <div class="erro-msg" id="pd-erro"></div>
       <button class="btn" id="pd-btn">Enviar pedido</button>`);
+    preencherGarantia(cl.id);
     const simular = () => {
       const v = parseFloat($("pd-valor").value);
       const sim = $("pd-sim");
@@ -3221,6 +3231,7 @@
           <button class="btn" id="pd-btn">Enviar pedido</button>
         </div>
         <p class="sub" style="color:var(--texto-suave);text-align:center">O pedido fica à espera da aprovação do Administrador.</p>`;
+      preencherGarantia(S.user.clienteId);
       const simular = () => {
         const v = parseFloat($("pd-valor").value); const sim = $("pd-sim");
         if (!v || v < 1000) { sim.style.display = "none"; return; }

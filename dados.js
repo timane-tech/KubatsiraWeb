@@ -74,6 +74,15 @@ const Dados = (() => {
     } catch (e) {}
   }
 
+  // Bens de garantia do pedido mais recente do cliente (para preencher o novo pedido)
+  async function ultimaGarantia(clienteId) {
+    try {
+      const r = await DB.consultar("SELECT bens_garantia FROM emprestimos WHERE cliente_id = ? AND COALESCE(TRIM(bens_garantia),'') <> '' " +
+        "ORDER BY data_solicitacao DESC, id DESC LIMIT 1", [clienteId]);
+      return r.length ? String(r[0].bens_garantia).trim() : "";
+    } catch (e) { return ""; }
+  }
+
   // A senha está certa? (Desbloqueio: mostrar valores, exportar PDF) — não altera nada na base
   async function senhaCorreta(id, senha) {
     if (!senha) return false;
@@ -1266,7 +1275,7 @@ const Dados = (() => {
   }
 
   return {
-    autenticar, obterUtilizador, idAdminPrincipal, registarAcesso, senhaCorreta, smsJaEnviados, registarSmsManual, avisarEntradaBloqueada, balanco, cobrancasPrevistas, topClientes,
+    autenticar, obterUtilizador, idAdminPrincipal, registarAcesso, senhaCorreta, ultimaGarantia, smsJaEnviados, registarSmsManual, avisarEntradaBloqueada, balanco, cobrancasPrevistas, topClientes,
     graficoEntradasSaidas, graficoEvolucaoCaixa,
     listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo, listarPagas,
     movimentosPeriodo,
