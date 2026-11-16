@@ -1540,6 +1540,7 @@
         <select id="ap-mod"><option value="PARCELADO" ${e.modalidade === "PARCELADO" ? "selected" : ""}>6 prestações (5/5 dias)</option>
         <option value="UNICO" ${e.modalidade === "UNICO" ? "selected" : ""}>Única (30 dias)</option></select></div>
       <div class="campo"><label>Data de aprovação</label><input id="ap-data" type="date" value="${hoje}" max="${hoje}" min="${e.dataPedido}"></div>
+      <div id="ap-plano">${planoHtml(e.capital, e.modalidade, e.dataPedido)}</div>
       <div class="btn-linha">
         <button class="btn perigo" id="ap-rej">Rejeitar</button>
         <button class="btn" id="ap-ok">Aprovar</button>
@@ -1547,6 +1548,10 @@
   }
 
   function ligarAprovacao(e, recarregar) {
+    // As prestações que vão ser geradas acompanham o valor e a modalidade escolhidos
+    const atualizarPlano = () => { if ($("ap-plano")) $("ap-plano").innerHTML = planoHtml($("ap-valor").value, $("ap-mod").value, e.dataPedido); };
+    $("ap-valor").oninput = atualizarPlano;
+    $("ap-mod").onchange = atualizarPlano;
     $("ap-ok").onclick = async () => {
       const valor = parseFloat($("ap-valor").value);
       const mod = $("ap-mod").value, data = $("ap-data").value;
@@ -1565,6 +1570,24 @@
       const r = await comErro(() => Dados.rejeitar(e.id, nomeRegisto()));
       fecharFolha(); toast(r.msg, !r.ok); if (r.ok && recarregar) recarregar();
     };
+  }
+
+  // Plano de pagamento gerado a partir do valor (as mesmas regras de quando o pedido é aprovado):
+  // capital + 30% de juros; 6 prestações de 5 em 5 dias ou 1 prestação aos 30 dias, a contar da data do pedido.
+  function planoHtml(valor, modalidade, dataPedidoISO) {
+    const v = parseFloat(String(valor).replace(",", "."));
+    if (!v || v <= 0) return "";
+    const erro = R.validarValor(v);
+    if (erro) return `<div class="erro-msg" style="margin:4px 0 10px">${esc(erro)}</div>`;
+    const total = R.totalAPagar(v), linhas = R.plano(v, modalidade, dataPedidoISO || R.hojeISO());
+    return `<div class="cartao" style="background:var(--fundo);margin:6px 0 12px;padding:12px 14px">
+      <div class="titulo-cfg" style="margin-bottom:6px">📅 Prestações</div>
+      <div class="linha-dados"><span class="r">Capital</span><span class="v">${R.mt(v)}</span></div>
+      <div class="linha-dados"><span class="r">Juros (30%)</span><span class="v">${R.mt(total - v)}</span></div>
+      <div class="linha-dados"><span class="r">Total a pagar</span><span class="v" style="color:var(--accent)">${R.mt(total)}</span></div>
+      <div class="sub-secao" style="margin-top:10px">${linhas.length} PRESTAÇ${linhas.length === 1 ? "ÃO" : "ÕES"}</div>
+      ${linhas.map((l) => `<div class="linha-dados"><span class="r">${l.numero}ª · vence ${R.data(l.vencimento)}</span><span class="v">${R.mt(l.valor)}</span></div>`).join("")}
+    </div>`;
   }
 
   // Cliente antigo: os bens de garantia do último pedido entram já no campo (pode alterá-los)
@@ -1587,14 +1610,12 @@
       <div class="erro-msg" id="pd-erro"></div>
       <button class="btn" id="pd-btn">Enviar pedido</button>`);
     preencherGarantia(cl.id);
+    // As prestações aparecem logo ao escrever o valor (e mudam com a modalidade)
     const simular = () => {
-      const v = parseFloat($("pd-valor").value);
       const sim = $("pd-sim");
-      if (!v || v < 1000) { sim.style.display = "none"; return; }
-      const total = R.totalAPagar(v);
-      sim.style.display = "block";
-      sim.innerHTML = `<div class="linha-dados"><span class="r">Total a pagar (c/ 30%)</span><span class="v">${R.mt(total)}</span></div>
-        <div class="linha-dados"><span class="r">${$("pd-mod").value === "PARCELADO" ? "6 prestações de" : "1 pagamento de"}</span><span class="v">${R.mt($("pd-mod").value === "PARCELADO" ? R.arredondar(total / 6) : total)}</span></div>`;
+      sim.style.cssText = "";
+      sim.className = "";
+      sim.innerHTML = planoHtml($("pd-valor").value, $("pd-mod").value, R.hojeISO());
     };
     $("pd-valor").oninput = simular; $("pd-mod").onchange = simular;
     $("pd-btn").onclick = async () => {
@@ -3242,13 +3263,11 @@
         </div>
         <p class="sub" style="color:var(--texto-suave);text-align:center">O pedido fica à espera da aprovação do Administrador.</p>`;
       preencherGarantia(S.user.clienteId);
+      // As prestações aparecem logo ao escrever o valor (e mudam com a modalidade)
       const simular = () => {
-        const v = parseFloat($("pd-valor").value); const sim = $("pd-sim");
-        if (!v || v < 1000) { sim.style.display = "none"; return; }
-        const total = R.totalAPagar(v);
-        sim.style.display = "block";
-        sim.innerHTML = `<div class="linha-dados"><span class="r">Total a pagar (c/ 30%)</span><span class="v">${R.mt(total)}</span></div>
-          <div class="linha-dados"><span class="r">${$("pd-mod").value === "PARCELADO" ? "6 prestações de" : "1 pagamento de"}</span><span class="v">${R.mt($("pd-mod").value === "PARCELADO" ? R.arredondar(total / 6) : total)}</span></div>`;
+        const sim = $("pd-sim");
+        sim.style.cssText = ""; sim.className = "";
+        sim.innerHTML = planoHtml($("pd-valor").value, $("pd-mod").value, R.hojeISO());
       };
       $("pd-valor").oninput = simular; $("pd-mod").onchange = simular;
       $("pd-btn").onclick = async () => {
