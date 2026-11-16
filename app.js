@@ -1400,7 +1400,10 @@
           $("ok").onclick = fecharFolha;
         } else { fecharFolha(); toast(r.msg); }
         navegar("clientes");
-      } catch (err) { $("f-erro").textContent = err.message; $("f-btn").disabled = false; }
+      } catch (err) {
+        if ($("f-erro")) { $("f-erro").textContent = err.message; $("f-btn").disabled = false; }
+        else toast(err.message || "Ocorreu um erro.", true);
+      }
     };
   }
 
