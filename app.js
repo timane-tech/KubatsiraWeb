@@ -93,8 +93,10 @@
   // ---------- Utilitários DOM ----------
   const $ = (id) => document.getElementById(id);
   const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; };
+  // "Empréstimo #24" -> "Empréstimo nº 24" (também nos textos antigos já gravados na base)
+  const semCardinal = (s) => String(s == null ? "" : s).replace(/(^|[\s(·:-])#(\d+)\b/g, "$1nº $2");
   function esc(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    return semCardinal(s).replace(/[&<>"']/g, (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   }
   const R = Regras;
@@ -1155,7 +1157,7 @@
     const podeMulta = pode("REMOVER_MULTA") && p.estado !== "PAGO" && multa > 0.004;
     abrirFolha(`
       <h3>${esc(p.nomeCliente)}</h3>
-      <div class="sub">${p.numero}ª prestação · Empréstimo #${p.emprestimoId}</div>
+      <div class="sub">${p.numero}ª prestação · Empréstimo nº ${p.emprestimoId}</div>
       <div class="linha-dados"><span class="r">Vencimento</span><span class="v">${R.data(p.vencimento)}</span></div>
       <div class="linha-dados"><span class="r">Situação</span><span class="v">${R.situacaoPrestacao(p)}${atraso > 0 ? ` (${atraso}d)` : ""}</span></div>
       <div class="linha-dados"><span class="r">Valor da prestação</span><span class="v">${R.mt(p.valor)}</span></div>
@@ -1312,7 +1314,7 @@
     let poup = 0; try { poup = await Dados.poupancaSaldo(cl.id); } catch (e) {}
     const empHtml = emprestimos.length ? emprestimos.map((e) => `
       <button class="item" data-eid="${e.id}">
-        <span class="meio"><span class="nome">#${e.id} · ${vmt(e.capital)}</span>
+        <span class="meio"><span class="nome">Nº ${e.id} · ${vmt(e.capital)}</span>
           <span class="det">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)} · ${e.prestacoesPagas}/${e.totalPrestacoes} pagas</span></span>
         <span class="fim"><span class="mt">${e.emFalta > 0 ? vmt(e.emFalta) : `<span style="color:var(--verde)">${ic("check", 18)}</span>`}</span></span></button>`).join("")
       : `<p class="sub" style="color:var(--texto-suave)">Sem empréstimos.</p>`;
@@ -1419,7 +1421,7 @@
       <div id="emp-lista">${spinner}</div>`;
     let fonte = [];
     if ($("emp-pdf")) $("emp-pdf").onclick = () => exportarPDF("Empréstimos",
-      ["#", "Cliente", "Capital (MT)", "Situação", "Em falta (MT)"],
+      ["Nº", "Cliente", "Capital (MT)", "Situação", "Em falta (MT)"],
       fonte.map((e) => [String(e.id), e.nomeCliente, R.mt(e.capital), R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso), e.emFalta > 0 ? R.mt(e.emFalta) : "—"]),
       ["Total: " + fonte.length + " empréstimo(s)"], () => {
         if (!fonte.length) return [];
@@ -1463,14 +1465,14 @@
     const cls = e.prestacoesEmAtraso > 0 ? "e-atraso" : e.estado === "PAGO" ? "e-ok" : e.estado === "PENDENTE" ? "e-aviso" : "e-neutro";
     return `<button class="item" data-eid="${e.id}">
       <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
-      <span class="meio"><span class="nome">${esc(e.nomeCliente)} · #${e.id}</span>
+      <span class="meio"><span class="nome">${esc(e.nomeCliente)} · nº ${e.id}</span>
         <span class="det">${vmt(e.capital)} · ${e.modalidade === "PARCELADO" ? "6 prest." : "única"}${pend ? " · pedido " + R.data(e.dataPedido) : ""}</span>
         <span class="etiqueta ${cls}">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></span>
       <span class="fim"><span class="mt">${e.estado === "PENDENTE" ? "" : (e.emFalta > 0 ? vmt(e.emFalta) : `<span style="color:var(--verde)">${ic("check", 18)}</span>`)}</span></span></button>`;
   }
 
   async function abrirEmprestimo(e, recarregar) {
-    abrirFolha(`<h3>Empréstimo #${e.id}</h3><div class="sub">${esc(e.nomeCliente)}</div>${spinner}`);
+    abrirFolha(`<h3>Empréstimo nº ${e.id}</h3><div class="sub">${esc(e.nomeCliente)}</div>${spinner}`);
     let prest = [];
     try { prest = await Dados.listarPorEmprestimo(e.id); } catch (err) {}
     const hoje = R.hojeISO();
@@ -1485,7 +1487,7 @@
     }).join("");
     const pend = e.estado === "PENDENTE";
     abrirFolha(`
-      <h3>Empréstimo #${e.id}</h3><div class="sub">${esc(e.nomeCliente)} · ${esc(e.telefoneCliente || "")}</div>
+      <h3>Empréstimo nº ${e.id}</h3><div class="sub">${esc(e.nomeCliente)} · ${esc(e.telefoneCliente || "")}</div>
       <div class="linha-dados"><span class="r">Situação</span><span class="v">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></div>
       <div class="linha-dados"><span class="r">Capital</span><span class="v">${vmt(e.capital)}</span></div>
       <div class="linha-dados"><span class="r">Total a pagar</span><span class="v">${vmt(e.totalAPagar)}</span></div>
@@ -1499,7 +1501,7 @@
       ${!pend && pode("ANULAR_EMPRESTIMO") && e.estado === "APROVADO" && e.jaPago === 0 ? `<button class="btn perigo" id="e-anular" style="margin-top:10px">Anular empréstimo</button>` : ""}
     `);
     if ($("e-desemb")) $("e-desemb").onclick = () => {
-      abrirFolha(`<h3>Data de desembolso</h3><div class="sub">Empréstimo #${e.id} · ${esc(e.nomeCliente)} · atual ${R.data(e.dataAprovacao)}</div>
+      abrirFolha(`<h3>Data de desembolso</h3><div class="sub">Empréstimo nº ${e.id} · ${esc(e.nomeCliente)} · atual ${R.data(e.dataAprovacao)}</div>
         <div class="campo"><label>Nova data de desembolso</label><input id="dd-data" type="date" value="${e.dataAprovacao}" max="${R.hojeISO()}"></div>
         <label style="display:flex;align-items:center;gap:10px;font-size:.9rem;margin-bottom:12px">
           <input type="checkbox" id="dd-mover" checked style="width:auto;transform:scale(1.2)"> Mover também as datas das prestações</label>
@@ -1914,7 +1916,7 @@
 
   function gerirCaixa(m) {
     const podeEditar = pode("CAIXA_EDITAR") && m.livre;
-    abrirFolha(`<h3>${esc(curto(m.categoria))}</h3><div class="sub">Lançamento #${m.id} · ${R.dataHora(m.dataMovimento)}</div>
+    abrirFolha(`<h3>${esc(curto(m.categoria))}</h3><div class="sub">Lançamento nº ${m.id} · ${R.dataHora(m.dataMovimento)}</div>
       <div class="linha-dados"><span class="r">Tipo</span><span class="v">${m.tipo === "ENTRADA" ? "Entrada" : "Saída"}</span></div>
       <div class="linha-dados"><span class="r">Valor</span><span class="v">${R.mt(m.valor)}</span></div>
       <div class="linha-dados"><span class="r">Descrição</span><span class="v" style="max-width:60%">${esc(m.justificativa || "")}</span></div>
@@ -2114,7 +2116,7 @@
             const entrada = m.tipo === "ENTRADA";
             return `<div class="item" style="cursor:default;align-items:flex-start">
               <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${ic("lixeira", 18)}</span>
-              <span class="meio"><span class="nome">#${m.caixaId} · ${esc(curto(m.categoria))}</span>
+              <span class="meio"><span class="nome">Nº ${m.caixaId} · ${esc(curto(m.categoria))}</span>
                 <span class="det" style="white-space:normal">${esc(m.justificativa || "")}</span>
                 <span class="det" style="font-size:.74rem">Apagado por ${esc(m.eliminadoPor || "—")} · ${R.dataHora(m.eliminadoEm)}${m.anulado ? " · pagamento anulado" : ""}</span>
                 <span style="display:flex;gap:8px;margin-top:8px">
@@ -2142,7 +2144,7 @@
           if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", "Não há pedidos rejeitados."); return; }
           $("lix-lista").innerHTML = lista.map((e) => `<div class="item" style="cursor:default;align-items:flex-start">
             <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
-            <span class="meio"><span class="nome">${esc(e.nomeCliente)} · #${e.id}</span>
+            <span class="meio"><span class="nome">${esc(e.nomeCliente)} · nº ${e.id}</span>
               <span class="det">${vmt(e.capital)} · pedido ${R.data(e.dataPedido)}</span>
               <span class="det" style="font-size:.74rem">Rejeitado por ${esc(e.rejeitadoPor || "—")} · ${R.dataHora(e.rejeitadoEm)}</span>
               <span style="display:flex;gap:8px;margin-top:8px">
@@ -2456,7 +2458,7 @@
   async function montarContextoIA() {
     let dados;
     try { dados = await dadosIA(); } catch (e) { dados = "(Não foi possível carregar os dados atuais: " + (e.message || "sem ligação") + ".)\n"; }
-    return instrucoesIA() + "\n\n=== CONTEXTO (dados atuais) ===\n" + dados;
+    return instrucoesIA() + "\nNunca escrevas \"#\" antes de números: escreve \"Empréstimo nº 24\".\n\n=== CONTEXTO (dados atuais) ===\n" + semCardinal(dados);
   }
 
   function markdownLeve(t) {
@@ -3085,8 +3087,8 @@
     const atraso = R.diasAtraso(p.vencimento, hoje);
     const falta = R.emFalta(p, hoje);
     let m = `Kubatsira: Ola ${primeiroNome(p.nomeCliente)}, `;
-    if (atraso > 0) m += `a sua ${p.numero}a prestacao (emprestimo #${p.emprestimoId}) venceu em ${R.data(p.vencimento)} e tem ${atraso} dia(s) de atraso. `;
-    else m += `a sua ${p.numero}a prestacao (emprestimo #${p.emprestimoId}) vence em ${R.data(p.vencimento)}. `;
+    if (atraso > 0) m += `a sua ${p.numero}a prestacao (emprestimo n. ${p.emprestimoId}) venceu em ${R.data(p.vencimento)} e tem ${atraso} dia(s) de atraso. `;
+    else m += `a sua ${p.numero}a prestacao (emprestimo n. ${p.emprestimoId}) vence em ${R.data(p.vencimento)}. `;
     m += `Valor a pagar: ${R.mt(falta)}${p.multaCongelada || atraso > 0 ? " (inclui multa)" : ""}. Por favor regularize. Obrigado.`;
     return m;
   }
@@ -3339,7 +3341,7 @@
     toast("A preparar o PDF…");
     // A letra do PDF (Helvetica) não tem setas nem emojis: troca-os para não sair texto estragado.
     // E, como na app, tudo segue o idioma escolhido (os nomes e valores não mudam).
-    const limpo = (s) => Idioma.T(String(s == null ? "" : s)).replace(/[↓↑→←]\s?/g, "").replace(/−/g, "-")
+    const limpo = (s) => Idioma.T(semCardinal(s)).replace(/[↓↑→←]\s?/g, "").replace(/−/g, "-")
       .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, "").trim();
     titulo = limpo(titulo); colunas = colunas.map(limpo); linhas = linhas.map((l) => l.map(limpo)); notas = (notas || []).map(limpo);
     try {

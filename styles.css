@@ -530,5 +530,8 @@ input, select, textarea, .campo input, .campo select, .campo textarea, .pesquisa
 @keyframes abana { 0%,100% { transform: translateX(0); } 15% { transform: translateX(18px); } 30% { transform: translateX(-18px); }
   45% { transform: translateX(12px); } 60% { transform: translateX(-12px); } 75% { transform: translateX(6px); } 90% { transform: translateX(-6px); } }
 
+/* Ícones que substituem os emojis (icones.js): da cor e do tamanho do texto */
+.ic-emoji { width: 1.15em; height: 1.15em; fill: currentColor; vertical-align: -0.2em; display: inline-block; flex: none; }
+
 /* Badge do sino */
 .cabecalho .badge-sino { border-color: #1f4fa0; }
