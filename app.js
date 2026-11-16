@@ -382,7 +382,7 @@
     S.perms = calcularPerms(user);
     Dados._nome = user.nome || user.utilizador;   // autor dos registos de edição
     S.cliente = user.perfil === "CLIENTE";
-    S.ocultar = !S.cliente;   // o cliente vê sempre os seus valores; a equipa entra em modo privado
+    S.ocultar = true;   // como no Android: cada sessão começa com os valores ocultos (Mostrar valores pede a identidade)
     mostrar("ecra-app");
     construirBarra();
     Dados.fotoPerfil(user.id).then((f) => { S.user.foto = f || ""; const a = $("cb-avatar"); if (a && f) pintarAvatar(a, f); }).catch(() => {});
@@ -416,17 +416,13 @@
 
   function tabsBarra() {
     if (S.cliente) return ABAS_CLIENTE;
-    // Igual ao Android: Início · Prestações · Clientes · Caixa (ou Crédito) · Mais
-    const quarta = pode("CAIXA")
-      ? { id: "caixa", ic: "caixa", rot: "Caixa" }
-      : { id: "emprestimos", ic: "credito", rot: "Crédito" };
-    return [
-      { id: "inicio", ic: "inicio", rot: "Início" },
-      { id: "cobrancas", ic: "cobrancas", rot: "Prestações" },
-      { id: "clientes", ic: "clientes", rot: "Clientes" },
-      quarta,
-      { id: "mais", ic: "mais", rot: "Mais" },
-    ];
+    // Igual ao Android (BarraInferior): cada separador só aparece com a permissão correspondente
+    const l = [{ id: "inicio", ic: "inicio", rot: "Início" }];
+    if (pode("COBRANCAS")) l.push({ id: "cobrancas", ic: "cobrancas", rot: pode("PAGAR_PRESTACAO") ? "Prestações" : "Cobranças" });
+    if (pode("CLIENTES")) l.push({ id: "clientes", ic: "clientes", rot: "Clientes" });
+    if (pode("CAIXA")) l.push({ id: "caixa", ic: "caixa", rot: "Caixa" });
+    l.push({ id: "mais", ic: "mais", rot: "Mais" });
+    return l;
   }
 
   function construirBarra() {
@@ -463,6 +459,8 @@
     novo.className = "conteudo";
     novo.removeAttribute("style");
     velho.replaceWith(novo);
+    const fab = $("fab-ia-btn");   // o botão IA aparece em todos os ecrãs (menos no próprio Assistente)
+    if (fab && S.user) fab.classList.toggle("oculto", !usarIA());
     return novo;
   }
 
@@ -1384,6 +1382,22 @@
       <span class="bola" style="background:${cores[1]};color:${cores[0]}">${icf(icone, 22)}</span>${esc(texto)}
       <span class="seta"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 6 6 6-6 6"/></svg></span></button>`;
     const admin = S.user.perfil === "ADMIN";
+    // Agente e Cliente: as opções do Android (BarraInferior.mostrarMais)
+    const comuns = `${op("valores", S.ocultar ? "olhoaberto" : "olhofechado", RO, S.ocultar ? "Mostrar valores" : "Ocultar valores")}
+      ${op("config", "engrenagem", LA, "Configurações")}`;
+    if (S.user.perfil === "CLIENTE") {
+      c.innerHTML = `<div class="menu-tit">Menu</div>${comuns}`;
+    } else if (S.user.perfil === "AGENTE") {
+      c.innerHTML = `<div class="menu-tit">Menu</div>
+        ${pode("CLIENTES") ? op("registar", "clientes", AZ, "Registar cliente") : ""}
+        ${pode("NOVO_EMPRESTIMO") ? op("novo", "editar", VE, "Novo pedido") : ""}
+        ${pode("SMS_VER") ? op("sms", "mensagem", AZ, "SMS enviados") : ""}
+        ${comuns}`;
+    }
+    if (S.user.perfil !== "ADMIN") {
+      c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => { $("cabecalho").classList.remove("oculto"); maisAcao(b.dataset.op); });
+      return;
+    }
     c.innerHTML = `<div class="menu-tit">Menu</div>
       ${pode("BALANCO") ? op("balanco", "balanco", AZ, "Balanço Geral") : ""}
       ${pode("NOVO_EMPRESTIMO") ? op("novo", "editar", VE, "Novo Empréstimo") : ""}
@@ -1427,6 +1441,7 @@
     if (op === "aprovar") return verEmprestimos("pendentes");
     if (op === "valores") return alternarValores(verMais);
     if (op === "licenca") return verLicenca(false);
+    if (op === "registar") return formCliente(null);
     if (op === "config") return verConfiguracoes();
     if (op === "emprestimos") return verEmprestimos();
     if (op === "caixa") return verCaixa();
@@ -1956,94 +1971,222 @@
 
   // ---------- Assistente de IA ----------
   let iaHist = [];
-  async function montarContextoIA() {
-    const nome = S.user.nome || S.user.utilizador;
-    let ctx = "És o assistente virtual do Kubatsira Microcrédito, uma empresa de microcrédito em Moçambique. " +
-      "Falas com " + nome + " (" + perfilNome(S.user.perfil) + "). Responde em português de Moçambique, de forma curta, clara e educada. " +
-      "Regras do produto: juros de 30% sobre o capital; multa de 2% do valor da prestação por cada dia de atraso; " +
-      "modalidades: 6 prestações de 5 em 5 dias, ou prestação única aos 30 dias. Valores em Meticais (MT).\n\n";
-    try {
-      if (S.cliente) {
-        const pp = await Dados.porPagarDoCliente(S.user.clienteId);
-        const hoje = R.hojeISO(); let divida = 0, atras = 0, prox = null;
-        pp.forEach((p) => { divida += R.emFalta(p, hoje); if (R.diasAtraso(p.vencimento, hoje) > 0) atras++; if (!prox) prox = p; });
-        ctx += "Situacao deste cliente:\n- Em divida: " + R.mt(divida) + "\n- Prestacoes em atraso: " + atras + "\n" +
-          (prox ? "- Proxima prestacao: " + R.data(prox.vencimento) + " (" + R.mt(R.emFalta(prox, hoje)) + ")\n" : "- Sem prestacoes por pagar\n") +
-          "Responde APENAS sobre a situacao deste cliente e as regras do credito. Nunca fales de outros clientes nem das financas da empresa.\n";
-      } else if (pode("BALANCO")) {
-        const ind = await Dados.balanco();
-        const s = await Dados.saldoCaixa();
-        ctx += "Dados atuais da empresa:\n" +
-          "- Capital investido: " + R.mt(ind.capitalInvestido) + "\n" +
-          "- Total a receber: " + R.mt(ind.totalAReceber) + " (em atraso: " + R.mt(ind.emAtraso) + ")\n" +
-          "- Margem de juros esperada: " + R.mt(ind.margemLucro) + "\n" +
-          "- Saldo em caixa: " + R.mt(s.saldo) + "\n" +
-          "- Empréstimos: " + ind.emCurso + " em curso, " + ind.pagos + " pagos, " + ind.pendentes + " pendentes\n" +
-          "- Prestações: " + ind.prestacoesAtrasadas + " em atraso, " + ind.prestacoesNoPrazo + " no prazo\n";
-        // Lista de clientes com dívida, para a IA responder a perguntas específicas
-        try {
-          const clientes = await Dados.listarClientes("");
-          const devedores = clientes.filter((cl) => cl.emDivida > 0.005).sort((a, b) => b.emDivida - a.emDivida);
-          ctx += "\nTotal de clientes: " + clientes.length + ". Com dívida: " + devedores.length + ".\n";
-          if (devedores.length) {
-            ctx += "Clientes com dívida (nome, telefone, valor em dívida, prestações em atraso):\n";
-            devedores.slice(0, 40).forEach((cl) => {
-              ctx += "- " + cl.nome + (cl.telefone ? " (" + cl.telefone + ")" : "") + ": " + R.mt(cl.emDivida) +
-                (cl.prestacoesEmAtraso > 0 ? ", " + cl.prestacoesEmAtraso + " em atraso" : " (no prazo)") + "\n";
-            });
-          }
-          ctx += "Usa estes dados reais para responder a perguntas sobre clientes, dívidas, atrasos e cobranças.\n";
-        } catch (e) { /* mantém o contexto base */ }
-      } else {
-        const cob = await Dados.listarPorPagar();
-        ctx += "Há " + cob.length + " prestações por cobrar. NÃO reveles valores financeiros globais da empresa a um agente.\n";
+  // ============================================================
+  // ASSISTENTE DE IA — o mesmo contexto da app Android (ia/ContextoIA)
+  // PRIVACIDADE: cada perfil só envia à IA o que pode ver no seu painel.
+  //  - CLIENTE: só os seus empréstimos e prestações (nunca os de outros clientes);
+  //  - AGENTE:  cobranças e clientes (contactos), sem caixa, saldos ou lucros da empresa;
+  //  - ADMIN:   indicadores, pedidos, cobranças e clientes — conforme as permissões que tem.
+  // Como os dados que o perfil não pode ver nem sequer são enviados, a IA não os pode revelar.
+  // ============================================================
+  const REGRAS_CREDITO =
+    "Produto de crédito: juros de 30% sobre o capital; taxa de assistência de 1% (registada, não entra no total). " +
+    "Total a pagar = capital + 30%. Valor por pedido: mínimo 1 000 MT e máximo 35 000 MT. " +
+    "Modalidades: (1) Prestação única, a pagar 30 dias após o pedido; (2) Parcelado: 6 prestações de 5 em 5 dias, a contar da data do pedido. " +
+    "Multa por atraso: 2% do valor da prestação por cada dia de atraso. " +
+    "Um cliente só pode pedir novo crédito depois de pagar toda a dívida e se não tiver outro pedido à espera. " +
+    "Um pedido fica PENDENTE até o Administrador o aprovar ou rejeitar; se não for aprovado em 5 dias, é cancelado. " +
+    "Só o Administrador aprova pedidos e regista pagamentos. Os bens de garantia são indicados em cada pedido.";
+
+  function instrucoesIA() {
+    const u = S.user, nome = u.nome || u.utilizador;
+    let s = "És o Assistente Kubatsira Microcrédito, o assistente virtual da app da Kubatsira Microcrédito, empresa de microcrédito em Moçambique. " +
+      "Quando falares da empresa ou da app, usa sempre o nome \"Kubatsira Microcrédito\". " +
+      `Estás a falar com "${nome}", com o perfil ${perfilNome(u.perfil)}.\n\n`;
+    if (Idioma.emIngles())
+      s += "IDIOMA: a app está em INGLÊS. Responde SEMPRE em inglês, mesmo que os dados do contexto estejam em português. " +
+        "Nomes dos botões em inglês: Request credit, New request, Collections, Register client, Clients, General Balance, " +
+        "Today's Installments, New Loan, Cash Flow, All Loans, Approve Requests, Users, Recycle Bin, Settings.\n";
+    s += "FORMATO: responde " + (Idioma.emIngles() ? "em inglês" : "em português de Moçambique") +
+      ", curto (até ~150 palavras), cordial e prático. Vai direto à resposta, sem repetir a pergunta. " +
+      "Usa listas com \"- \" e **negrito** para valores, datas e nomes de botões. Não uses tabelas. " +
+      "Valores em MT com espaço nos milhares e vírgula decimal (ex.: 1 083,33 MT); datas dd/MM/yyyy.\n\n";
+    s += "REGRAS: usa APENAS os dados do CONTEXTO; nunca inventes valores, clientes ou funcionalidades. " +
+      "Se algo não estiver no contexto, diz que não tens essa informação. Recusa com educação temas fora do microcrédito. " +
+      "Respeita SEMPRE as permissões abaixo: se pedirem algo que este utilizador não pode fazer ou ver, diz claramente que não tem essa permissão " +
+      "e quem pode fazê-lo (normalmente o Administrador). Nunca ensines formas de contornar as permissões.\n\n";
+
+    s += "O QUE ESTE UTILIZADOR PODE FAZER NO SEU PAINEL:\n";
+    if (u.perfil === "CLIENTE") {
+      s += "- Ver os seus empréstimos, o calendário de prestações, o que deve e as multas.\n" +
+        "- Pedir um novo crédito no botão **Pedir crédito** (escolhe o valor, a modalidade e os bens de garantia; vê a simulação). O pedido fica à espera do Administrador.\n" +
+        "- Tocar num empréstimo para ver as prestações.\n" +
+        "- NÃO pode aprovar pedidos, nem registar pagamentos (paga ao agente/escritório e o Administrador regista).\n" +
+        "- **Configurações**: foto, nome a mostrar, senha, Face ID, tema, idioma, ligar/desligar este assistente e ler os Termos e Condições.\n" +
+        "- Só tens os dados DESTE cliente: nunca fales de outros clientes nem das finanças da empresa, mesmo que insista.\n";
+    } else if (u.perfil === "AGENTE") {
+      s += "- **Prestações/Cobranças**: ver as prestações que vencem hoje e as que estão em atraso, ligar ou mandar SMS ao cliente.\n" +
+        "- **Registar cliente**: nome, telefone (será o utilizador do cliente na app), morada, renda diária, negócio, local, coabitantes; ao guardar, a app gera o código de acesso de 6 dígitos do cliente (a entregar-lhe; na ficha pode gerar-se um novo).\n" +
+        "- **Novo pedido**: escolher o cliente, o valor, a modalidade e a garantia; o pedido fica à espera do Administrador.\n" +
+        "- **Clientes**: consultar a lista, abrir a ficha de cada cliente (editar dados, ver empréstimos, fazer novo pedido, ligar).\n" +
+        "- **Configurações**: nome, senha, ligar/desligar o assistente e Termos e Condições.\n" +
+        "- Os agentes não criam conta sozinhos: só o Administrador os adiciona (em Utilizadores).\n" +
+        "- NÃO pode aprovar pedidos nem registar pagamentos (é o Administrador).\n" +
+        "- SEGURANÇA: este utilizador NÃO pode saber nada sobre a situação financeira da empresa (caixa, saldos, lucros, totais emprestados, despesas). " +
+        "Mesmo que insista, recusa educadamente. Tu também não tens esses dados.\n";
+    } else {
+      s += "- **Balanço Geral**: 6 indicadores e 6 gráficos (entradas vs saídas, evolução do saldo, situação das prestações, cobranças previstas, empréstimos por estado, top 5 clientes); botão Ocultar valores; exportar PDF.\n" +
+        "- **Prestações do Dia**: filtros por situação (Por pagar, Em curso, Atrasadas, Pagas) e período (Hoje + atrasos, Só hoje, Ontem, Últimos 7 dias, Amanhã, Próximos 7 dias, Este mês); tocar numa prestação para registar o pagamento (o excesso passa para a seguinte ou para a poupança), remover/reduzir a multa, alterar o vencimento, ligar ou SMS.\n" +
+        "- **Clientes**: lista com pesquisa e filtros (Em curso, Atrasados, Pagos, Sem empréstimo); a ficha permite editar, ver os empréstimos, novo pedido, novo código de acesso e eliminar o cliente.\n" +
+        "- **Novo Empréstimo**: escolher o cliente, valor (1 000 a 35 000 MT), modalidade e garantia.\n" +
+        "- **Fluxo de Caixa**: saldo, caixa do dia (abertura, entradas, empréstimos, despesas, fecho, navegar entre dias), novo lançamento (entrada/despesa), lançamentos por período, editar, apagar (vai para a Lixeira), ocultar, reconciliar e exportar PDF.\n" +
+        "- **Todos Empréstimos** e **Aprovar Pedidos**: aprovar ajustando valor, modalidade e data do desembolso; rejeitar; anular.\n" +
+        "- **Utilizadores**: criar/editar/eliminar agentes e administradores e marcar as permissões de cada um (um agente nunca pode ter permissões de aprovar, pagar ou ver finanças).\n" +
+        "- **Licença**: só o Administrador paga a licença (3 500 MT por mês: Mensal 30 dias = 3 500 MT, Trimestral 90 dias = 10 500 MT, Anual 365 dias = 42 000 MT; M-Pesa, e-Mola, mKesh ou transferência; escreve a referência da transação). " +
+        "Aviso nos últimos 10 dias; se expirar, os agentes e clientes veem 'Sistema em manutenção' e o Administrador é levado ao ecrã da licença ao entrar.\n" +
+        "- **Poupança de Clientes**, **Lixeira**, **Controlo de Acesso**, **SMS aos clientes**, **Configurações** (tema, idioma, sino, SMS automático).\n" +
+        "- Exportar listas em PDF. A sessão termina após 5 minutos sem uso.\n" +
+        (pode("BALANCO") || pode("CAIXA") ? "- Pode analisar a situação financeira e dar recomendações com base nos indicadores do contexto.\n"
+          : "- SEGURANÇA: este Administrador NÃO tem acesso às finanças (Balanço/Caixa). Não fales de saldos, lucros nem totais da empresa.\n");
+    }
+    // As permissões exatas desta conta (o Administrador pode ter tirado algumas)
+    if (u.perfil !== "CLIENTE") {
+      const tem = CAT.filter(([c]) => pode(c)).map(([, nomeP]) => nomeP);
+      const naoTem = CAT.filter(([c]) => !pode(c)).map(([, nomeP]) => nomeP);
+      s += "\nPERMISSÕES DESTA CONTA (definidas pelo Administrador; mandam sobre a lista acima):\n" +
+        "- TEM: " + (tem.join("; ") || "nenhuma") + ".\n" +
+        "- NÃO TEM: " + (naoTem.join("; ") || "—") + ". Se perguntarem por algo destas, explica que a conta não tem essa permissão e que deve pedir ao Administrador.\n";
+    }
+    return s + "\n" + REGRAS_CREDITO;
+  }
+
+  // Dados atuais que este perfil pode ver (as listas param em 40 linhas: custo e rapidez)
+  async function dadosIA() {
+    const u = S.user, hoje = R.hojeISO();
+    let s = "Hoje é " + R.data(hoje) + ".\n";
+    const situ = (e) => R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso);
+    const modal = (e) => e.modalidade === "PARCELADO" ? "6 prestações de 5 em 5 dias" : "Prestação única aos 30 dias";
+    if (u.perfil === "CLIENTE") {
+      const [meus, pp] = await Promise.all([Dados.emprestimosDoCliente(u.clienteId), Dados.porPagarDoCliente(u.clienteId)]);
+      s += `--- OS MEUS EMPRÉSTIMOS (${meus.length}) ---\n`;
+      meus.forEach((e) => { s += `- Nº ${e.id}: capital ${R.mt(e.capital)}, total a pagar ${R.mt(e.totalAPagar)}, ${modal(e)}, pedido em ${R.data(e.dataPedido)}, situação: ${situ(e)}, já pago ${R.mt(e.jaPago)}, em falta ${R.mt(e.emFalta)}, garantia: ${e.bensGarantia || "-"}\n`; });
+      s += "--- AS MINHAS PRESTAÇÕES POR PAGAR ---\n";
+      pp.forEach((p) => { const d = R.diasAtraso(p.vencimento, hoje);
+        s += `- Empréstimo ${p.emprestimoId}, ${p.numero}ª prestação: vence ${R.data(p.vencimento)}, valor ${R.mt(p.valor)}, multa ${R.mt(R.multaPrestacao(p, hoje))}, em falta ${R.mt(R.emFalta(p, hoje))}, ${R.situacaoPrestacao(p)}${d > 0 ? " (" + d + " dias)" : ""}\n`; });
+      const pendente = meus.find((e) => e.estado === "PENDENTE");
+      s += pp.length ? "Ainda não pode pedir novo crédito: tem prestações por pagar.\n"
+        : pendente ? `Ainda não pode pedir novo crédito: já tem o pedido nº ${pendente.id} à espera de aprovação.\n` : "Pode pedir um novo crédito.\n";
+    } else if (u.perfil === "AGENTE") {
+      const [cobrar, clientes] = await Promise.all([pode("COBRANCAS") ? Dados.listarCobrancas(hoje) : [], pode("CLIENTES") ? Dados.listarClientes("") : []]);
+      if (pode("COBRANCAS")) {
+        s += `--- COBRANÇAS DE HOJE E EM ATRASO (${cobrar.length}) ---\n`;
+        cobrar.slice(0, 40).forEach((p) => { const d = R.diasAtraso(p.vencimento, hoje);
+          s += `- ${p.nomeCliente} | tel ${p.telefoneCliente || "-"} | local: ${p.localNegocio || "-"} | ${p.numero}ª prestação | vence ${R.data(p.vencimento)} | a cobrar ${R.mt(R.emFalta(p, hoje))}${d > 0 ? " | " + d + " dias de atraso" : ""}\n`; });
+        if (cobrar.length > 40) s += "... (lista truncada)\n";
       }
-    } catch (e) { ctx += "(Não foi possível carregar os números atuais.)\n"; }
-    return ctx;
+      if (pode("CLIENTES")) {
+        s += `--- CLIENTES (${clientes.length}) ---\n`;
+        clientes.slice(0, 40).forEach((c) => { s += `- ${c.nome} | tel ${c.telefone || "-"} | negócio: ${c.tipoNegocio || "-"} | local: ${c.localNegocio || "-"} | ${c.prestacoesEmAtraso > 0 ? "com prestações em atraso" : "sem atrasos"}\n`; });
+        if (clientes.length > 40) s += "... (lista truncada)\n";
+      }
+    } else {
+      const fin = pode("BALANCO") || pode("CAIXA");
+      const [porPagar, pendentes, cobrar, clientes, caixa, lic] = await Promise.all([
+        Dados.listarPorPagar(), pode("APROVACOES") ? Dados.listarPendentes() : [], pode("COBRANCAS") ? Dados.listarCobrancas(hoje) : [],
+        pode("CLIENTES") ? Dados.listarClientes("") : [], fin ? Dados.saldoCaixa() : null, Dados.licencaEstado().catch(() => null)]);
+      if (fin) {
+        let emDivida = 0, emAtraso = 0, atrasadas = 0;
+        porPagar.forEach((p) => { const f = R.emFalta(p, hoje); emDivida += f; if (R.diasAtraso(p.vencimento, hoje) > 0) { emAtraso += f; atrasadas++; } });
+        s += "--- INDICADORES ---\n" +
+          `- Saldo em caixa: ${R.mt(caixa.saldo)} (entradas ${R.mt(caixa.entradas)}, saídas ${R.mt(caixa.saidas)})\n` +
+          `- Dívida total em aberto: ${R.mt(emDivida)}; em atraso: ${R.mt(emAtraso)} (${atrasadas} prestações)\n` +
+          `- Pedidos pendentes: ${pendentes.length}\n`;
+        if (pode("BALANCO")) {
+          const ind = await Dados.balanco();
+          s += `- Capital investido: ${R.mt(ind.capitalInvestido)}; margem de lucro esperada: ${R.mt(ind.margemLucro)}\n` +
+            `- Empréstimos: ${ind.emCurso} em curso, ${ind.pagos} pagos, ${ind.pendentes} pendentes, ${ind.rejeitados} rejeitados, ${ind.cancelados} cancelados\n` +
+            `- Prestações: ${ind.prestacoesPagas} pagas, ${ind.prestacoesNoPrazo} no prazo, ${ind.prestacoesAtrasadas} em atraso\n`;
+        }
+      }
+      if (lic) s += "--- LICENÇA DO SISTEMA ---\n- " + (lic.expirada
+        ? `EXPIRADA desde ${R.data(lic.expiracao)} (agentes e clientes veem 'Sistema em manutenção'; pagar no botão Licença)`
+        : `Válida até ${R.data(lic.expiracao)} (faltam ${lic.diasRestantes} dias), plano ${lic.nomePlano}`) + "\n";
+      if (pode("APROVACOES")) {
+        s += "--- PEDIDOS PENDENTES ---\n";
+        pendentes.forEach((e) => { s += `- Nº ${e.id} ${e.nomeCliente}: ${R.mt(e.capital)}, ${modal(e)}, pedido em ${R.data(e.dataPedido)}, aprovar até ${R.data(R.limiteAprovacao(e.dataPedido))}, garantia: ${e.bensGarantia || "-"}\n`; });
+      }
+      if (pode("COBRANCAS")) {
+        s += "--- COBRANÇAS DE HOJE E EM ATRASO ---\n";
+        cobrar.slice(0, 40).forEach((p) => { const d = R.diasAtraso(p.vencimento, hoje);
+          s += `- ${p.nomeCliente} | tel ${p.telefoneCliente || "-"} | empréstimo ${p.emprestimoId} | ${p.numero}ª | vence ${R.data(p.vencimento)} | em falta ${R.mt(R.emFalta(p, hoje))}${d > 0 ? " | " + d + " dias de atraso" : ""}\n`; });
+        if (cobrar.length > 40) s += "... (lista truncada)\n";
+      }
+      if (pode("CLIENTES")) {
+        s += "--- CLIENTES ---\n";
+        clientes.slice(0, 40).forEach((c) => { s += `- ${c.nome} | tel ${c.telefone || "-"} | ${c.classificacao || "NOVO"}${fin ? " | em dívida " + R.mt(c.emDivida) : ""}${c.prestacoesEmAtraso > 0 ? " | " + c.prestacoesEmAtraso + " em atraso" : ""}\n`; });
+        if (clientes.length > 40) s += "... (lista truncada)\n";
+      }
+    }
+    return s;
+  }
+
+  async function montarContextoIA() {
+    let dados;
+    try { dados = await dadosIA(); } catch (e) { dados = "(Não foi possível carregar os dados atuais: " + (e.message || "sem ligação") + ".)\n"; }
+    return instrucoesIA() + "\n\n=== CONTEXTO (dados atuais) ===\n" + dados;
   }
 
   function markdownLeve(t) {
     return esc(t).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>").replace(/\*(.+?)\*/g, "<i>$1</i>").replace(/\n/g, "<br>");
   }
 
+  // Boas-vindas (RespostasLocais: o que se pode fazer neste painel) e perguntas rápidas, por perfil
+  function boasVindasIA() {
+    const p = S.user.perfil;
+    if (p === "CLIENTE") return "No seu painel pode:\n- Ver os seus **empréstimos** e **prestações** (toque num para ver o calendário).\n- Ver o que **deve** e as **multas**.\n- **Pedir crédito** (fica à espera do Administrador).\nPergunte, por exemplo: \"Como peço crédito?\" ou \"Como funciona a multa?\"";
+    if (p === "AGENTE") return "No seu painel pode:\n- Ver as **Cobranças** de hoje e em atraso (ligar/SMS).\n- **Registar clientes** e fazer **novos pedidos**.\n- Consultar a lista de **Clientes**.\nNão pode aprovar pedidos nem registar pagamentos.";
+    return "No painel do Administrador pode:\n- Ver o **Balanço Geral** com gráficos, **aprovar pedidos**, registar **pagamentos** e ver **Todos os empréstimos** e **Clientes**.\n- Gerir o **Fluxo de Caixa**, a **Lixeira** e os **Utilizadores** (criar agentes e definir permissões).";
+  }
+  function sugestoesIA() {
+    const p = S.user.perfil;
+    if (p === "CLIENTE") return ["Quanto devo?", "Quando vence a próxima prestação?", "Como peço crédito?", "Como funciona a multa?"];
+    if (p === "AGENTE") return ["Quem devo cobrar hoje?", "Quem está em atraso?", "Como registo um cliente?", "Escreve uma mensagem de cobrança"];
+    return ["Resumo da situação", "Que pedidos devo aprovar?", "Quem está em atraso?", "Como registo um pagamento?"];
+  }
+
   async function verAssistente() {
-    cabecalho("Assistente", "Perguntas sobre o negócio");
+    mostrar("ecra-app");
+    cabecalho("Assistente", "Ajuda para o painel do " + perfilNome(S.user.perfil));
     const c = novoConteudo();
+    if ($("fab-ia-btn")) $("fab-ia-btn").classList.add("oculto");
     c.innerHTML = `<div id="ia-chat" style="display:flex;flex-direction:column;gap:10px;margin-bottom:12px"></div>
       <div style="position:sticky;bottom:calc(var(--barra) + env(safe-area-inset-bottom));background:var(--fundo);padding:8px 0">
+        <div class="chips" id="ia-sug" style="padding-bottom:8px">${sugestoesIA().map((q) => `<button class="chip">${esc(q)}</button>`).join("")}</div>
         <div style="display:flex;gap:8px">
-          <input id="ia-in" placeholder="Escreva a sua pergunta…" style="flex:1;padding:12px 14px;border:1.5px solid var(--borda);border-radius:12px;font-size:1rem">
+          <input id="ia-in" placeholder="Escreva a sua pergunta…" style="flex:1;padding:12px 14px;border:1.5px solid var(--borda);border-radius:12px;background:var(--campo);color:var(--texto)">
           <button class="btn" id="ia-send" style="width:auto;margin:0;padding:12px 16px">${ic("enviar", 18)}</button>
         </div></div>`;
     const chat = $("ia-chat");
     const bolha = (texto, meu) => {
       const d = el(`<div style="max-width:85%;padding:11px 14px;border-radius:16px;font-size:.92rem;${meu
-        ? "align-self:flex-end;background:var(--navy);color:#fff;border-bottom-right-radius:4px"
+        ? "align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px"
         : "align-self:flex-start;background:var(--cartao);border:1px solid var(--borda);border-bottom-left-radius:4px"}">${meu ? esc(texto) : markdownLeve(texto)}</div>`);
       chat.appendChild(d); window.scrollTo(0, document.body.scrollHeight); return d;
     };
-    if (!iaHist.length) bolha("Olá! Sou o assistente do Kubatsira. Pergunte-me sobre cobranças, clientes, o balanço ou as regras do crédito.", false);
-    else iaHist.forEach((m) => bolha(m.texto, m.user));
+    bolha("Olá! Sou o **Assistente Kubatsira Microcrédito**. 👋\n\n" + boasVindasIA(), false);
+    iaHist.forEach((m) => bolha(m.texto, m.user));
 
-    let contexto = null;
-    const enviar = async () => {
-      const q = $("ia-in").value.trim();
-      if (!q) return;
+    let aPensar = false;
+    const enviar = async (texto) => {
+      const q = (texto != null ? texto : $("ia-in").value).trim();
+      if (!q || aPensar) return;
+      aPensar = true;
       $("ia-in").value = ""; $("ia-send").disabled = true;
-      bolha(q, true); iaHist.push({ user: true, texto: q });
-      const pensar = bolha("…", false);
+      bolha(q, true);
+      const pensar = bolha("⏳ A pensar…", false);
       try {
-        if (!contexto) contexto = await montarContextoIA();
-        const r = await Dados.iaPerguntar(contexto, iaHist.slice(0, -1), q);
+        // Contexto novo a cada pergunta (dados atuais) — como no Android
+        const contexto = await montarContextoIA();
+        const r = await Dados.iaPerguntar(contexto, iaHist.slice(-10), q);
         pensar.innerHTML = markdownLeve(r.texto);
-        iaHist.push({ user: false, texto: r.texto });
+        iaHist.push({ user: true, texto: q }, { user: false, texto: r.texto });
       } catch (e) { pensar.innerHTML = esc("Erro: " + e.message); }
-      $("ia-send").disabled = false; window.scrollTo(0, document.body.scrollHeight);
+      aPensar = false; $("ia-send").disabled = false; window.scrollTo(0, document.body.scrollHeight);
     };
-    $("ia-send").onclick = enviar;
+    $("ia-send").onclick = () => enviar();
     $("ia-in").onkeydown = (e) => { if (e.key === "Enter") enviar(); };
+    $("ia-sug").querySelectorAll(".chip").forEach((b) => b.onclick = () => enviar(b.textContent));
   }
-
   // ---------- Configurações (A minha conta) ----------
   // ============================================================
   // CONFIGURAÇÕES (como o ConfiguracoesActivity do Android)
@@ -2593,11 +2736,31 @@
   // ============================================================
   // PAINEL DO CLIENTE (só vê os seus próprios dados)
   // ============================================================
+  // Painel do CLIENTE (PainelClienteActivity): só os SEUS dados — o que deve, a próxima prestação,
+  // os atrasos (com a multa) e os seus empréstimos. Não aprova pedidos nem regista pagamentos.
   async function verClienteInicio() {
-    cabecalho("Olá, " + primeiroNome(S.user.nome || S.user.utilizador), "Cliente");
+    const nome = S.user.nome || S.user.utilizador;
     const c = novoConteudo();
     c.innerHTML = spinner;
+    const sinoOn = await Dados.sinoAtivo().catch(() => true);
+    if (!c.isConnected) return;
+    $("cabecalho").className = "cabecalho cab-painel";
+    $("cabecalho").innerHTML = `
+      <div class="cab-topo">
+        <div class="avatar" id="cb-avatar" style="background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
+        <div class="cab-saud"><div class="ola">${esc(saudacao())},</div><div class="data">${esc(dataExtenso())}</div></div>
+        <button class="icone" id="cb-atualizar" title="Atualizar">${icf("atualizar", 21)}</button>
+        ${sinoOn ? `<button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>` : ""}
+        <button class="icone" id="cb-sair" title="Sair">${icf("porta", 21)}</button>
+      </div>
+      <span class="pilula-perfil">Painel do Cliente</span>`;
+    pintarAvatar($("cb-avatar"), S.user.foto);
+    $("cb-atualizar").onclick = () => verClienteInicio();
+    if ($("cb-sino")) $("cb-sino").onclick = () => verNotificacoes();
+    $("cb-sair").onclick = async () => { if (await confirmar("Terminar sessão", "Quer sair da sua conta?", "Sair")) sair(); };
+    if (sinoOn) atualizarBadgeSino();
     try {
+      // Tudo é filtrado pelo id DESTE cliente: nunca se leem dados de outros clientes
       const [porPagar, meus] = await Promise.all([
         Dados.porPagarDoCliente(S.user.clienteId), Dados.emprestimosDoCliente(S.user.clienteId)]);
       const hoje = R.hojeISO();
@@ -2605,33 +2768,34 @@
       for (const p of porPagar) {
         divida += R.emFalta(p, hoje); multas += R.multaPrestacao(p, hoje);
         if (R.diasAtraso(p.vencimento, hoje) > 0) atrasadas++;
-        if (!proxima) proxima = p;
+        if (!proxima) proxima = p;   // a lista vem ordenada por vencimento
       }
       divida = R.arredondar(divida); multas = R.arredondar(multas);
-      let aviso = "";
-      if (atrasadas > 0)
-        aviso = `<div class="aviso-caixa" style="background:var(--vermelho-bg);color:var(--vermelho);border-color:#f3c6c1">${ic("alerta", 15)} Tem <b>${atrasadas} prestação(ões) em atraso</b>. A multa já vai em <b>${R.mt(multas)}</b> e aumenta 2% por dia. Pague o quanto antes.</div>`;
-      else if (proxima && proxima.vencimento === hoje)
-        aviso = `<div class="aviso-caixa">A sua <b>${proxima.numero}ª prestação vence hoje</b>: ${R.mt(R.emFalta(proxima, hoje))}.</div>`;
-      else if (divida <= 0.005)
-        aviso = `<div class="aviso-caixa" style="background:var(--verde-bg);color:var(--verde);border-color:#bfe6cf">${ic("check", 15)} Não tem dívidas. Pode pedir um novo crédito.</div>`;
-      const meusHtml = meus.length ? meus.map((e) => `<button class="item" data-eid="${e.id}">
-        <span class="avatar">${ic("credito", 20)}</span>
-        <span class="meio"><span class="nome">Empréstimo nº ${e.id} · ${R.mt(e.capital)}</span>
-          <span class="det">${e.totalPrestacoes ? e.prestacoesPagas + "/" + e.totalPrestacoes + " prestações pagas" : "Pedido em " + R.data(e.dataPedido)}</span>
-          <span class="etiqueta ${e.prestacoesEmAtraso > 0 ? "e-atraso" : e.estado === "PAGO" ? "e-ok" : e.estado === "PENDENTE" ? "e-aviso" : "e-neutro"}">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></span>
-        <span class="fim"><span class="mt">${e.emFalta > 0 ? "Falta " + R.mt(e.emFalta) : ""}</span></span></button>`).join("")
-        : vazio("credito", 'Ainda não tem empréstimos. Toque em "Pedir crédito" para fazer o primeiro pedido.');
+      const pendente = meus.find((e) => e.estado === "PENDENTE");
+      const podePedir = !porPagar.length && !pendente;
+      const kpi = (rot, txt, cor) => `<div class="kpi-card" style="--cor:${cor}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
+      const aviso = (t, cores) => `<div class="aviso-painel" style="color:${cores[0]};background:${cores[1]}">${t}</div>`;
+      let avisos = "";
+      if (atrasadas > 0) avisos = aviso(`⚠ Tem <b>${atrasadas} prestação(ões) em atraso</b>. A multa já vai em <b>${vmt(multas)}</b> e aumenta 2% por dia. Pague o quanto antes.`, CORES.vermelho);
+      else if (proxima && proxima.vencimento === hoje) avisos = aviso(`📅 A sua <b>${proxima.numero}ª prestação vence hoje</b>: ${vmt(R.emFalta(proxima, hoje))}.`, CORES.laranja);
+      else if (podePedir) avisos = aviso("✓ Não tem dívidas. Pode <b>pedir um novo crédito</b>.", CORES.verde);
+      const lista = meus.length ? meus.map((e) => {
+        const sit = R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso);
+        const prog = e.totalPrestacoes === 0 ? "Pedido em " + R.data(e.dataPedido) : `${e.prestacoesPagas}/${e.totalPrestacoes} prestações pagas`;
+        return `<div class="cl" data-eid="${e.id}">
+          <div class="cl-topo"><div class="cl-meio"><div class="cl-tit">Empréstimo nº ${e.id} · ${vmt(e.capital)}</div><div class="cl-sub">${esc(prog)}</div></div>
+            <div class="cl-fim"><div class="cl-valor" style="color:${e.emFalta > 0 ? "var(--laranja)" : "var(--texto)"}">${e.emFalta > 0 ? "Falta " + vmt(e.emFalta) : vmt(e.totalAPagar)}</div>${pilula(sit, coresSituacao(sit))}</div></div>
+          <div class="cl-det"><div>📆<span>${e.modalidade === "PARCELADO" ? "6 prestações de 5 em 5 dias" : "Prestação única aos 30 dias"}</span></div></div></div>`;
+      }).join("") : `<div class="vazio" style="padding:20px">Ainda não tem empréstimos. Toque em "Pedir crédito" para fazer o primeiro pedido.</div>`;
       c.innerHTML = `
-        <div class="kpis">
-          <div class="kpi destaque"><div class="rotulo">Em dívida</div><div class="valor">${R.mt(divida)}</div></div>
-          <div class="kpi"><div class="rotulo">Próxima prestação</div><div class="valor" style="font-size:1rem">${proxima ? R.data(proxima.vencimento) : "—"}</div></div>
-          <div class="kpi ${atrasadas > 0 ? "alerta" : ""}"><div class="rotulo">Em atraso</div><div class="valor">${atrasadas}</div></div>
-          <div class="kpi"><div class="rotulo">Empréstimos</div><div class="valor">${meus.length}</div></div>
+        <div class="kpis-scroll">
+          ${kpi("Em dívida", vmt(divida), divida > 0 ? "var(--laranja)" : "var(--verde)")}
+          ${kpi("Próxima prestação", proxima ? R.data(proxima.vencimento) : "—", proxima && R.diasAtraso(proxima.vencimento, hoje) > 0 ? "var(--vermelho)" : "var(--accent)")}
+          ${kpi("Em atraso", String(atrasadas), atrasadas > 0 ? "var(--vermelho)" : "var(--verde)")}
         </div>
-        ${aviso}
-        <div class="seccao-titulo">Os meus empréstimos</div>${meusHtml}`;
-      c.querySelectorAll("[data-eid]").forEach((b) => b.onclick = () =>
+        ${avisos}
+        <div class="seccao-titulo">Os meus empréstimos</div>${lista}`;
+      c.querySelectorAll(".cl[data-eid]").forEach((b) => b.onclick = () =>
         abrirEmprestimo(meus.find((x) => x.id == b.dataset.eid), verClienteInicio));
     } catch (e) { c.innerHTML = erroEcra(e, verClienteInicio); }
   }
@@ -2680,25 +2844,8 @@
     } catch (e) { c.innerHTML = erroEcra(e, verClientePedir); }
   }
 
-  async function verClienteMais() {
-    cabecalho("Mais", "");
-    const c = novoConteudo();
-    const op = (id, nome, t, sub) => `<button class="item" data-op="${id}"><span class="avatar" style="background:var(--fundo);color:var(--navy)">${ic(nome, 20)}</span><span class="meio"><span class="nome">${t}</span>${sub ? `<span class="det">${sub}</span>` : ""}</span></button>`;
-    const bioDisp = await Bio.disponivel(); const bioOn = Bio.ativa(S.user.id);
-    c.innerHTML = `
-      <div class="cartao" style="display:flex;align-items:center;gap:14px">
-        <div class="avatar" style="width:54px;height:54px;background:var(--navy)">${esc(R.iniciais(S.user.nome || S.user.utilizador))}</div>
-        <div><div style="font-weight:800;font-size:1.1rem">${esc(S.user.nome || S.user.utilizador)}</div>
-          <div class="det" style="color:var(--texto-suave)">Cliente · ${esc(S.user.utilizador)}</div></div>
-      </div>
-      <div class="seccao-titulo">Conta</div>
-      ${op("config", "perfil", "Configurações", "Foto, nome, senha, segurança")}
-      ${op("assistente", "assistente", "Assistente", "Perguntas sobre o seu crédito")}
-      <div class="seccao-titulo">Sistema</div>
-      ${op("sobre", "sobre", "Sobre a aplicação", "")}
-      ${op("sair", "sair", "Terminar sessão", "")}`;
-    c.querySelectorAll("[data-op]").forEach((b) => b.onclick = () => maisAcao(b.dataset.op));
-  }
+  // O Mais do cliente é o mesmo Menu (verMais escolhe as opções conforme o perfil)
+  function verClienteMais() { return verMais(); }
 
   // ---------- Exportar PDF ----------
   function carregarScript(src) {
