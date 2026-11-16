@@ -508,6 +508,7 @@
     Dados.fotoPerfil(user.id).then((f) => { S.user.foto = f || ""; const a = $("cb-avatar"); if (a && f) pintarAvatar(a, f); }).catch(() => {});
     if (S.cliente) navegar("inicio");
     else navegar(pode("BALANCO") ? "inicio" : (pode("COBRANCAS") ? "cobrancas" : "clientes"));
+    setTimeout(verificarAvisoSms, 4000);   // se já passou uma hora marcada, avisa logo ao entrar
   }
 
   function sair(motivo) {
@@ -617,12 +618,37 @@
       ${acoes ? `<div class="cab-acoes">${acoes}</div>` : ""}`;
   }
 
-  // Mostrar/ocultar valores (pede Face ID / Touch ID para mostrar, se estiver ativo)
-  async function alternarValores(depois) {
-    if (S.ocultar && Bio.ativa(S.user.id)) {
-      try { await Bio.verificar(S.user.id); }
-      catch (e) { toast("Não foi possível confirmar a identidade.", true); return; }
+  // Confirma quem está a usar o aparelho (Desbloqueio.confirmar): Face ID / impressão digital, se estiver
+  // ativa neste aparelho; senão (ou se cancelar / falhar) pede a senha da conta. Devolve true se confirmou.
+  async function confirmarIdentidade(titulo) {
+    if (Bio.ativa(S.user.id)) {
+      try { await Bio.verificar(S.user.id); return true; }
+      catch (e) { /* cancelou ou falhou: passa para a senha, como o "Usar a senha" do Android */ }
     }
+    return new Promise((res) => {
+      abrirFolha(`<h3>🔒 ${esc(titulo || "Mostrar os valores")}</h3>
+        <p class="sub">Para ver os valores, escreva a senha da sua conta.</p>
+        <div class="campo"><label>Senha</label><input id="dz-senha" type="password" autocomplete="current-password"></div>
+        <div class="erro-msg" id="dz-erro"></div>
+        <div class="btn-linha"><button class="btn secundario" id="dz-nao">Cancelar</button><button class="btn" id="dz-sim">Mostrar</button></div>`);
+      setTimeout(() => { if ($("dz-senha")) $("dz-senha").focus(); }, 200);
+      const ok = async () => {
+        $("dz-sim").disabled = true;
+        try {
+          if (await Dados.senhaCorreta(S.user.id, $("dz-senha").value)) { fecharFolha(); res(true); return; }
+          $("dz-erro").textContent = "A senha não está certa. Os valores continuam ocultos.";
+        } catch (e) { $("dz-erro").textContent = e.message || "Sem ligação."; }
+        $("dz-sim").disabled = false; $("dz-senha").value = "";
+      };
+      $("dz-sim").onclick = ok;
+      $("dz-senha").onkeydown = (e) => { if (e.key === "Enter") ok(); };
+      $("dz-nao").onclick = () => { fecharFolha(); res(false); };
+    });
+  }
+
+  // Mostrar/ocultar valores: ocultar é imediato; mostrar pede a identidade (como no Android)
+  async function alternarValores(depois) {
+    if (S.ocultar && !(await confirmarIdentidade("Mostrar os valores"))) return;
     S.ocultar = !S.ocultar;
     (depois || (() => navegar(S.ecra)))();
   }
@@ -742,7 +768,7 @@
   }
 
   // Barras verticais com eixos e o valor por cima (Cobranças previstas). mapa = Map(rótulo -> valor)
-  function svgBarrasVert(mapa) {
+  function svgBarrasVert(mapa, corDe) {
     const W = 340, H = 210, x0 = 46, x1 = W - 8, yTopo = 14, yBase = H - 26;
     const itens = [...mapa.entries()];
     const max = Math.max(1, ...itens.map(([, v]) => v));
@@ -754,7 +780,7 @@
       const gx = x0 + i * gw + gw / 2;
       if (v > 0) {
         const yy = g.y(v);
-        barras += `<rect x="${(gx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(yBase - yy).toFixed(1)}" rx="1.5" style="fill:${i === 0 ? "var(--vermelho)" : "var(--roxo)"}"/>` +
+        barras += `<rect x="${(gx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(yBase - yy).toFixed(1)}" rx="1.5" style="fill:${corDe ? corDe(i, rot) : i === 0 ? "var(--vermelho)" : "var(--roxo)"}"/>` +
           `<text x="${gx.toFixed(1)}" y="${(yy - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" style="fill:var(--texto-suave)">${numCurto(v)}</text>`;
       }
       rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" style="fill:var(--texto-suave)">${esc(rot)}</text>`;
@@ -998,7 +1024,15 @@
       if ($("bg-pdf")) $("bg-pdf").onclick = () => exportarPDF("Balanço Geral", ["Indicador", "Valor"],
         cartoes.map(([t, v]) => [t, R.mt(v)]).concat([
           ["Prestações pagas / no prazo / em atraso", ind.prestacoesPagas + " / " + ind.prestacoesNoPrazo + " / " + ind.prestacoesAtrasadas],
-          ["Empréstimos em curso / pagos / pendentes", ind.emCurso + " / " + ind.pagos + " / " + ind.pendentes]]), []);
+          ["Empréstimos em curso / pagos / pendentes", ind.emCurso + " / " + ind.pagos + " / " + ind.pendentes]]), [], [
+          graficoPdf("Entradas vs Saídas (6 meses)", svgBarrasAgrupadas(es), [{ rot: "Entradas", cor: "var(--verde)" }, { rot: "Empréstimos", cor: "var(--roxo)" }, { rot: "Despesas", cor: "var(--vermelho)" }]),
+          graficoPdf("Evolução do saldo (30 dias)", svgLinha(ev)),
+          roscaPdf("Situação das prestações", [{ rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "var(--verde)" },
+            { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "var(--accent)" }, { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "var(--vermelho)" }], "prestações"),
+          graficoPdf("Cobranças previstas", svgBarrasVert(cob)),
+          roscaPdf("Empréstimos por estado", estados, "empréstimos"),
+          barrasHPdf("Top 5 clientes", top),
+        ]);
     } catch (e) { c.innerHTML = erroEcra(e, verBalanco); }
   }
 
@@ -1083,8 +1117,30 @@
       ["Cliente", "Prest.", "Vencimento", "Atraso", cobSit === 3 ? "Pago (MT)" : "Em falta (MT)"],
       lista.map((p) => [p.nomeCliente, p.numero + "ª", R.data(p.vencimento), (p.estado === "PAGO" ? 0 : R.diasAtraso(p.vencimento, hoje)) + "d",
         R.mt(p.estado === "PAGO" ? p.valorPago : R.emFalta(p, hoje))]),
-      ["Total: " + R.mt(lista.reduce((s, p) => s + (p.estado === "PAGO" ? p.valorPago : R.emFalta(p, hoje)), 0))]);
+      ["Total: " + R.mt(lista.reduce((s, p) => s + (p.estado === "PAGO" ? p.valorPago : R.emFalta(p, hoje)), 0))],
+      graficosCobrancas(lista, hoje));
     carregar();
+  }
+
+  // Gráficos do PDF das prestações (ListaActivity.graficosDaLista, modo COBRANCAS)
+  function graficosCobrancas(lista, hoje) {
+    if (!lista.length) return [];
+    if (cobSit === 3) {
+      // Pagas: quanto se recebeu em cada dia (os 10 dias mais recentes)
+      const porDia = new Map();
+      lista.forEach((p) => { const d = p.dataPagamento || ""; if (d) porDia.set(d, (porDia.get(d) || 0) + p.valorPago); });
+      const dias = [...porDia.keys()].sort().slice(-10);
+      return [graficoPdf("Recebido por dia", svgBarrasVert(new Map(dias.map((d) => [R.data(d).slice(0, 5), porDia.get(d)])), () => "var(--verde)"))];
+    }
+    let noPrazo = 0, atraso = 0; const faixas = [0, 0, 0, 0];   // no prazo, 1-7, 8-30, mais de 30 dias
+    lista.forEach((p) => {
+      const d = R.diasAtraso(p.vencimento, hoje), v = R.emFalta(p, hoje);
+      if (d === 0) { noPrazo++; faixas[0] += v; } else { atraso++; faixas[d <= 7 ? 1 : d <= 30 ? 2 : 3] += v; }
+    });
+    return [
+      roscaPdf("Situação das prestações", [{ rotulo: "No prazo", valor: noPrazo, cor: "var(--accent)" }, { rotulo: "Em atraso", valor: atraso, cor: "var(--vermelho)" }], "prestações"),
+      graficoPdf("Valor a cobrar por atraso", svgBarrasVert(new Map([["No prazo", faixas[0]], ["1-7 dias", faixas[1]], ["8-30 dias", faixas[2]], ["+30 dias", faixas[3]]]), () => "var(--roxo)")),
+    ];
   }
 
   // Folha de uma prestação (detalhe + registar pagamento)
@@ -1232,7 +1288,17 @@
     if ($("cl-pdf")) $("cl-pdf").onclick = () => exportarPDF("Clientes — " + SIT_CLIENTE[cliSit],
       ["Nome", "Telefone", "Local", "Empr.", "Dívida (MT)"],
       lista.map((cl) => [cl.nome, cl.telefone || "", cl.localNegocio || "", String(cl.emprestimos), R.mt(cl.emDivida)]),
-      ["Total de clientes: " + lista.length]);
+      ["Total de clientes: " + lista.length], () => {
+        if (!lista.length) return [];
+        const porClasse = new Map();
+        lista.forEach((cl) => { const k = (cl.classificacao || "NOVO").replace(/\s*\(.*$/, ""); porClasse.set(k, (porClasse.get(k) || 0) + 1); });
+        const paleta = ["var(--verde)", "var(--accent)", "var(--laranja)", "var(--roxo)", "var(--vermelho)", "#19969F", "#5A6E8C"];
+        const atraso = lista.filter((cl) => cl.prestacoesEmAtraso > 0).length;
+        return [
+          roscaPdf("Clientes por classe", [...porClasse.entries()].map(([k, v], i) => ({ rotulo: k, valor: v, cor: paleta[i % paleta.length] })), "clientes"),
+          roscaPdf("Clientes com prestações em atraso", [{ rotulo: "Em dia", valor: lista.length - atraso, cor: "var(--verde)" }, { rotulo: "Com atrasos", valor: atraso, cor: "var(--vermelho)" }], "clientes"),
+        ];
+      });
     carregar("");
     $("cl-f").oninput = (e) => { clearTimeout(timer); const v = e.target.value; timer = setTimeout(() => carregar(v), 350); };
   }
@@ -1353,7 +1419,19 @@
     if ($("emp-pdf")) $("emp-pdf").onclick = () => exportarPDF("Empréstimos",
       ["#", "Cliente", "Capital (MT)", "Situação", "Em falta (MT)"],
       fonte.map((e) => [String(e.id), e.nomeCliente, R.mt(e.capital), R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso), e.emFalta > 0 ? R.mt(e.emFalta) : "—"]),
-      ["Total: " + fonte.length + " empréstimo(s)"]);
+      ["Total: " + fonte.length + " empréstimo(s)"], () => {
+        if (!fonte.length) return [];
+        if (ativa === "pendentes")
+          return [barrasHPdf("Capital pedido por cliente", fonte.slice(0, 8).map((e) => ({ nome: e.nomeCliente, total: e.capital })))];
+        const porSit = new Map();
+        fonte.forEach((e) => { const s = R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso); porSit.set(s, (porSit.get(s) || 0) + 1); });
+        const cap = fonte.reduce((s, e) => s + e.capital, 0), pago = fonte.reduce((s, e) => s + (e.jaPago || 0), 0), falta = fonte.reduce((s, e) => s + e.emFalta, 0);
+        return [
+          roscaPdf("Empréstimos por situação", [...porSit.entries()].map(([k, v]) => ({ rotulo: k, valor: v, cor: coresSituacao(k)[0] })), "empréstimos"),
+          graficoPdf("Capital, pago e em falta", svgBarrasVert(new Map([["Capital", cap], ["Já pago", pago], ["Em falta", falta]]),
+            (i) => ["var(--accent)", "var(--verde)", "var(--vermelho)"][i])),
+        ];
+      });
     const carregar = async () => {
       $("emp-lista").innerHTML = spinner;
       try {
@@ -1804,7 +1882,21 @@
       if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa — " + periodos[cxPer][0],
         ["Data", "Tipo", "Categoria", "Descrição", "Valor (MT)"],
         naLista.map((m) => [R.dataHora(m.dataMovimento), m.tipo, movCurto(m), m.justificativa || "", (m.tipo === "ENTRADA" ? "+" : "-") + R.mt(m.valor)]),
-        [`Saldo: ${R.mt(s.saldo)}  |  Entradas: ${R.mt(s.entradas)}  |  Saídas: ${R.mt(s.saidas)}`]);
+        [`Saldo: ${R.mt(s.saldo)}  |  Entradas: ${R.mt(s.entradas)}  |  Saídas: ${R.mt(s.saidas)}`], async () => {
+          let prest = 0, outras = 0, desemb = 0, desp = 0;
+          naLista.forEach((m) => {
+            if (m.tipo === "ENTRADA") { if (m.categoria === "PRESTACAO") prest += m.valor; else outras += m.valor; }
+            else if (m.categoria === "DESEMBOLSO") desemb += m.valor; else desp += m.valor;
+          });
+          const es = await Dados.graficoEntradasSaidas();
+          return [
+            graficoPdf("Evolução do saldo (30 dias)", svgLinha(ev)),
+            graficoPdf("Entradas vs Saídas (6 meses)", svgBarrasAgrupadas(es), [{ rot: "Entradas", cor: "var(--verde)" }, { rot: "Empréstimos", cor: "var(--roxo)" }, { rot: "Despesas", cor: "var(--vermelho)" }]),
+            prest + outras + desemb + desp > 0 ? roscaPdf("Movimentos desta lista", [{ rotulo: "Prestações", valor: prest, cor: "var(--verde)" },
+              { rotulo: "Outras entradas", valor: outras, cor: "var(--accent)" }, { rotulo: "Empréstimos", valor: desemb, cor: "var(--roxo)" },
+              { rotulo: "Despesas", valor: desp, cor: "var(--vermelho)" }], "MT") : null,
+          ];
+        });
     } catch (e) { c.innerHTML = erroEcra(e, verCaixa); }
   }
 
@@ -2073,7 +2165,7 @@
     c.innerHTML = spinner;
     // No iPhone não há envio automático: abre a app Mensagens já preenchida, um cliente de cada vez
     const btnTodos = pode("COBRANCAS") ? `<button class="btn" id="sms-todos" style="margin-bottom:14px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>` : "";
-    const ligar = () => { if ($("sms-todos")) $("sms-todos").onclick = cobrarTodos; };
+    const ligar = () => { if ($("sms-todos")) $("sms-todos").onclick = () => cobrarTodos(); };
     try {
       const lista = pode("SMS_VER") ? await Dados.smsEnviadosListar() : [];
       if (lista === null) { c.innerHTML = btnTodos + vazio("sms", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); ligar(); return; }
@@ -2882,24 +2974,72 @@
     return t;
   }
 
+  // ---------- Aviso das mensagens de cobrança nas horas marcadas (08:00, 12:00, 14:00) ----------
+  // No iPhone um site não pode enviar SMS sozinho: na hora marcada a app avisa e o utilizador envia com
+  // 1 toque por cliente. Não avisa se o SMS automático (pela Internet) estiver ligado — esse envia sozinho.
+  const HORAS_SMS = [8, 12, 14];
+  const turnoAtual = () => { const h = new Date().getHours(); return [...HORAS_SMS].reverse().find((x) => h >= x) || 0; };
+  let smsAutoCache = { quando: 0, ligado: false }, avisoAberto = false;
+  async function verificarAvisoSms() {
+    if (!S.user || S.cliente || !pode("COBRANCAS") || avisoAberto) return;
+    if ($("fundo-escuro").classList.contains("aberto")) return;   // não interrompe uma folha aberta
+    const turno = turnoAtual(); if (!turno) return;
+    const hoje = R.hojeISO();
+    const chave = `kub_aviso_sms_${S.user.id}_${hoje}_${turno}`;
+    try { if (localStorage.getItem(chave)) return; } catch (e) {}
+    try {
+      if (Date.now() - smsAutoCache.quando > 10 * 60 * 1000) smsAutoCache = { quando: Date.now(), ligado: await Dados.smsAutomaticoAtivo() };
+      if (smsAutoCache.ligado) return;
+      const [cobr, ja] = await Promise.all([Dados.listarCobrancas(hoje), Dados.smsJaEnviados(hoje, turno)]);
+      const clientes = new Set(cobr.filter((p) => p.telefoneCliente && !ja.has(p.clienteId)).map((p) => p.clienteId));
+      try { localStorage.setItem(chave, "1"); } catch (e) {}
+      if (!clientes.size || !S.user) return;
+      const hora = String(turno).padStart(2, "0") + ":00";
+      // Se a app estiver aberta mas noutro separador/fundo: notificação do sistema (se autorizada)
+      if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+        try { const reg = await navigator.serviceWorker.getRegistration();
+          const txt = { body: `${clientes.size} cliente(s) para avisar. Toque para enviar.`, icon: "icons/icon-192.png", tag: "kub-sms-" + turno };
+          if (reg) reg.showNotification("Kubatsira · Mensagens das " + hora, txt); else new Notification("Kubatsira · Mensagens das " + hora, txt);
+        } catch (e) {}
+      }
+      avisoAberto = true;
+      abrirFolha(`<h3>📱 Mensagens de cobrança das ${hora}</h3>
+        <p class="sub">Há <b>${clientes.size} cliente(s)</b> com prestações a vencer hoje ou em atraso por avisar.</p>
+        <div class="aviso-painel" style="color:var(--laranja);background:var(--laranja-bg)">${ehApple()
+          ? "No iPhone as mensagens <b>não saem sozinhas</b>: toque em <b>Enviar</b> e, na app Mensagens, carregue em <b>Enviar</b> — um cliente de cada vez."
+          : "Neste aparelho as mensagens <b>não saem sozinhas</b>: toque em <b>Enviar</b> e, na app de mensagens, confirme o envio — um cliente de cada vez."}</div>
+        <button class="btn btn-verde" id="av-env">💬 Enviar agora</button>
+        <button class="btn secundario" id="av-dep" style="margin-top:10px">Mais tarde</button>`);
+      $("av-env").onclick = () => {
+        avisoAberto = false; fecharFolha();
+        if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+        cobrarTodos(turno);
+      };
+      $("av-dep").onclick = () => { avisoAberto = false; fecharFolha(); toast("Pode enviar depois em Mais › SMS aos clientes."); };
+    } catch (e) { /* sem rede: tenta outra vez no minuto seguinte */ try { localStorage.removeItem(chave); } catch (e2) {} }
+  }
+  setInterval(verificarAvisoSms, 60 * 1000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) setTimeout(verificarAvisoSms, 1500); });
+
   // Fluxo "Enviar SMS a todos": percorre os clientes com cobranças, um a um (1 toque por cliente).
-  async function cobrarTodos() {
+  async function cobrarTodos(turno) {
     toast("A preparar as cobranças…");
     const hoje = R.hojeISO();
-    let cobr, todas;
-    try { cobr = await Dados.listarCobrancas(hoje); todas = await Dados.listarPorPagar(); }
+    if (turno == null) turno = turnoAtual() || 0;   // 8, 12, 14 (ou 0 = fora do horário)
+    let cobr, todas, jaEnviados;
+    try { [cobr, todas, jaEnviados] = await Promise.all([Dados.listarCobrancas(hoje), Dados.listarPorPagar(), Dados.smsJaEnviados(hoje, turno)]); }
     catch (e) { toast(e.message, true); return; }
     const divida = {}; todas.forEach((p) => divida[p.clienteId] = (divida[p.clienteId] || 0) + R.emFalta(p, hoje));
     const grupos = {}; cobr.forEach((p) => { (grupos[p.clienteId] = grupos[p.clienteId] || []).push(p); });
-    const lista = Object.keys(grupos).map((cid) => {
+    const lista = Object.keys(grupos).filter((cid) => !jaEnviados.has(Number(cid))).map((cid) => {
       const ps = grupos[cid];
-      return { nome: ps[0].nomeCliente, tel: ps[0].telefoneCliente,
+      return { clienteId: Number(cid), nome: ps[0].nomeCliente, tel: ps[0].telefoneCliente,
         texto: mensagemCobrancaGrupo(ps, divida[cid] || 0),
         total: ps.reduce((s, p) => s + R.emFalta(p, hoje), 0) };
     });
     const semTel = lista.filter((x) => !x.tel).length;
     const comTel = lista.filter((x) => x.tel);
-    if (!comTel.length) { toast("Não há clientes com telefone para cobrar.", true); return; }
+    if (!comTel.length) { toast(jaEnviados.size ? "Todos os clientes deste horário já receberam a mensagem." : "Não há clientes com telefone para cobrar.", !jaEnviados.size); return; }
     let i = 0;
     const render = () => {
       if (i >= comTel.length) {
@@ -2917,7 +3057,10 @@
           <button class="btn secundario" id="ct-salta">Saltar</button>
           <button class="btn secundario" id="ct-fim">Terminar</button>
         </div>`);
-      $("ct-env").onclick = () => { abrirSMS(x.tel, x.texto, x.nome); i++; setTimeout(render, 500); };
+      $("ct-env").onclick = () => {
+        Dados.registarSmsManual(hoje, turno, x.clienteId, x.nome, x.tel, x.total, x.texto, S.user.utilizador);
+        abrirSMS(x.tel, x.texto, x.nome); i++; setTimeout(render, 500);
+      };
       $("ct-salta").onclick = () => { i++; render(); };
       $("ct-fim").onclick = fecharFolha;
     };
@@ -3107,21 +3250,122 @@
     });
   }
 
-  async function exportarPDF(titulo, colunas, linhas, notas) {
+  // ---------- Gráficos para o PDF (ExportadorPdf.GraficoPdf) ----------
+  // Cores do tema CLARO: o relatório é sempre em fundo branco, mesmo com o tema escuro ligado
+  const CORES_PDF = { "--verde": "#1e9a55", "--roxo": "#6e3cb4", "--vermelho": "#c62828", "--accent": "#2f80ed", "--laranja": "#b26a00",
+    "--texto": "#1c2430", "--texto-suave": "#6e7887", "--borda": "#e6eaf0", "--cinzento-claro": "#eef1f5", "--fundo": "#f2f4f8" };
+  const soSvg = (html) => { const m = /<svg[\s\S]*<\/svg>/.exec(html); return m ? m[0] : html; };
+  // Gráfico com a legenda por cima (as legendas do ecrã são HTML; no PDF tudo tem de ser SVG)
+  function graficoPdf(titulo, svg, legenda) {
+    const interno = soSvg(svg);
+    const vb = (/viewBox="0 0 (\d+(?:\.\d+)?) (\d+(?:\.\d+)?)"/.exec(interno) || [0, 340, 200]).slice(1).map(Number);
+    const alt = legenda && legenda.length ? 24 : 0;
+    let x = 8;
+    const leg = (legenda || []).map((l) => {
+      const g = `<circle cx="${x + 5}" cy="12" r="5" fill="${l.cor}"/><text x="${x + 14}" y="16" font-size="11" fill="#6e7887">${esc(l.rot)}</text>`;
+      x += 24 + l.rot.length * 6.2; return g;
+    }).join("");
+    const corpo = interno.replace(/<svg[^>]*>/, `<svg x="0" y="${alt}" width="${vb[0]}" height="${vb[1]}" viewBox="0 0 ${vb[0]} ${vb[1]}">`);
+    return { titulo, largura: vb[0], altura: vb[1] + alt,
+      svg: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${vb[0]} ${vb[1] + alt}" width="${vb[0]}" height="${vb[1] + alt}" font-family="Helvetica, Arial, sans-serif">${leg}${corpo}</svg>` };
+  }
+  // Rosca para o PDF (com a legenda "Pagas · 50 · 56%" desenhada em SVG)
+  function roscaPdf(titulo, segs, centro) {
+    const total = segs.reduce((s, x) => s + x.valor, 0) || 1;
+    const r = 58, cx = 80, cy = 90, C = 2 * Math.PI * r;
+    let off = 0;
+    const aneis = segs.filter((s) => s.valor > 0).map((s) => {
+      const len = (s.valor / total) * C;
+      const a = `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${s.cor}" stroke-width="22" stroke-dasharray="${len.toFixed(2)} ${(C - len).toFixed(2)}" stroke-dashoffset="${(-off).toFixed(2)}" transform="rotate(-90 ${cx} ${cy})"/>`;
+      off += len; return a;
+    }).join("");
+    const leg = segs.map((s, i) => `<circle cx="180" cy="${40 + i * 34}" r="6" fill="${s.cor}"/>
+      <text x="192" y="${44 + i * 34}" font-size="13" fill="#1c2430">${esc(s.rotulo)}</text>
+      <text x="192" y="${59 + i * 34}" font-size="11" fill="#6e7887">${numCurto(s.valor)} · ${Math.round((s.valor / total) * 100)}%</text>`).join("");
+    const soma = segs.reduce((s, x) => s + x.valor, 0);
+    return graficoPdf(titulo, `<svg viewBox="0 0 340 180"><circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#eef1f5" stroke-width="22"/>${aneis}
+      <text x="${cx}" y="${cy + 4}" text-anchor="middle" font-size="22" font-weight="bold" fill="#1c2430">${numCurto(soma)}</text>
+      <text x="${cx}" y="${cy + 20}" text-anchor="middle" font-size="10" fill="#6e7887">${esc(centro)}</text>${leg}</svg>`);
+  }
+  // Barras horizontais para o PDF (Top 5 clientes, capital pedido por cliente)
+  function barrasHPdf(titulo, lista) {
+    const max = Math.max(1, ...lista.map((x) => x.total));
+    const linhas = lista.slice(0, 8).map((x, i) => {
+      const y = 14 + i * 24, w = Math.max(2, (x.total / max) * 170);
+      return `<text x="8" y="${y + 13}" font-size="11" fill="#1c2430">${esc((x.nome || "").slice(0, 22))}</text>
+        <rect x="140" y="${y}" width="${w.toFixed(1)}" height="17" rx="3" fill="#2f80ed"/>
+        <text x="${(140 + w + 5).toFixed(1)}" y="${y + 13}" font-size="10" fill="#6e7887">${numCurto(x.total)}</text>`;
+    }).join("");
+    return graficoPdf(titulo, `<svg viewBox="0 0 340 ${Math.max(60, 20 + Math.min(8, lista.length) * 24)}">${linhas}</svg>`);
+  }
+  // SVG -> PNG (para o jsPDF), com as cores do tema claro
+  function svgParaPng(g) {
+    const svg = g.svg.replace(/var\((--[a-z-]+)\)/g, (m, v) => CORES_PDF[v] || "#1c2430");
+    return new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => {
+        // 2× chega para imprimir bem; JPEG deixa o PDF leve (para mandar por WhatsApp / e-mail)
+        const esc2 = 2, cv = document.createElement("canvas");
+        cv.width = g.largura * esc2; cv.height = g.altura * esc2;
+        const ctx = cv.getContext("2d");
+        ctx.fillStyle = "#ffffff"; ctx.fillRect(0, 0, cv.width, cv.height);
+        ctx.drawImage(img, 0, 0, cv.width, cv.height);
+        res(cv.toDataURL("image/jpeg", 0.88));
+      };
+      img.onerror = () => rej(new Error("Não foi possível desenhar um gráfico."));
+      img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg);
+    });
+  }
+
+  // graficos: lista de graficoPdf/roscaPdf/barrasHPdf (ou uma função async que a devolve)
+  async function exportarPDF(titulo, colunas, linhas, notas, graficos) {
+    // O PDF leva os valores reais: com os valores ocultos, pede primeiro a identidade (como no Android)
+    if (S.ocultar && !(await confirmarIdentidade("Exportar o relatório"))) return;
     toast("A preparar o PDF…");
+    // A letra do PDF (Helvetica) não tem setas nem emojis: troca-os para não sair texto estragado.
+    // E, como na app, tudo segue o idioma escolhido (os nomes e valores não mudam).
+    const limpo = (s) => Idioma.T(String(s == null ? "" : s)).replace(/[↓↑→←]\s?/g, "").replace(/−/g, "-")
+      .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, "").trim();
+    titulo = limpo(titulo); colunas = colunas.map(limpo); linhas = linhas.map((l) => l.map(limpo)); notas = (notas || []).map(limpo);
     try {
       await carregarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js");
       await carregarScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js");
       const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
+      const doc = new jsPDF({ compress: true });
       doc.setFillColor(31, 58, 95); doc.rect(0, 0, 210, 24, "F");
       doc.setTextColor(255, 255, 255); doc.setFontSize(15); doc.setFont(undefined, "bold");
       doc.text("Kubatsira Microcrédito", 14, 11);
       doc.setFontSize(10); doc.setFont(undefined, "normal");
       doc.text(titulo, 14, 18);
-      doc.setTextColor(90, 90, 90); doc.setFontSize(9);
-      doc.text("Gerado em " + R.data(R.hojeISO()) + " · " + (S.user.nome || S.user.utilizador), 196, 18, { align: "right" });
+      doc.setTextColor(200, 215, 235); doc.setFontSize(9);
+      doc.text(limpo("Gerado em " + R.data(R.hojeISO())) + " · " + (S.user.nome || S.user.utilizador), 196, 18, { align: "right" });
       let y = 30;
+      // Gráficos: dois por linha, em cartões com título, logo a seguir ao cabeçalho
+      let lista = typeof graficos === "function" ? await graficos() : (graficos || []);
+      lista = lista.filter(Boolean);
+      if (lista.length) {
+        const larg = (210 - 28 - 6) / 2;
+        let linhaAlt = 0;
+        for (let i = 0; i < lista.length; i++) {
+          const g = lista[i], col = i % 2;
+          const imgAlt = larg * (g.altura / g.largura) * 0.92;
+          const cartaoAlt = imgAlt + 12;
+          if (col === 0) {
+            if (i > 0) y += linhaAlt + 5;
+            linhaAlt = 0;
+            if (y + cartaoAlt > 285) { doc.addPage(); y = 14; }
+          }
+          linhaAlt = Math.max(linhaAlt, cartaoAlt);
+          const x = 14 + col * (larg + 6);
+          doc.setDrawColor(221, 226, 234); doc.roundedRect(x, y, larg, cartaoAlt, 2, 2, "S");
+          doc.setTextColor(28, 36, 48); doc.setFontSize(9.5); doc.setFont(undefined, "bold");
+          doc.text(limpo(g.titulo), x + 3, y + 6);
+          doc.setFont(undefined, "normal");
+          try { doc.addImage(await svgParaPng(g), "JPEG", x + larg * 0.04, y + 9, larg * 0.92, imgAlt, undefined, "FAST"); } catch (e) {}
+        }
+        y += linhaAlt + 8;
+        if (y > 250) { doc.addPage(); y = 14; }
+      }
       (notas || []).forEach((n) => { doc.setTextColor(40, 40, 40); doc.setFontSize(10); doc.text(String(n), 14, y); y += 6; });
       doc.autoTable({
         head: [colunas], body: linhas, startY: y + 2, styles: { fontSize: 8, cellPadding: 2 },

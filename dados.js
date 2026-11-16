@@ -74,6 +74,29 @@ const Dados = (() => {
     } catch (e) {}
   }
 
+  // A senha está certa? (Desbloqueio: mostrar valores, exportar PDF) — não altera nada na base
+  async function senhaCorreta(id, senha) {
+    if (!senha) return false;
+    const h = await Regras.hash(senha);
+    return (await DB.consultar("SELECT 1 FROM usuarios WHERE id = ? AND senha_hash = ?", [id, h])).length > 0;
+  }
+
+  // ---------- SMS enviados à mão (iPhone): ficam na mesma tabela do envio automático ----------
+  // Turno = hora do horário (8, 12, 14), como na app; a regra UNIQUE (dia, turno, cliente) evita repetir.
+  async function smsJaEnviados(diaISO, turno) {
+    try {
+      return new Set((await DB.consultar("SELECT cliente_id FROM sms_cobranca WHERE dia = ?::date AND turno = ?::smallint", [diaISO, turno]))
+        .map((r) => Number(r.cliente_id)));
+    } catch (e) { return new Set(); }
+  }
+  async function registarSmsManual(diaISO, turno, clienteId, nome, telefone, valor, texto, quem) {
+    try {
+      await DB.executar("INSERT INTO sms_cobranca (dia, turno, cliente_id, nome, telefone, valor, texto, enviado_em, enviado_por, automatico) " +
+        "VALUES (?::date, ?::smallint, ?::int, ?, ?, ?::numeric, ?, ?::timestamp, ?, FALSE) ON CONFLICT (dia, turno, cliente_id) DO NOTHING",
+        [diaISO, turno, clienteId, nome, telefone, Regras.arredondar(valor), texto, Regras.agoraLocal(), quem]);
+    } catch (e) { /* tabela antiga: não impede o envio */ }
+  }
+
   // A conta ligada ao Face ID / impressão digital deste aparelho (a identidade já foi confirmada pelo aparelho)
   async function obterUtilizador(id) {
     const rows = await DB.consultar(SELECT_USER + "WHERE u.id = ?", [id]);
@@ -1243,7 +1266,7 @@ const Dados = (() => {
   }
 
   return {
-    autenticar, obterUtilizador, idAdminPrincipal, registarAcesso, avisarEntradaBloqueada, balanco, cobrancasPrevistas, topClientes,
+    autenticar, obterUtilizador, idAdminPrincipal, registarAcesso, senhaCorreta, smsJaEnviados, registarSmsManual, avisarEntradaBloqueada, balanco, cobrancasPrevistas, topClientes,
     graficoEntradasSaidas, graficoEvolucaoCaixa,
     listarClientes, listarEmprestimos, listarPorPagar, listarCobrancas, listarPorEmprestimo, listarPagas,
     movimentosPeriodo,

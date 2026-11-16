@@ -2,7 +2,7 @@
  * Service worker: guarda a "casca" da app (HTML/CSS/JS/ícones) para abrir depressa e offline.
  * Os dados (consultas à Neon) NUNCA são guardados aqui — vão sempre à base de dados pela rede.
  */
-const CACHE = "kubatsira-v26";
+const CACHE = "kubatsira-v27";
 const CASCA = [
   "./", "./index.html", "./styles.css", "./dicionario.js", "./idioma.js", "./regras.js", "./db.js", "./dados.js", "./app.js",
   "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png",
@@ -18,6 +18,15 @@ self.addEventListener("activate", (e) => {
     caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim())
   );
+});
+
+// Tocar no aviso das mensagens de cobrança abre (ou traz para a frente) a app
+self.addEventListener("notificationclick", (e) => {
+  e.notification.close();
+  e.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((cs) => {
+    for (const c of cs) if ("focus" in c) return c.focus();
+    return self.clients.openWindow("./");
+  }));
 });
 
 self.addEventListener("fetch", (e) => {
