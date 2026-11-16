@@ -824,6 +824,8 @@
       </div>
       <span class="pilula-perfil">Painel do ${esc(perfilNome(S.user.perfil))}</span>`;
     pintarAvatar($("cb-avatar"), S.user.foto);
+    $("cb-avatar").title = "A minha conta"; $("cb-avatar").style.cursor = "pointer";
+    $("cb-avatar").onclick = () => verConfiguracoes();   // tocar na foto abre as Configurações da conta
     $("cb-atualizar").onclick = () => verInicio();
     if ($("cb-sino")) $("cb-sino").onclick = () => verNotificacoes();
     $("cb-sair").onclick = async () => { if (await confirmar("Terminar sessão", "Quer sair da sua conta?", "Sair")) sair(); };
@@ -3148,6 +3150,8 @@
       </div>
       <span class="pilula-perfil">Painel do Cliente</span>`;
     pintarAvatar($("cb-avatar"), S.user.foto);
+    $("cb-avatar").title = "A minha conta"; $("cb-avatar").style.cursor = "pointer";
+    $("cb-avatar").onclick = () => verConfiguracoes();   // tocar na foto abre as Configurações da conta
     $("cb-atualizar").onclick = () => verClienteInicio();
     if ($("cb-sino")) $("cb-sino").onclick = () => verNotificacoes();
     $("cb-sair").onclick = async () => { if (await confirmar("Terminar sessão", "Quer sair da sua conta?", "Sair")) sair(); };
