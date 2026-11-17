@@ -107,6 +107,13 @@ const Dados = (() => {
   }
 
   // A conta ligada ao Face ID / impressão digital deste aparelho (a identidade já foi confirmada pelo aparelho)
+  // Assinatura da sessão guardada no aparelho (para não voltar ao login ao atualizar a página).
+  // Depende da senha: se a senha mudar, a sessão guardada deixa de valer. (senha_hash nunca vai para a cache)
+  async function assinaturaSessao(id) {
+    const r = await DB.consultar("SELECT senha_hash FROM usuarios WHERE id = ?", [id]);
+    return r.length && r[0].senha_hash ? Regras.hash(id + "|" + r[0].senha_hash + "|sessao-web") : "";
+  }
+
   async function obterUtilizador(id) {
     const rows = await DB.consultar(SELECT_USER + "WHERE u.id = ?", [id]);
     return rows.length ? lerUser(rows[0]) : null;
@@ -1524,7 +1531,7 @@ const Dados = (() => {
     PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
     poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar, lixoPreverAnulacao, lixoAnularPagamento, ehPagamento,
-    enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico, smsEnfileirarRecado,
+    enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico, smsEnfileirarRecado, assinaturaSessao,
     balancoEmprestimosPeriodo, caixaPeriodo, graficoEntradasSaidasPeriodo, graficoEvolucaoCaixaPeriodo, topClientesPeriodo, ultimosMovimentosPeriodo,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, acessosApagar, movimentosDoDia, smsEnviadosListar,

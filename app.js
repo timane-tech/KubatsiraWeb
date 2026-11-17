@@ -345,6 +345,7 @@
             <button class="btn login-entrar" id="l-btn" type="submit">Entrar</button>
             ${bioConta ? `<button class="login-bio" id="l-bio" type="button" title="Entrar com impressão digital · ${esc(bioConta.nome || "")}">${ICON_DIGITAL}</button>` : ""}
           </form>
+          <button class="btn contorno oculto" id="l-instalar" type="button" style="margin-top:12px">📲 Instalar o aplicativo</button>
         </div>
       </div>
       <div class="verificador oculto" id="l-verif"><div class="cartao-verif" id="l-vcart">
@@ -355,6 +356,8 @@
     const mudarIdioma = (l) => { if (Idioma.atual() !== l) { Idioma.definir(l); verLogin(); } };
     $("l-pt").onclick = () => mudarIdioma("pt");
     $("l-en").onclick = () => mudarIdioma("en");
+    $("l-instalar").onclick = instalarAplicativo;
+    mostrarBotaoInstalar();
     $("l-olho").onclick = () => { const s = $("l-senha"); s.type = s.type === "password" ? "text" : "password"; $("l-olho").innerHTML = icf(s.type === "password" ? "olhoaberto" : "olhofechado", 22); };
     // Licença por pagar: aviso de manutenção (só a administração entra)
     Dados.licencaEstado().then((l) => { if (l.expirada && $("l-manut")) $("l-manut").classList.remove("oculto"); }).catch(() => {});
@@ -501,6 +504,9 @@
     Dados._nome = user.nome || user.utilizador;   // autor dos registos de edição
     S.cliente = user.perfil === "CLIENTE";
     S.ocultar = true;   // como no Android: cada sessão começa com os valores ocultos (Mostrar valores pede a identidade)
+    // Guarda a sessão no aparelho: atualizar a página não volta ao login
+    S.assinatura = "";
+    Dados.assinaturaSessao(user.id).then((a) => { if (S.user === user) { S.assinatura = a; guardarSessao(); } }).catch(() => {});
     mostrar("ecra-app");
     construirBarra();
     Dados.fotoPerfil(user.id).then((f) => { S.user.foto = f || ""; const a = $("cb-avatar"); if (a && f) pintarAvatar(a, f); }).catch(() => {});
@@ -512,6 +518,7 @@
   function sair(motivo) {
     if (S.user) Dados.registarAcesso("SAIDA", S.user.utilizador, S.user.id, S.user.perfil, (motivo || "Saiu") + " · web");
     S.user = null; S.perms = new Set();
+    apagarSessao();
     $("barra-inferior").classList.remove("escondida");
     fecharFolha();
     verLogin();
@@ -587,6 +594,7 @@
   function navegar(aba) {
     const mudou = S.ecra !== aba;
     S.ecra = aba;
+    guardarSessao();
     [...$("barra-inferior").children].forEach((b) => b.classList.toggle("ativo", b.dataset.aba === aba));
     if (mudou) animarLogo();
     window.scrollTo(0, 0);
@@ -3370,13 +3378,75 @@
       <h2 style="margin:10px 0 6px">Sistema em manutenção</h2>
       <p style="color:var(--texto-suave)">O sistema está temporariamente indisponível. Tente mais tarde ou fale com o Administrador.</p>
       <button class="btn" id="mn-sair" style="margin-top:18px">Voltar ao início</button></div></div>`;
-    $("mn-sair").onclick = () => { S.user = null; verLogin(); };
+    $("mn-sair").onclick = () => { S.user = null; apagarSessao(); verLogin(); };
   }
 
   // ---------- Fim da sessão após 5 minutos sem uso (como na app) ----------
   const SESSAO_MS = 5 * 60 * 1000;
-  let ultimoUso = Date.now();
-  ["pointerdown", "keydown", "scroll", "touchstart"].forEach((ev) => window.addEventListener(ev, () => { ultimoUso = Date.now(); }, { passive: true, capture: true }));
+  let ultimoUso = Date.now(), ultimaGravacao = 0;
+  ["pointerdown", "keydown", "scroll", "touchstart"].forEach((ev) => window.addEventListener(ev, () => {
+    ultimoUso = Date.now();
+    if (S.user && ultimoUso - ultimaGravacao > 10000) guardarSessao();
+  }, { passive: true, capture: true }));
+
+  // ---------- Manter a sessão ao atualizar a página (ou ao reabrir o aplicativo) ----------
+  // Fica no aparelho: o utilizador, a hora do último uso, o ecrã aberto e uma assinatura que depende da
+  // senha. Vale só enquanto não passarem 5 minutos sem uso (a mesma regra da sessão) e a senha não mudar.
+  const CHAVE_SESSAO = "kub_sessao";
+  function guardarSessao() {
+    if (!S.user || !S.assinatura) return;
+    ultimaGravacao = Date.now();
+    try { localStorage.setItem(CHAVE_SESSAO, JSON.stringify({ id: S.user.id, a: S.assinatura, t: ultimoUso, ecra: S.ecra || "" })); } catch (e) {}
+  }
+  function apagarSessao() { try { localStorage.removeItem(CHAVE_SESSAO); } catch (e) {} }
+  function lerSessao() {
+    try {
+      const s = JSON.parse(localStorage.getItem(CHAVE_SESSAO) || "null");
+      if (s && s.id && s.a && Date.now() - Number(s.t || 0) < SESSAO_MS) return s;
+    } catch (e) {}
+    apagarSessao();
+    return null;
+  }
+  async function retomarSessao(s) {
+    mostrar("ecra-login");
+    $("ecra-login").innerHTML = `<div class="centro" style="min-height:100vh;display:flex;align-items:center;justify-content:center">${spinner}</div>`;
+    try {
+      const [u, a] = await Promise.all([Dados.obterUtilizador(s.id), Dados.assinaturaSessao(s.id)]);
+      if (!u || !u.ativo || !a || a !== s.a || (u.perfil === "CLIENTE" && !u.clienteId)) throw new Error("sessão inválida");
+      ultimoUso = Date.now();
+      await entrar(u);
+      if (!S.user) return;   // sistema em manutenção (já mostrado)
+      if (s.ecra && s.ecra !== S.ecra) navegar(s.ecra);
+    } catch (e) { apagarSessao(); S.user = null; verLogin(); }
+  }
+  // A página vai fechar ou ficar escondida: grava a hora do último uso
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") guardarSessao(); });
+
+  // ---------- Instalar como aplicativo (PWA): ícone no ecrã, abre em ecrã inteiro e depressa ----------
+  let pedidoInstalar = null;
+  const emAplicativo = () => (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  const ehIOS = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const podeInstalar = () => !emAplicativo() && (!!pedidoInstalar || ehIOS());
+  function mostrarBotaoInstalar() { const b = $("l-instalar"); if (b) b.classList.toggle("oculto", !podeInstalar()); }
+  window.addEventListener("beforeinstallprompt", (e) => { e.preventDefault(); pedidoInstalar = e; mostrarBotaoInstalar(); });
+  window.addEventListener("appinstalled", () => { pedidoInstalar = null; mostrarBotaoInstalar(); toast("Aplicativo instalado. Abra-o pelo ícone Kubatsira."); });
+  async function instalarAplicativo() {
+    if (pedidoInstalar) {
+      const p = pedidoInstalar; pedidoInstalar = null;
+      p.prompt();
+      try { await p.userChoice; } catch (e) {}
+      mostrarBotaoInstalar();
+      return;
+    }
+    abrirFolha(`<h3>Instalar o aplicativo</h3><div class="sub">No iPhone ou iPad, no Safari:</div>
+      <ol style="line-height:1.8;padding-left:22px;margin:10px 0">
+        <li>Toque em <b>Partilhar</b> (o quadrado com a seta para cima).</li>
+        <li>Escolha <b>“Adicionar ao ecrã principal”</b>.</li>
+        <li>Toque em <b>Adicionar</b>.</li></ol>
+      <p class="sub">Depois abra o Kubatsira pelo ícone: abre em ecrã inteiro, como uma app, e mais depressa.</p>
+      <button class="btn" id="ins-ok" style="margin-top:8px">Entendi</button>`);
+    $("ins-ok").onclick = fecharFolha;
+  }
   setInterval(() => {
     if (S.user && Date.now() - ultimoUso > SESSAO_MS) {
       sair("Sessão terminada por inatividade");
@@ -3413,9 +3483,12 @@
       <p class="sub">Aplicação web (PWA). Liga à mesma base de dados da app Android e do programa de computador.</p>
       <div class="linha-dados"><span class="r">Servidor</span><span class="v" style="font-size:.78rem">${esc(DB.servidorAtual() || "—")}</span></div>
       <div class="linha-dados"><span class="r">Utilizador</span><span class="v">${esc(S.user.utilizador)}</span></div>
-      <p class="sub" style="margin-top:14px">Para instalar no telemóvel: abra no Safari/Chrome e escolha <b>“Adicionar ao ecrã principal”</b>.</p>
+      ${podeInstalar() ? `<button class="btn contorno" id="sb-instalar" style="margin-top:14px">📲 Instalar o aplicativo</button>`
+        : emAplicativo() ? `<p class="sub" style="margin-top:14px">Está a usar o aplicativo instalado.</p>`
+        : `<p class="sub" style="margin-top:14px">Para instalar no telemóvel: abra no Safari/Chrome e escolha <b>“Adicionar ao ecrã principal”</b>.</p>`}
       <button class="btn" id="sb-ok" style="margin-top:10px">Fechar</button>`);
     $("sb-ok").onclick = fecharFolha;
+    if ($("sb-instalar")) $("sb-instalar").onclick = () => { fecharFolha(); instalarAplicativo(); };
   }
 
   // ---------- Auxiliares ----------
@@ -3969,6 +4042,7 @@
   // ---------- Arranque ----------
   DB.iniciar();
   if (!DB.configurado()) verLigar();
+  else if (lerSessao()) retomarSessao(lerSessao());   // atualizou a página com a sessão aberta: continua onde estava
   else verLogin();
 
   // Service worker (PWA offline shell)
