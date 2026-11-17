@@ -1431,8 +1431,17 @@
   // ============================================================
   // ECRÃ: EMPRÉSTIMOS / CRÉDITO
   // ============================================================
+  // Período pela data do pedido (como o datasPedido do Android) + "Escolher datas"
+  let empPer = 0, empDe = null, empAte = null;
   async function verEmprestimos(abaInicial) {
     mostrar("ecra-app");
+    const hojeE = R.hojeISO(), dE = (n) => R.somaDias(hojeE, n);
+    if (!empDe) { empDe = dE(-29); empAte = hojeE; }
+    const PER_EMP = [["Tudo", null, null], ["Hoje", hojeE, hojeE], ["Ontem", dE(-1), dE(-1)], ["Últimos 7 dias", dE(-6), hojeE],
+      ["Este mês", hojeE.slice(0, 8) + "01", hojeE], ["Últimos 30 dias", dE(-29), hojeE], ["📅 Escolher datas", null, null]];
+    const ESC_EMP = PER_EMP.length - 1;
+    const intervaloEmp = () => empPer === ESC_EMP ? [empDe, empAte] : [PER_EMP[empPer][1], PER_EMP[empPer][2]];
+    const nomePerEmp = () => empPer !== ESC_EMP ? PER_EMP[empPer][0] : empDe === empAte ? R.data(empDe) : R.data(empDe) + " a " + R.data(empAte);
     cabecalho(abaInicial === "pendentes" ? "Aprovar Pedidos" : abaInicial === "todos" ? "Todos Empréstimos" : "Empréstimos", "");
     const c = novoConteudo();
     const abas = [];
@@ -1441,10 +1450,15 @@
     let ativa = abas.some((a) => a[0] === abaInicial) ? abaInicial : abas[0][0];
     c.innerHTML = `<div class="cartao" style="display:flex;gap:8px;padding:8px">${abas.map(([id, r]) =>
       `<button class="btn ${id === ativa ? "" : "secundario"}" data-ab="${id}" style="margin:0;padding:10px">${r}</button>`).join("")}</div>
+      <div class="chips" id="emp-per">${PER_EMP.map((p, i) => `<button class="chip ${i === empPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div id="emp-datas" class="${empPer === ESC_EMP ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="emp-de" type="date" value="${empDe}" max="${hojeE}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="emp-ate" type="date" value="${empAte}" max="${hojeE}"></div>
+      </div>
       ${pode("EXPORTAR") ? `<button class="btn secundario" id="emp-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
       <div id="emp-lista">${spinner}</div>`;
     let fonte = [];
-    if ($("emp-pdf")) $("emp-pdf").onclick = () => exportarPDF("Empréstimos",
+    if ($("emp-pdf")) $("emp-pdf").onclick = () => exportarPDF((ativa === "pendentes" ? "Pedidos pendentes" : "Empréstimos") + " — " + nomePerEmp(),
       ["Nº", "Cliente", "Capital (MT)", "Situação", "Em falta (MT)"],
       fonte.map((e) => [String(e.id), e.nomeCliente, R.mt(e.capital), R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso), e.emFalta > 0 ? R.mt(e.emFalta) : "—"]),
       ["Total: " + fonte.length + " empréstimo(s)"], () => {
@@ -1463,20 +1477,40 @@
     const carregar = async () => {
       $("emp-lista").innerHTML = spinner;
       try {
+        const [de, ate] = intervaloEmp();
+        const noPeriodo = (e) => (!de || (e.dataPedido || "") >= de) && (!ate || (e.dataPedido || "") <= ate);
         if (ativa === "pendentes") {
-          fonte = await Dados.listarPendentes();
-          if (!fonte.length) { $("emp-lista").innerHTML = vazio("ok", "Não há pedidos à espera de aprovação."); return; }
-          $("emp-lista").innerHTML = fonte.map((e) => itemEmp(e, true)).join("");
+          fonte = (await Dados.listarPendentes()).filter(noPeriodo);
+          if (!fonte.length) { $("emp-lista").innerHTML = vazio("ok", empPer ? "Não há pedidos à espera de aprovação neste período." : "Não há pedidos à espera de aprovação."); return; }
+          $("emp-lista").innerHTML = resumoEmp(fonte) + fonte.map((e) => itemEmp(e, true)).join("");
         } else {
           fonte = await Dados.listarEmprestimos();
           if (!pode("TODOS_EMPRESTIMOS")) fonte = fonte.filter((e) => e.estado === "APROVADO");
-          if (!fonte.length) { $("emp-lista").innerHTML = vazio("credito", "Nenhum empréstimo."); return; }
-          $("emp-lista").innerHTML = fonte.map((e) => itemEmp(e, false)).join("");
+          fonte = fonte.filter(noPeriodo);
+          if (!fonte.length) { $("emp-lista").innerHTML = vazio("credito", empPer ? "Nenhum empréstimo pedido neste período." : "Nenhum empréstimo."); return; }
+          $("emp-lista").innerHTML = resumoEmp(fonte) + fonte.map((e) => itemEmp(e, false)).join("");
         }
         $("emp-lista").querySelectorAll("[data-eid]").forEach((b) => b.onclick = () =>
           abrirEmprestimo(fonte.find((x) => x.id == b.dataset.eid), carregar));
       } catch (e) { $("emp-lista").innerHTML = erroEcra(e, carregar); }
     };
+    const resumoEmp = (l) => `<div class="resumo-lista">${l.length} ${l.length === 1 ? "empréstimo" : "empréstimos"} · capital: <b>${vmt(l.reduce((s, e) => s + e.capital, 0))}</b>` +
+      (ativa === "pendentes" ? "" : ` · em falta: <b>${vmt(l.reduce((s, e) => s + (e.emFalta || 0), 0))}</b>`) + `</div>`;
+    $("emp-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+      $("emp-per").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
+      empPer = Number(ch.dataset.i);
+      $("emp-datas").classList.toggle("oculto", empPer !== ESC_EMP);
+      carregar();
+    });
+    // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+    const mudarDatasEmp = () => {
+      let de = $("emp-de").value || hojeE, ate = $("emp-ate").value || de;
+      if (de > ate) [de, ate] = [ate, de];
+      $("emp-de").value = de; $("emp-ate").value = ate;
+      empDe = de; empAte = ate; carregar();
+    };
+    $("emp-de").onchange = mudarDatasEmp;
+    $("emp-ate").onchange = mudarDatasEmp;
     c.querySelectorAll("[data-ab]").forEach((b) => b.onclick = () => {
       ativa = b.dataset.ab;
       c.querySelectorAll("[data-ab]").forEach((x) => x.className = "btn " + (x.dataset.ab === ativa ? "" : "secundario") );
@@ -1490,7 +1524,7 @@
     return `<button class="item" data-eid="${e.id}">
       <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
       <span class="meio"><span class="nome">${esc(e.nomeCliente)} · nº ${e.id}</span>
-        <span class="det">${vmt(e.capital)} · ${e.modalidade === "PARCELADO" ? "6 prest." : "única"}${pend ? " · pedido " + R.data(e.dataPedido) : ""}</span>
+        <span class="det">${vmt(e.capital)} · ${e.modalidade === "PARCELADO" ? "6 prest." : "única"} · pedido ${R.data(e.dataPedido)}</span>
         <span class="etiqueta ${cls}">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></span>
       <span class="fim"><span class="mt">${e.estado === "PENDENTE" ? "" : (e.emFalta > 0 ? vmt(e.emFalta) : `<span style="color:var(--verde)">${ic("check", 18)}</span>`)}</span></span></button>`;
   }
