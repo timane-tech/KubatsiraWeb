@@ -301,13 +301,14 @@ const Dados = (() => {
   // ---------- Clientes ----------
   const SELECT_CLIENTE =
     "SELECT c.id, c.usuario_id, c.nome, u.telefone, c.morada, c.renda_diaria, c.tipo_negocio, c.local_negocio, " +
-    "c.coabitantes, c.classificacao FROM clientes c JOIN usuarios u ON u.id = c.usuario_id ";
+    "c.coabitantes, c.classificacao, u.data_criacao FROM clientes c JOIN usuarios u ON u.id = c.usuario_id ";
 
   function lerCliente(r) {
     return {
       id: Number(r.id), usuarioId: Number(r.usuario_id), nome: r.nome, telefone: r.telefone,
       morada: r.morada, rendaDiaria: Number(r.renda_diaria || 0), tipoNegocio: r.tipo_negocio,
       localNegocio: r.local_negocio, coabitantes: r.coabitantes, classificacao: r.classificacao,
+      dataRegisto: Regras.dataBase(r.data_criacao),   // dia em que a conta do cliente foi criada
       emDivida: 0, prestacoesEmAtraso: 0, prestacoesPorPagar: 0, emprestimos: 0,
     };
   }

@@ -1258,7 +1258,7 @@
   // ============================================================
   // Como no Android (ListaActivity, modo CLIENTES): pesquisa, 5 filtros, cartões e "+ Registar cliente".
   const SIT_CLIENTE = ["Todos", "Em curso", "Atrasados", "Pagos", "Sem empréstimo"];
-  let cliSit = 0;
+  let cliSit = 0, cliPer = 0, cliDe = null, cliAte = null;   // período pela data de registo do cliente
   function cartaoCliente(cl) {
     const classe = (cl.classificacao || "NOVO").replace(/\s*\(.*$/, "");   // "BOM CLIENTE (…)" -> "BOM CLIENTE", como aparece no Android
     const bom = classe.toUpperCase().startsWith("BOM");
@@ -1273,7 +1273,8 @@
         <div class="cl-meio"><div class="cl-tit">${esc(cl.nome)}</div><div class="cl-sub" style="white-space:normal">${sub}</div></div>
         <div class="cl-fim">${valor}${pilula(bom ? "★ " + classe : classe, bom ? CORES.verde : CORES.azul)}</div>
       </div>
-      ${det.trim() ? `<div class="cl-det"><div>${icf("local", 15)}<span>${esc(det)}</span></div></div>` : ""}</div>`;
+      ${det.trim() || cl.dataRegisto ? `<div class="cl-det">${det.trim() ? `<div>${icf("local", 15)}<span>${esc(det)}</span></div>` : ""}
+        ${cl.dataRegisto ? `<div>${icf("calendario", 15)}<span>Registado em ${R.data(cl.dataRegisto)}</span></div>` : ""}</div>` : ""}</div>`;
   }
 
   async function verClientes() {
@@ -1282,22 +1283,38 @@
     $("cl-atu").onclick = () => verClientes();
     const c = novoConteudo();
     if (pode("CLIENTES")) c.classList.add("com-btn-fixo");
+    const hojeC = R.hojeISO(), dC = (n) => R.somaDias(hojeC, n);
+    if (!cliDe) { cliDe = dC(-29); cliAte = hojeC; }
+    const PER_CLI = [["Sempre", null, null], ["Hoje", hojeC, hojeC], ["Ontem", dC(-1), dC(-1)], ["Últimos 7 dias", dC(-6), hojeC],
+      ["Este mês", hojeC.slice(0, 8) + "01", hojeC], ["Últimos 30 dias", dC(-29), hojeC], ["📅 Escolher datas", null, null]];
+    const ESC_CLI = PER_CLI.length - 1;
+    const intervaloCli = () => cliPer === ESC_CLI ? [cliDe, cliAte] : [PER_CLI[cliPer][1], PER_CLI[cliPer][2]];
+    const nomePerCli = () => cliPer === 0 ? "" : " · registados " + (cliPer !== ESC_CLI ? PER_CLI[cliPer][0].toLowerCase()
+      : cliDe === cliAte ? "em " + R.data(cliDe) : "de " + R.data(cliDe) + " a " + R.data(cliAte));
     c.innerHTML = `<div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cl-f" placeholder="Nome, telefone, negócio ou local"></div>
-      <div class="chips" id="cl-sit">${SIT_CLIENTE.map((s, i) => `<button class="chip ${i === cliSit ? "ativo" : ""}" data-i="${i}">${s}</button>`).join("")}</div>
+      <div class="chips" id="cl-sit" style="padding-bottom:6px">${SIT_CLIENTE.map((s, i) => `<button class="chip ${i === cliSit ? "ativo" : ""}" data-i="${i}">${s}</button>`).join("")}</div>
+      <div class="chips" id="cl-per">${PER_CLI.map((p, i) => `<button class="chip ${i === cliPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div id="cl-datas" class="${cliPer === ESC_CLI ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>Registado de</label><input id="cl-de" type="date" value="${cliDe}" max="${hojeC}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="cl-ate" type="date" value="${cliAte}" max="${hojeC}"></div>
+      </div>
       <div id="cl-lista">${spinner}</div>
       ${pode("CLIENTES") ? `<button class="btn-fixo" id="cl-novo">+ Registar cliente</button>` : ""}`;
     if ($("cl-novo")) $("cl-novo").onclick = () => formCliente(null);
     let timer, todos = [], lista = [];
     const render = () => {
+      const [de, ate] = intervaloCli();
       lista = todos.filter((cl) => {
+        if (de && (!cl.dataRegisto || cl.dataRegisto < de)) return false;                 // data de registo
+        if (ate && (!cl.dataRegisto || cl.dataRegisto > ate)) return false;
         if (cliSit === 1 && cl.prestacoesPorPagar === 0) return false;                    // Em curso
         if (cliSit === 2 && cl.prestacoesEmAtraso === 0) return false;                    // Atrasados
         if (cliSit === 3 && (cl.emprestimos === 0 || cl.prestacoesPorPagar > 0)) return false; // Pagos: tudo pago
         if (cliSit === 4 && cl.emprestimos > 0) return false;                             // Sem empréstimo
         return true;
       });
-      if (!lista.length) { $("cl-lista").innerHTML = vazio("clientes", "Nenhum cliente encontrado."); return; }
-      $("cl-lista").innerHTML = lista.map(cartaoCliente).join("");
+      if (!lista.length) { $("cl-lista").innerHTML = vazio("clientes", cliPer ? "Nenhum cliente registado neste período." : "Nenhum cliente encontrado."); return; }
+      $("cl-lista").innerHTML = `<div class="resumo-lista">${lista.length} cliente${lista.length === 1 ? "" : "s"}${esc(nomePerCli())}</div>` + lista.map(cartaoCliente).join("");
       $("cl-lista").querySelectorAll(".cl[data-cid]").forEach((b) =>
         b.onclick = () => abrirCliente(lista.find((x) => x.id == b.dataset.cid)));
     };
@@ -1310,7 +1327,22 @@
       $("cl-sit").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
       cliSit = Number(ch.dataset.i); render();
     });
-    if ($("cl-pdf")) $("cl-pdf").onclick = () => exportarPDF("Clientes — " + SIT_CLIENTE[cliSit],
+    $("cl-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+      $("cl-per").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
+      cliPer = Number(ch.dataset.i);
+      $("cl-datas").classList.toggle("oculto", cliPer !== ESC_CLI);
+      render();
+    });
+    // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+    const mudarDatasCli = () => {
+      let de = $("cl-de").value || hojeC, ate = $("cl-ate").value || de;
+      if (de > ate) [de, ate] = [ate, de];
+      $("cl-de").value = de; $("cl-ate").value = ate;
+      cliDe = de; cliAte = ate; render();
+    };
+    $("cl-de").onchange = mudarDatasCli;
+    $("cl-ate").onchange = mudarDatasCli;
+    if ($("cl-pdf")) $("cl-pdf").onclick = () => exportarPDF("Clientes — " + SIT_CLIENTE[cliSit] + nomePerCli(),
       ["Nome", "Telefone", "Local", "Empr.", "Dívida (MT)"],
       lista.map((cl) => [cl.nome, cl.telefone || "", cl.localNegocio || "", String(cl.emprestimos), R.mt(cl.emDivida)]),
       ["Total de clientes: " + lista.length], () => {
