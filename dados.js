@@ -291,6 +291,106 @@ const Dados = (() => {
     return out;
   }
 
+  // ---------- Balanço de um período (filtro de datas do Balanço) ----------
+  // Empréstimos do período: capital e margem pelos aprovados nesse período (data de aprovação/desembolso);
+  // estados pelos pedidos feitos nesse período (data do pedido).
+  async function balancoEmprestimosPeriodo(de, ate) {
+    const r = (await DB.consultar(
+      "SELECT " +
+      "COALESCE(SUM(CASE WHEN status IN ('APROVADO','PAGO') AND data_aprovacao::date BETWEEN ?::date AND ?::date THEN valor_solicitado END),0) AS capital," +
+      "COALESCE(SUM(CASE WHEN status IN ('APROVADO','PAGO') AND data_aprovacao::date BETWEEN ?::date AND ?::date THEN valor_total - valor_solicitado END),0) AS margem," +
+      "COUNT(CASE WHEN status IN ('APROVADO','PAGO') AND data_aprovacao::date BETWEEN ?::date AND ?::date THEN 1 END) AS aprovados," +
+      "COUNT(CASE WHEN status='PENDENTE' AND data_solicitacao::date BETWEEN ?::date AND ?::date THEN 1 END) AS pendentes," +
+      "COUNT(CASE WHEN status='REJEITADO' AND COALESCE(rejeitado_em, data_solicitacao)::date BETWEEN ?::date AND ?::date THEN 1 END) AS rejeitados," +
+      "COUNT(CASE WHEN status='CANCELADO' AND data_solicitacao::date BETWEEN ?::date AND ?::date THEN 1 END) AS cancelados " +
+      "FROM emprestimos", [de, ate, de, ate, de, ate, de, ate, de, ate, de, ate]))[0];
+    return { capital: Number(r.capital), margem: Number(r.margem), aprovados: Number(r.aprovados),
+      pendentes: Number(r.pendentes), rejeitados: Number(r.rejeitados), cancelados: Number(r.cancelados) };
+  }
+
+  // Caixa de um período: saldo no início, entradas/saídas por tipo e saldo no fim
+  async function caixaPeriodo(de, ate) {
+    const [ab, rr] = await Promise.all([
+      DB.consultar("SELECT COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END),0) AS s FROM caixa WHERE data_movimento::date < ?::date", [de]),
+      DB.consultar(
+        "SELECT " +
+        "COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND categoria='PRESTACAO' THEN valor ELSE 0 END),0) AS prest," +
+        "COALESCE(SUM(CASE WHEN tipo='ENTRADA' AND COALESCE(categoria,'')<>'PRESTACAO' THEN valor ELSE 0 END),0) AS outras," +
+        "COALESCE(SUM(CASE WHEN tipo='SAIDA' AND categoria='DESEMBOLSO' THEN valor ELSE 0 END),0) AS emp," +
+        "COALESCE(SUM(CASE WHEN tipo='SAIDA' AND COALESCE(categoria,'')<>'DESEMBOLSO' THEN valor ELSE 0 END),0) AS desp " +
+        "FROM caixa WHERE data_movimento::date BETWEEN ?::date AND ?::date", [de, ate])]);
+    const abertura = Number(ab[0].s), r = rr[0];
+    const prestacoes = Number(r.prest), outras = Number(r.outras), emprestimos = Number(r.emp), despesas = Number(r.desp);
+    return { de, ate, abertura, prestacoes, outras, emprestimos, despesas,
+      fecho: Regras.arredondar(abertura + prestacoes + outras - emprestimos - despesas) };
+  }
+
+  // Entradas vs Saídas de um período: por dia (até 31 dias), por semana (até ~4 meses) ou por mês
+  async function graficoEntradasSaidasPeriodo(de, ate) {
+    const dias = Regras.diasEntre(de, ate) + 1;
+    const modo = dias <= 31 ? "dia" : dias <= 124 ? "semana" : "mes";
+    const chaveSql = modo === "dia" ? "to_char(data_movimento,'YYYY-MM-DD')"
+      : modo === "semana" ? "to_char(date_trunc('week', data_movimento),'YYYY-MM-DD')" : "to_char(data_movimento,'YYYY-MM')";
+    const rows = await DB.consultar(
+      "SELECT " + chaveSql + " AS k, " +
+      "COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE 0 END),0) AS entradas, " +
+      "COALESCE(SUM(CASE WHEN categoria='DESEMBOLSO' THEN valor ELSE 0 END),0) AS emprestimos, " +
+      "COALESCE(SUM(CASE WHEN categoria='DESPESA' THEN valor ELSE 0 END),0) AS despesas " +
+      "FROM caixa WHERE data_movimento::date BETWEEN ?::date AND ?::date GROUP BY k ORDER BY k", [de, ate]);
+    const mapa = {};
+    rows.forEach((r) => mapa[r.k] = { entradas: Number(r.entradas), emprestimos: Number(r.emprestimos), despesas: Number(r.despesas) });
+    const meses = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+    const zero = { entradas: 0, emprestimos: 0, despesas: 0 };
+    const out = [];
+    if (modo === "dia") {
+      for (let d = de; d <= ate; d = Regras.somaDias(d, 1)) out.push({ mes: d.slice(8, 10) + "/" + d.slice(5, 7), ...(mapa[d] || zero) });
+    } else if (modo === "semana") {
+      // segunda-feira da semana de "de" (como o date_trunc('week') da base)
+      const dt = new Date(de + "T00:00:00"); dt.setDate(dt.getDate() - ((dt.getDay() + 6) % 7));
+      for (let d = Regras.isoLocal(dt); d <= ate; d = Regras.somaDias(d, 7)) out.push({ mes: d.slice(8, 10) + "/" + d.slice(5, 7), ...(mapa[d] || zero) });
+    } else {
+      let y = Number(de.slice(0, 4)), m = Number(de.slice(5, 7));
+      const yF = Number(ate.slice(0, 4)), mF = Number(ate.slice(5, 7));
+      while (y < yF || (y === yF && m <= mF)) {
+        const k = y + "-" + String(m).padStart(2, "0");
+        out.push({ mes: meses[m - 1] + (yF !== Number(de.slice(0, 4)) ? " " + String(y).slice(2) : ""), ...(mapa[k] || zero) });
+        m++; if (m > 12) { m = 1; y++; }
+      }
+    }
+    return { modo, pontos: out };
+  }
+
+  // Saldo em caixa no fim de cada dia do período
+  async function graficoEvolucaoCaixaPeriodo(de, ate) {
+    const [ini, diarios] = await Promise.all([
+      DB.consultar("SELECT COALESCE(SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END),0) AS s FROM caixa WHERE data_movimento::date < ?::date", [de]),
+      DB.consultar("SELECT data_movimento::date AS dia, SUM(CASE WHEN tipo='ENTRADA' THEN valor ELSE -valor END) AS net " +
+        "FROM caixa WHERE data_movimento::date BETWEEN ?::date AND ?::date GROUP BY dia ORDER BY dia", [de, ate])]);
+    const mapa = {}; diarios.forEach((r) => mapa[Regras.dataBase(r.dia)] = Number(r.net));
+    const out = []; let saldo = Number(ini[0].s);
+    for (let d = de; d <= ate; d = Regras.somaDias(d, 1)) { saldo += (mapa[d] || 0); out.push({ dia: d, saldo: Regras.arredondar(saldo) }); }
+    return out;
+  }
+
+  // Top 5 clientes do período (capital dos empréstimos aprovados nesse período)
+  async function topClientesPeriodo(de, ate) {
+    return (await DB.consultar(
+      "SELECT c.nome, SUM(e.valor_solicitado) AS total FROM emprestimos e JOIN clientes c ON c.id = e.cliente_id " +
+      "WHERE e.status IN ('APROVADO','PAGO') AND e.data_aprovacao::date BETWEEN ?::date AND ?::date " +
+      "GROUP BY c.id, c.nome ORDER BY total DESC LIMIT 5", [de, ate]))
+      .map((r) => ({ nome: r.nome, total: Number(r.total) }));
+  }
+
+  // Últimos lançamentos do período
+  async function ultimosMovimentosPeriodo(de, ate, quantidade) {
+    return (await DB.consultar(
+      "SELECT id, tipo, valor, justificativa, categoria, data_movimento, registado_por FROM caixa " +
+      "WHERE NOT oculto AND data_movimento::date BETWEEN ?::date AND ?::date ORDER BY data_movimento DESC, id DESC LIMIT ?",
+      [de, ate, quantidade || 6]))
+      .map((r) => ({ id: Number(r.id), tipo: r.tipo, valor: Number(r.valor), justificativa: r.justificativa,
+        categoria: r.categoria, dataMovimento: r.data_movimento, registadoPor: r.registado_por }));
+  }
+
   async function topClientes() {
     return (await DB.consultar(
       "SELECT c.nome, SUM(e.valor_solicitado) AS total FROM emprestimos e JOIN clientes c ON c.id = e.cliente_id " +
@@ -1425,6 +1525,7 @@ const Dados = (() => {
     poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar, lixoPreverAnulacao, lixoAnularPagamento, ehPagamento,
     enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico, smsEnfileirarRecado,
+    balancoEmprestimosPeriodo, caixaPeriodo, graficoEntradasSaidasPeriodo, graficoEvolucaoCaixaPeriodo, topClientesPeriodo, ultimosMovimentosPeriodo,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, acessosApagar, movimentosDoDia, smsEnviadosListar,
     alterarMulta, reporMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,

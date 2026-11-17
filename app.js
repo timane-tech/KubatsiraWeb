@@ -731,7 +731,8 @@
     const linha = pontos.map((p, i) => `${x(i).toFixed(1)},${y(p.saldo).toFixed(1)}`);
     const area = `M ${x(0).toFixed(1)},${yBase} L ${linha.join(" L ")} L ${x(n - 1).toFixed(1)},${yBase} Z`;
     let datas = "";
-    for (let i = 0; i < n; i += 6) {
+    const passo = Math.max(1, Math.ceil(n / 6));   // ~6 datas no eixo, seja qual for o número de dias
+    for (let i = 0; i < n; i += passo) {
       const d = pontos[i].dia || "";
       datas += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" style="fill:var(--texto-suave)">${d.slice(8, 10)}/${d.slice(5, 7)}</text>`;
     }
@@ -907,15 +908,16 @@
   }
 
   // Os 4 gráficos principais do balanço (ecrã inicial e Balanço Geral)
-  function graficosBalanco(ind, cob, es, ev) {
+  // subES / subEV: subtítulos dos 2 primeiros gráficos (mudam com o período escolhido no Balanço)
+  function graficosBalanco(ind, cob, es, ev, subES, subEV) {
     const donut = donutSVG([
       { rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "var(--verde)" },
       { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "var(--accent)" },
       { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "var(--vermelho)" },
     ], "prestações", ind.prestacoesPagas + ind.prestacoesNoPrazo + ind.prestacoesAtrasadas);
     return `
-      <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">Últimos 6 meses · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
-      <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">Últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
+      <div class="grafico-cartao"><h3>Entradas vs Saídas</h3><div class="sub">${esc(subES || "Últimos 6 meses")} · empréstimos e despesas separados</div>${S.ocultar ? ocultoCartao() : svgBarrasAgrupadas(es)}</div>
+      <div class="grafico-cartao"><h3>Evolução do saldo em caixa</h3><div class="sub">${esc(subEV || "Últimos 30 dias")}</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
       <div class="grafico-cartao"><h3>Situação das prestações</h3><div class="sub">Pagas, no prazo e em atraso</div>${S.ocultar ? ocultoCartao() : donut}</div>
       <div class="grafico-cartao"><h3>Cobranças previstas</h3><div class="sub">Valor em falta: atrasadas e próximos 7 dias</div>${S.ocultar ? ocultoCartao() : svgBarrasVert(cob)}</div>`;
   }
@@ -983,6 +985,9 @@
   // ============================================================
   // ECRÃ: BALANÇO GERAL (completo, como o BalancoActivity)
   // ============================================================
+  // Período do Balanço: "Geral" = como sempre (situação de hoje, gráficos de 6 meses / 30 dias);
+  // com um período, as entradas/saídas, empréstimos, gráficos, top e lançamentos passam a ser desse período.
+  let balPer = 0, balDe = null, balAte = null;
   async function verBalanco() {
     mostrar("ecra-app");
     if (!pode("BALANCO")) { toast("Sem permissão.", true); return; }
@@ -990,58 +995,100 @@
       `<button class="pilula-cab" id="bg-olho">${S.ocultar ? "👁 Mostrar" : "🙈 Ocultar"}</button>`);
     $("bg-olho").onclick = () => alternarValores(verBalanco);
     const c = novoConteudo();
-    c.innerHTML = spinner;
+    const hojeB = R.hojeISO(), dB = (n) => R.somaDias(hojeB, n);
+    if (!balDe) { balDe = dB(-29); balAte = hojeB; }
+    const PER = [["Geral", null, null], ["Hoje", hojeB, hojeB], ["Ontem", dB(-1), dB(-1)], ["Últimos 7 dias", dB(-6), hojeB],
+      ["Este mês", hojeB.slice(0, 8) + "01", hojeB], ["Últimos 30 dias", dB(-29), hojeB], ["Este ano", hojeB.slice(0, 5) + "01-01", hojeB],
+      ["📅 Escolher datas", null, null]];
+    const ESC = PER.length - 1;
+    const [de, ate] = balPer === ESC ? [balDe, balAte] : [PER[balPer][1], PER[balPer][2]];
+    const comPer = balPer !== 0;
+    const nomePer = !comPer ? "" : balPer !== ESC ? PER[balPer][0] : de === ate ? R.data(de) : R.data(de) + " a " + R.data(ate);
+    const filtro = `<div class="chips" id="bal-per">${PER.map((p, i) => `<button class="chip ${i === balPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div class="${balPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="bal-de" type="date" value="${balDe}" max="${hojeB}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="bal-ate" type="date" value="${balAte}" max="${hojeB}"></div></div>`;
+    c.innerHTML = filtro + spinner;
+    const ligarFiltro = () => {
+      $("bal-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => { balPer = Number(ch.dataset.i); verBalanco(); });
+      // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+      const mudar = () => {
+        let d = $("bal-de").value || hojeB, a = $("bal-ate").value || d;
+        if (d > a) [d, a] = [a, d];
+        balDe = d; balAte = a; verBalanco();
+      };
+      $("bal-de").onchange = mudar; $("bal-ate").onchange = mudar;
+    };
+    ligarFiltro();
     try {
-      const [ind, cob, saldo, es, ev, top, hoje, ultimos] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(),
-        Dados.graficoEntradasSaidas(), Dados.graficoEvolucaoCaixa(), Dados.topClientes(), Dados.caixaDoDia(R.hojeISO()), Dados.ultimosMovimentos(6)]);
+      const [ind, cob, saldo, es, ev, top, mov, ultimos, bp] = await Promise.all([Dados.balanco(), Dados.cobrancasPrevistas(), Dados.saldoCaixa(),
+        comPer ? Dados.graficoEntradasSaidasPeriodo(de, ate).then((g) => g.pontos) : Dados.graficoEntradasSaidas(),
+        comPer ? Dados.graficoEvolucaoCaixaPeriodo(de, ate) : Dados.graficoEvolucaoCaixa(),
+        comPer ? Dados.topClientesPeriodo(de, ate) : Dados.topClientes(),
+        comPer ? Dados.caixaPeriodo(de, ate) : Dados.caixaDoDia(hojeB),
+        comPer ? Dados.ultimosMovimentosPeriodo(de, ate, 6) : Dados.ultimosMovimentos(6),
+        comPer ? Dados.balancoEmprestimosPeriodo(de, ate) : null]);
       const num = (v) => S.ocultar ? "••••" : R.mt(v).replace(/\s*MT$/, "");
-      const entHoje = hoje.prestacoes + hoje.outras, saiHoje = hoje.emprestimos + hoje.despesas;
+      const ent = mov.prestacoes + mov.outras, sai = mov.emprestimos + mov.despesas;
+      const sufixo = comPer ? " · " + nomePer : " de hoje";
       // Os 6 indicadores: {título, valor, cor, linha de detalhe}
       const cartoes = [
-        ["Valor investido (capital)", ind.capitalInvestido, "#19969F", null],
-        ["Total a receber", ind.totalAReceber, "var(--verde)", ind.emAtraso > 0 ? "em atraso: " + vmt(ind.emAtraso) : null],
-        ["Margem de lucro esperada", ind.margemLucro, "#B8860B", "juros de 30%"],
-        ["↓ Entradas de hoje", entHoje, "var(--verde)", "prestações " + num(hoje.prestacoes) + " · outras " + num(hoje.outras)],
-        ["↑ Saídas de hoje", saiHoje, "var(--vermelho)", "empréstimos " + num(hoje.emprestimos) + " · despesas " + num(hoje.despesas)],
-        ["Saldo atual em caixa", saldo.saldo, "var(--roxo)", "entrou " + num(saldo.entradas) + " · saiu " + num(saldo.saidas)],
+        [comPer ? "Capital emprestado · " + nomePer : "Valor investido (capital)", comPer ? bp.capital : ind.capitalInvestido, "#19969F",
+          comPer ? bp.aprovados + " empréstimo(s) aprovado(s)" : null],
+        ["Total a receber (agora)", ind.totalAReceber, "var(--verde)", ind.emAtraso > 0 ? "em atraso: " + vmt(ind.emAtraso) : null],
+        [comPer ? "Margem de lucro · " + nomePer : "Margem de lucro esperada", comPer ? bp.margem : ind.margemLucro, "#B8860B", "juros de 30%"],
+        ["↓ Entradas" + sufixo, ent, "var(--verde)", "prestações " + num(mov.prestacoes) + " · outras " + num(mov.outras)],
+        ["↑ Saídas" + sufixo, sai, "var(--vermelho)", "empréstimos " + num(mov.emprestimos) + " · despesas " + num(mov.despesas)],
+        ["Saldo atual em caixa", saldo.saldo, "var(--roxo)", comPer ? "no início do período " + num(mov.abertura) + " · no fim " + num(mov.fecho)
+          : "entrou " + num(saldo.entradas) + " · saiu " + num(saldo.saidas)],
       ];
-      const estados = [
+      const estados = comPer ? [
+        { rotulo: "Aprovados", valor: bp.aprovados, cor: "var(--verde)" },
+        { rotulo: "Pendentes", valor: bp.pendentes, cor: "#F39C12" },
+        { rotulo: "Rejeitados", valor: bp.rejeitados, cor: "var(--vermelho)" },
+      ] : [
         { rotulo: "Aprovados", valor: ind.emCurso + ind.pagos, cor: "var(--verde)" },
         { rotulo: "Pendentes", valor: ind.pendentes, cor: "#F39C12" },
         { rotulo: "Rejeitados", valor: ind.rejeitados, cor: "var(--vermelho)" },
       ];
-      if (ind.cancelados > 0) estados.push({ rotulo: "Cancelados", valor: ind.cancelados, cor: "var(--texto-suave)" });
-      c.innerHTML = `
+      const cancelados = comPer ? bp.cancelados : ind.cancelados;
+      if (cancelados > 0) estados.push({ rotulo: "Cancelados", valor: cancelados, cor: "var(--texto-suave)" });
+      const totalEstados = estados.reduce((s, x) => s + x.valor, 0);
+      const subES = comPer ? nomePer : "Últimos 6 meses", subEV = comPer ? nomePer : "Últimos 30 dias";
+      c.innerHTML = filtro + `
+        ${comPer ? `<div class="resumo-lista">Período: <b>${esc(nomePer)}</b>${balPer !== ESC && de !== ate ? " (" + R.data(de) + " a " + R.data(ate) + ")" : ""} · o total a receber, o saldo e a situação das prestações são de agora</div>` : ""}
         <div class="ind-grelha">${cartoes.map(([t, v, cor, d]) => `<div class="ind"><div class="t">${esc(t)}</div>
           <div class="v" style="color:${cor}">${vmt(v)}</div>${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`).join("")}</div>
-        ${graficosBalanco(ind, cob, es, ev)}
-        <div class="grafico-cartao"><h3>Empréstimos por estado</h3><div class="sub">Aprovados, pendentes e rejeitados</div>${S.ocultar ? ocultoCartao() : donutSVG(estados, "empréstimos", estados.reduce((s, x) => s + x.valor, 0))}</div>
-        <div class="grafico-cartao"><h3>Top 5 clientes</h3><div class="sub">Maior capital emprestado (aprovados)</div>${S.ocultar ? ocultoCartao() : barrasHorizontais(top)}</div>
-        <div class="cartao"><div class="titulo-cfg">Últimos lançamentos no caixa</div>
+        ${graficosBalanco(ind, cob, es, ev, subES, subEV)}
+        <div class="grafico-cartao"><h3>Empréstimos por estado</h3><div class="sub">${comPer ? esc(nomePer) + " · aprovados, pedidos e rejeitados no período" : "Aprovados, pendentes e rejeitados"}</div>${S.ocultar ? ocultoCartao() : totalEstados ? donutSVG(estados, "empréstimos", totalEstados) : `<div class="vazio" style="padding:14px">Sem empréstimos neste período.</div>`}</div>
+        <div class="grafico-cartao"><h3>Top 5 clientes</h3><div class="sub">${comPer ? "Maior capital emprestado · " + esc(nomePer) : "Maior capital emprestado (aprovados)"}</div>${S.ocultar ? ocultoCartao() : top.length ? barrasHorizontais(top) : `<div class="vazio" style="padding:14px">Sem empréstimos aprovados neste período.</div>`}</div>
+        <div class="cartao"><div class="titulo-cfg">${comPer ? "Lançamentos no caixa · " + esc(nomePer) : "Últimos lançamentos no caixa"}</div>
           ${ultimos.length ? ultimos.map((m) => {
-            const ent = m.tipo === "ENTRADA";
+            const e2 = m.tipo === "ENTRADA";
             return `<div class="linha-dados" style="align-items:flex-start;gap:10px"><span style="min-width:0;flex:1">
               <b style="display:block">${esc(movLongo(m))}</b>
               <span class="r" style="font-size:.8rem;white-space:pre-line">${esc(String(m.dataMovimento || "").substring(0, 16))}\n${esc(m.justificativa || "")}</span></span>
-              <span class="v" style="color:${ent ? "var(--verde)" : "var(--vermelho)"};white-space:nowrap;flex:none">${ent ? "+ " : "− "}${vmt(m.valor)}</span></div>`;
-          }).join("") : `<div class="vazio" style="padding:14px">Ainda não há lançamentos.</div>`}
+              <span class="v" style="color:${e2 ? "var(--verde)" : "var(--vermelho)"};white-space:nowrap;flex:none">${e2 ? "+ " : "− "}${vmt(m.valor)}</span></div>`;
+          }).join("") : `<div class="vazio" style="padding:14px">${comPer ? "Sem lançamentos neste período." : "Ainda não há lançamentos."}</div>`}
         </div>
         ${pode("EXPORTAR") ? `<button class="btn contorno" id="bg-pdf">📄 Exportar o balanço (PDF ou Excel)</button>` : ""}`;
-      if ($("bg-pdf")) $("bg-pdf").onclick = () => exportarPDF("Balanço Geral", ["Indicador", "Valor"],
+      ligarFiltro();
+      if ($("bg-pdf")) $("bg-pdf").onclick = () => exportarPDF("Balanço Geral" + (comPer ? " — " + nomePer : ""), ["Indicador", "Valor"],
         cartoes.map(([t, v]) => [t, R.mt(v)]).concat([
-          ["Prestações pagas / no prazo / em atraso", ind.prestacoesPagas + " / " + ind.prestacoesNoPrazo + " / " + ind.prestacoesAtrasadas],
-          ["Empréstimos em curso / pagos / pendentes", ind.emCurso + " / " + ind.pagos + " / " + ind.pendentes]]), [], [
-          graficoPdf("Entradas vs Saídas (6 meses)", svgBarrasAgrupadas(es), [{ rot: "Entradas", cor: "var(--verde)" }, { rot: "Empréstimos", cor: "var(--roxo)" }, { rot: "Despesas", cor: "var(--vermelho)" }]),
-          graficoPdf("Evolução do saldo (30 dias)", svgLinha(ev)),
+          ["Prestações pagas / no prazo / em atraso (agora)", ind.prestacoesPagas + " / " + ind.prestacoesNoPrazo + " / " + ind.prestacoesAtrasadas],
+          comPer ? ["Empréstimos aprovados / pendentes / rejeitados (" + nomePer + ")", bp.aprovados + " / " + bp.pendentes + " / " + bp.rejeitados]
+            : ["Empréstimos em curso / pagos / pendentes", ind.emCurso + " / " + ind.pagos + " / " + ind.pendentes]]),
+        comPer ? ["Período: " + nomePer + (balPer !== ESC && de !== ate ? " (" + R.data(de) + " a " + R.data(ate) + ")" : "")] : [], [
+          graficoPdf("Entradas vs Saídas (" + subES + ")", svgBarrasAgrupadas(es), [{ rot: "Entradas", cor: "var(--verde)" }, { rot: "Empréstimos", cor: "var(--roxo)" }, { rot: "Despesas", cor: "var(--vermelho)" }]),
+          graficoPdf("Evolução do saldo (" + subEV + ")", svgLinha(ev)),
           roscaPdf("Situação das prestações", [{ rotulo: "Pagas", valor: ind.prestacoesPagas, cor: "var(--verde)" },
             { rotulo: "No prazo", valor: ind.prestacoesNoPrazo, cor: "var(--accent)" }, { rotulo: "Em atraso", valor: ind.prestacoesAtrasadas, cor: "var(--vermelho)" }], "prestações"),
           graficoPdf("Cobranças previstas", svgBarrasVert(cob)),
-          roscaPdf("Empréstimos por estado", estados, "empréstimos"),
-          barrasHPdf("Top 5 clientes", top),
+          totalEstados ? roscaPdf("Empréstimos por estado", estados, "empréstimos") : null,
+          top.length ? barrasHPdf("Top 5 clientes", top) : null,
         ]);
-    } catch (e) { c.innerHTML = erroEcra(e, verBalanco); }
+    } catch (e) { c.innerHTML = filtro + erroEcra(e, verBalanco); ligarFiltro(); }
   }
-
   // Tipo de movimento por extenso (CaixaDao.Movimento.movimento)
   function movLongo(m) {
     const ent = m.tipo === "ENTRADA";
