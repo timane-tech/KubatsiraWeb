@@ -2282,20 +2282,40 @@
   }
 
   // ---------- Lixeira ----------
+  // Período pela data em que foi para a lixeira (apagado / rejeitado) + "Escolher datas"
+  let lixPer = 0, lixDe = null, lixAte = null;
   async function verLixeira() {
+    mostrar("ecra-app");
     cabecalho("Lixeira", "Lançamentos e pedidos apagados");
     const c = novoConteudo();
     let ativa = "caixa";
+    const hojeL = R.hojeISO(), dL = (n) => R.somaDias(hojeL, n);
+    if (!lixDe) { lixDe = dL(-29); lixAte = hojeL; }
+    const PER = [["Sempre", null, null], ["Hoje", hojeL, hojeL], ["Ontem", dL(-1), dL(-1)], ["Últimos 7 dias", dL(-6), hojeL],
+      ["Este mês", hojeL.slice(0, 8) + "01", hojeL], ["Últimos 30 dias", dL(-29), hojeL], ["📅 Escolher datas", null, null]];
+    const ESC = PER.length - 1;
+    const intervalo = () => lixPer === ESC ? [lixDe, lixAte] : [PER[lixPer][1], PER[lixPer][2]];
+    const noPeriodo = (dataHora) => {
+      const [de, ate] = intervalo(); const d = R.dataBase(dataHora) || "";
+      return (!de || d >= de) && (!ate || d <= ate);
+    };
     c.innerHTML = `<div class="cartao" style="display:flex;gap:8px;padding:8px">
       <button class="btn" data-ab="caixa" style="margin:0;padding:10px">Lançamentos do caixa</button>
-      <button class="btn secundario" data-ab="pedidos" style="margin:0;padding:10px">Pedidos rejeitados</button></div><div id="lix-lista">${spinner}</div>`;
+      <button class="btn secundario" data-ab="pedidos" style="margin:0;padding:10px">Pedidos rejeitados</button></div>
+      <div class="chips" id="lix-per">${PER.map((p, i) => `<button class="chip ${i === lixPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div id="lix-datas" class="${lixPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="lix-de" type="date" value="${lixDe}" max="${hojeL}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="lix-ate" type="date" value="${lixAte}" max="${hojeL}"></div>
+      </div>
+      <div id="lix-lista">${spinner}</div>`;
     const carregar = async () => {
       $("lix-lista").innerHTML = spinner;
       try {
         if (ativa === "caixa") {
-          const lista = await Dados.lixoCaixaListar();
-          if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", "O lixo do caixa está vazio."); return; }
-          $("lix-lista").innerHTML = lista.map((m) => {
+          const tudo = await Dados.lixoCaixaListar();
+          const lista = tudo.filter((m) => noPeriodo(m.eliminadoEm || m.data));
+          if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", tudo.length ? "Nenhum lançamento apagado neste período." : "O lixo do caixa está vazio."); return; }
+          $("lix-lista").innerHTML = `<div class="resumo-lista">${lista.length} lançamento${lista.length === 1 ? "" : "s"} apagado${lista.length === 1 ? "" : "s"}${lixPer ? "" : " (todos)"}</div>` + lista.map((m) => {
             const entrada = m.tipo === "ENTRADA";
             return `<div class="item" style="cursor:default;align-items:flex-start">
               <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${ic("lixeira", 18)}</span>
@@ -2307,7 +2327,7 @@
                   <button class="btn perigo" data-elim="${m.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">Eliminar</button>
                 </span></span>
               <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></div>`;
-          }).join("") + `<button class="btn secundario" id="lix-esvaziar" style="margin-top:8px">Esvaziar lixo do caixa</button>`;
+          }).join("") + `<button class="btn secundario" id="lix-esvaziar" style="margin-top:8px">Esvaziar todo o lixo do caixa</button>`;
           $("lix-lista").querySelectorAll("[data-restaurar]").forEach((b) => b.onclick = async () => {
             if (!(await confirmar("Restaurar lançamento", "O lançamento volta ao caixa e o saldo é atualizado.", "Restaurar"))) return;
             const r = await comErro(() => Dados.lixoCaixaRestaurar(Number(b.dataset.restaurar), b.dataset.anul === "true"));
@@ -2323,9 +2343,10 @@
             const r = await comErro(() => Dados.lixoCaixaEsvaziar()); toast(r.msg, !r.ok); carregar();
           };
         } else {
-          const lista = await Dados.rejeitadosListar();
-          if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", "Não há pedidos rejeitados."); return; }
-          $("lix-lista").innerHTML = lista.map((e) => `<div class="item" style="cursor:default;align-items:flex-start">
+          const tudo = await Dados.rejeitadosListar();
+          const lista = tudo.filter((e) => noPeriodo(e.rejeitadoEm || e.dataPedido));
+          if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", tudo.length ? "Nenhum pedido rejeitado neste período." : "Não há pedidos rejeitados."); return; }
+          $("lix-lista").innerHTML = `<div class="resumo-lista">${lista.length} pedido${lista.length === 1 ? "" : "s"} rejeitado${lista.length === 1 ? "" : "s"}${lixPer ? "" : " (todos)"}</div>` + lista.map((e) => `<div class="item" style="cursor:default;align-items:flex-start">
             <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
             <span class="meio"><span class="nome">${esc(e.nomeCliente)} · nº ${e.id}</span>
               <span class="det">${vmt(e.capital)} · pedido ${R.data(e.dataPedido)}</span>
@@ -2347,6 +2368,21 @@
         }
       } catch (e) { $("lix-lista").innerHTML = erroEcra(e, carregar); }
     };
+    $("lix-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+      $("lix-per").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
+      lixPer = Number(ch.dataset.i);
+      $("lix-datas").classList.toggle("oculto", lixPer !== ESC);
+      carregar();
+    });
+    // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+    const mudarDatas = () => {
+      let de = $("lix-de").value || hojeL, ate = $("lix-ate").value || de;
+      if (de > ate) [de, ate] = [ate, de];
+      $("lix-de").value = de; $("lix-ate").value = ate;
+      lixDe = de; lixAte = ate; carregar();
+    };
+    $("lix-de").onchange = mudarDatas;
+    $("lix-ate").onchange = mudarDatas;
     c.querySelectorAll("[data-ab]").forEach((b) => b.onclick = () => {
       ativa = b.dataset.ab;
       c.querySelectorAll("[data-ab]").forEach((x) => x.className = "btn " + (x.dataset.ab === ativa ? "" : "secundario"));
