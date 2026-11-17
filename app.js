@@ -1065,9 +1065,11 @@
     return [
       ["Hoje + atrasos", null, h], ["Só hoje", h, h], ["Ontem", d(-1), d(-1)], ["Últimos 7 dias", d(-6), h],
       ["Amanhã", d(1), d(1)], ["Próximos 7 dias", null, d(6)], ["Este mês", null, fimMes, iniMes],
+      // "Escolher datas": só as do intervalo escolhido (um dia: De = Até). Não junta os atrasos de antes.
+      ["📅 Escolher datas", cobDe || h, cobAte || h],
     ];
   }
-  let cobSit = 0, cobPer = 0;
+  let cobSit = 0, cobPer = 0, cobDe = null, cobAte = null;
 
   async function verCobrancas() {
     mostrar("ecra-app");
@@ -1079,8 +1081,15 @@
       <div class="pesquisa"><span class="lupa">${ic("pesquisa", 18)}</span><input id="cob-f" placeholder="Cliente, contacto ou local"></div>
       <div class="chips" id="cob-sit" style="padding-bottom:6px">${SIT_PREST.map((s, i) => `<button class="chip ${i === cobSit ? "ativo" : ""}" data-i="${i}">${s}</button>`).join("")}</div>
       <div class="chips" id="cob-per">${pers.map((p, i) => `<button class="chip ${i === cobPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div id="cob-datas" class="${cobPer === pers.length - 1 ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="cob-de" type="date" value="${pers[pers.length - 1][1]}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="cob-ate" type="date" value="${pers[pers.length - 1][2]}"></div>
+      </div>
       <div id="cob-lista">${spinner}</div>`;
     const hoje = R.hojeISO();
+    const ESCOLHER = pers.length - 1;
+    const nomePeriodo = () => cobPer !== ESCOLHER ? pers[cobPer][0]
+      : pers[ESCOLHER][1] === pers[ESCOLHER][2] ? R.data(pers[ESCOLHER][1]) : R.data(pers[ESCOLHER][1]) + " a " + R.data(pers[ESCOLHER][2]);
     let porPagar = null, pagas = null, busca = "", lista = [];
     const passaBusca = (p) => !busca || (p.nomeCliente || "").toLowerCase().includes(busca) ||
       (p.telefoneCliente || "").includes(busca) || (p.localNegocio || "").toLowerCase().includes(busca);
@@ -1117,9 +1126,19 @@
       fn(Number(ch.dataset.i));
     });
     chips("cob-sit", (i) => { cobSit = i; carregar(); });
-    chips("cob-per", (i) => { cobPer = i; if (cobSit === 3) carregar(); else render(); });
+    chips("cob-per", (i) => { cobPer = i; $("cob-datas").classList.toggle("oculto", i !== ESCOLHER); if (cobSit === 3) carregar(); else render(); });
+    // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+    const mudarDatas = () => {
+      let de = $("cob-de").value || hoje, ate = $("cob-ate").value || de;
+      if (de > ate) [de, ate] = [ate, de];
+      $("cob-de").value = de; $("cob-ate").value = ate;
+      cobDe = de; cobAte = ate; pers[ESCOLHER][1] = de; pers[ESCOLHER][2] = ate;
+      if (cobSit === 3) carregar(); else if (porPagar) render();
+    };
+    $("cob-de").onchange = mudarDatas;
+    $("cob-ate").onchange = mudarDatas;
     $("cob-f").oninput = (e) => { busca = (e.target.value || "").toLowerCase().trim(); if (porPagar || pagas) render(); };
-    if ($("cob-pdf")) $("cob-pdf").onclick = () => exportarPDF("Prestações do Dia — " + SIT_PREST[cobSit] + " · " + pers[cobPer][0],
+    if ($("cob-pdf")) $("cob-pdf").onclick = () => exportarPDF("Prestações do Dia — " + SIT_PREST[cobSit] + " · " + nomePeriodo(),
       ["Cliente", "Prest.", "Vencimento", "Atraso", cobSit === 3 ? "Pago (MT)" : "Em falta (MT)"],
       lista.map((p) => [p.nomeCliente, p.numero + "ª", R.data(p.vencimento), (p.estado === "PAGO" ? 0 : R.diasAtraso(p.vencimento, hoje)) + "d",
         R.mt(p.estado === "PAGO" ? p.valorPago : R.emFalta(p, hoje))]),
