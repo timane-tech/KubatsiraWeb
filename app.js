@@ -873,7 +873,11 @@
         if (saldo.saldo <= 0 && saldo.entradas === 0)
           avisos += aviso("💡 O caixa está vazio. Registe o <b>capital investido</b> no <b>Caixa</b> antes de aprovar créditos.", CORES.azul);
       }
-      if (pode("APROVACOES")) kpis += kpi("Por aprovar", String(pendentes.length), pendentes.length ? "var(--laranja)" : "var(--verde)");
+      // "Por aprovar" com um sinalizador: a piscar verde/amarelo quando há pedidos à espera; tocar abre os pedidos
+      if (pode("APROVACOES")) kpis += `<div class="kpi-card tocavel" id="ini-aprovar" style="--cor:${pendentes.length ? "var(--laranja)" : "var(--verde)"}"
+          title="${pendentes.length ? "Há pedidos à espera de aprovação" : "Sem pedidos à espera"}">
+        <span class="sinal${pendentes.length ? " piscar" : ""}"></span>
+        <div class="rotulo">${esc("Por aprovar")}</div><div class="valor">${pendentes.length}</div></div>`;
       if (pode("BALANCO")) {
         kpis += kpi("Em dívida", vmt(emDivida), "var(--roxo)");
         kpis += kpi("Em atraso", vmt(emAtraso), emAtraso > 0 ? "var(--vermelho)" : "var(--verde)");
@@ -910,6 +914,7 @@
       if ($("bal-completo")) $("bal-completo").onclick = () => verBalanco();
       if ($("ini-todas")) $("ini-todas").onclick = () => navegar("cobrancas");
       if ($("ini-lic")) $("ini-lic").onclick = () => verLicenca(false);
+      if ($("ini-aprovar")) $("ini-aprovar").onclick = () => verEmprestimos("pendentes");
       ligarCartoesCobranca(c, aCobrar, verInicio);
       c.querySelectorAll(".cl[data-eid]").forEach((b) => b.onclick = () => abrirEmprestimo(pendentes.find((x) => x.id == b.dataset.eid), verInicio));
     } catch (e) { c.innerHTML = erroEcra(e, verInicio); }

@@ -110,6 +110,15 @@ button { font-family: inherit; }
 }
 .kpi-card::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 5px; border-radius: 0 4px 4px 0; background: var(--cor, var(--accent)); }
 .kpi-card .rotulo { font-size: .74rem; color: var(--texto-suave); font-weight: 700; text-transform: uppercase; letter-spacing: .02em; }
+/* Sinalizador do cartão "Por aprovar": verde fixo sem pedidos; a piscar verde/amarelo quando há pedidos */
+.kpi-card .sinal { position: absolute; top: 12px; right: 12px; width: 12px; height: 12px; border-radius: 50%;
+  background: #22c55e; box-shadow: 0 0 0 4px rgba(34, 197, 94, .22); }
+.kpi-card .sinal.piscar { animation: sinal-piscar 1s steps(1, end) infinite; }
+@keyframes sinal-piscar {
+  0% { background: #22c55e; box-shadow: 0 0 0 4px rgba(34, 197, 94, .28), 0 0 10px rgba(34, 197, 94, .7); }
+  50% { background: #facc15; box-shadow: 0 0 0 4px rgba(250, 204, 21, .32), 0 0 10px rgba(250, 204, 21, .8); }
+}
+.kpi-card.tocavel { cursor: pointer; }
 .kpi-card .valor { font-size: 1.3rem; font-weight: 800; margin-top: 6px; color: var(--cor, var(--texto)); white-space: nowrap; }
 
 /* Botão-pílula (Mostrar valores / Ver todas) */
