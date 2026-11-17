@@ -1737,6 +1737,7 @@
   // Como no Android (CaixaActivity): saldo, gráfico, caixa do dia, novo lançamento e lançamentos por dia.
   let caixaVerOcultos = false;
   let cxDia = null, cxPer = 2, cxTipo = 0, cxEntrada = true;
+  let cxDe = null, cxAte = null;   // "Escolher datas": o intervalo escolhido (fica enquanto a app estiver aberta)
   const DIAS_SEMANA = ["DOMINGO", "SEGUNDA-FEIRA", "TERÇA-FEIRA", "QUARTA-FEIRA", "QUINTA-FEIRA", "SEXTA-FEIRA", "SÁBADO"];
   const movCurto = (m) => ({ PRESTACAO: "Prestação", DESEMBOLSO: "Desembolso", AJUSTE: "Ajuste", LICENCA: "Licença", POUPANCA: "Poupança" }[m.categoria]
     || (m.tipo === "ENTRADA" ? "Entrada" : "Despesa"));
@@ -1754,8 +1755,14 @@
       const [s, ev] = await Promise.all([Dados.saldoCaixa(), Dados.graficoEvolucaoCaixa()]);
       const sugEntrada = ["Capital investido", "Reposição do caixa", "Pagamento de dívida antiga", "Multa paga à parte"];
       const sugDespesa = ["Pagamento de salário", "Renda do escritório", "Energia (Credelec)", "Transporte", "Comunicação"];
+      if (!cxDe) { cxDe = R.somaDias(hoje, -6); cxAte = hoje; }
       const periodos = [["Hoje", hoje, hoje], ["Ontem", R.somaDias(hoje, -1), R.somaDias(hoje, -1)], ["Últimos 7 dias", R.somaDias(hoje, -6), hoje],
-        ["Este mês", hoje.slice(0, 8) + "01", hoje]];
+        ["Este mês", hoje.slice(0, 8) + "01", hoje], ["Últimos 30 dias", R.somaDias(hoje, -29), hoje], ["📅 Escolher datas", null, null]];
+      const ESCOLHER = periodos.length - 1;
+      // [de, até] do período ativo (no "Escolher datas", as datas escolhidas)
+      const intervalo = () => cxPer === ESCOLHER ? [cxDe, cxAte] : [periodos[cxPer][1], periodos[cxPer][2]];
+      const nomePeriodo = () => cxPer !== ESCOLHER ? periodos[cxPer][0]
+        : cxDe === cxAte ? R.data(cxDe) : R.data(cxDe) + " a " + R.data(cxAte);
       c.innerHTML = `
         <div class="saldo-cartao">
           <div style="display:flex;justify-content:space-between;align-items:center">
@@ -1797,6 +1804,10 @@
             </div>
           </div>
           <div class="chips" id="lc-per" style="padding-bottom:6px">${periodos.map((p, i) => `<button class="chip ${i === cxPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+          <div id="lc-datas" class="${cxPer === ESCOLHER ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+            <div class="campo" style="margin:0"><label>De</label><input id="lc-de" type="date" value="${cxDe}" max="${hoje}"></div>
+            <div class="campo" style="margin:0"><label>Até</label><input id="lc-ate" type="date" value="${cxAte}" max="${hoje}"></div>
+          </div>
           <div class="chips" id="lc-tipo">${["Todos", "Entradas", "Saídas"].map((t, i) => `<button class="chip ${i === cxTipo ? "ativo" : ""}" data-i="${i}">${t}</button>`).join("")}</div>
           <div class="pesquisa" style="margin-bottom:8px"><span class="lupa">${ic("pesquisa", 18)}</span><input id="lc-f" placeholder="Pesquisar na descrição"></div>
           ${pode("CAIXA_OCULTAR") ? `<label style="display:flex;align-items:center;gap:10px;font-size:.95rem;padding:4px 2px"><input type="checkbox" id="cx-oc" ${caixaVerOcultos ? "checked" : ""} style="width:20px;height:20px"> Mostrar lançamentos ocultos</label>` : ""}
@@ -1888,13 +1899,22 @@
       };
       const carregar = async () => {
         $("lc-lista").innerHTML = spinner;
-        try { const [, de, ate] = periodos[cxPer]; movs = await Dados.movimentosPeriodo(de, ate, caixaVerOcultos); render(); }
+        try { const [de, ate] = intervalo(); movs = await Dados.movimentosPeriodo(de, ate, caixaVerOcultos); render(); }
         catch (e) { $("lc-lista").innerHTML = erroEcra(e, carregar); }
       };
       const chips = (id, fn) => $(id).querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
         $(id).querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch)); fn(Number(ch.dataset.i));
       });
-      chips("lc-per", (i) => { cxPer = i; carregar(); });
+      chips("lc-per", (i) => { cxPer = i; $("lc-datas").classList.toggle("oculto", i !== ESCOLHER); carregar(); });
+      // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+      const mudarDatas = () => {
+        let de = $("lc-de").value || hoje, ate = $("lc-ate").value || de;
+        if (de > ate) [de, ate] = [ate, de];
+        $("lc-de").value = de; $("lc-ate").value = ate;
+        cxDe = de; cxAte = ate; carregar();
+      };
+      $("lc-de").onchange = mudarDatas;
+      $("lc-ate").onchange = mudarDatas;
       chips("lc-tipo", (i) => { cxTipo = i; render(); });
       $("lc-f").oninput = (e) => { busca = (e.target.value || "").toLowerCase().trim(); render(); };
       if ($("cx-oc")) $("cx-oc").onchange = (e) => { caixaVerOcultos = e.target.checked; carregar(); };
@@ -1924,7 +1944,7 @@
           } catch (e) { $("rc-erro").textContent = e.message; $("rc-ok").disabled = false; }
         };
       };
-      if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa — " + periodos[cxPer][0],
+      if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa — " + nomePeriodo(),
         ["Data", "Tipo", "Categoria", "Descrição", "Valor (MT)"],
         naLista.map((m) => [R.dataHora(m.dataMovimento), m.tipo, movCurto(m), m.justificativa || "", (m.tipo === "ENTRADA" ? "+" : "-") + R.mt(m.valor)]),
         [`Saldo: ${R.mt(s.saldo)}  |  Entradas: ${R.mt(s.entradas)}  |  Saídas: ${R.mt(s.saidas)}`], async () => {
