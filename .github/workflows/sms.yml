@@ -6,6 +6,8 @@ on:
   # e se os Secrets da Africa's Talking estiverem configurados (senao termina sem enviar nada).
   schedule:
     - cron: "0 6,10,12 * * *"
+    # Recados aos clientes (fila sms_fila): de 30 em 30 minutos, das 06:00 as 21:30 em Mocambique
+    - cron: "*/30 4-19 * * *"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -35,4 +37,5 @@ jobs:
           AT_ENV: ${{ secrets.AT_ENV }}
           DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '1' || '' }}
           EVENTO: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
         run: python scripts/enviar_sms.py

@@ -2516,9 +2516,11 @@
     c.innerHTML = spinner;
     // No iPhone não há envio automático: abre a app Mensagens já preenchida, um cliente de cada vez
     const btnTodos = pode("COBRANCAS") ? `<button class="btn" id="sms-todos" style="margin-bottom:14px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>` : "";
-    const btnLimparSms = pode("SMS_AUTOMATICO") ? `<button class="btn secundario" id="sms-limpar" style="margin:0 0 14px;color:var(--vermelho)">🧹 Limpar histórico de SMS</button>` : "";
+    const btnLimparSms = (pode("SMS_AUTOMATICO") ? `<button class="btn" id="sms-recado" style="margin:0 0 10px;background:var(--roxo)">✉ Recado aos clientes</button>` : "")
+      + (pode("SMS_AUTOMATICO") ? `<button class="btn secundario" id="sms-limpar" style="margin:0 0 14px;color:var(--vermelho)">🧹 Limpar histórico de SMS</button>` : "");
     const ligar = () => {
       if ($("sms-todos")) $("sms-todos").onclick = () => cobrarTodos();
+      if ($("sms-recado")) $("sms-recado").onclick = escreverRecadoSms;
       if ($("sms-limpar")) $("sms-limpar").onclick = limparHistoricoSms;
     };
     const hojeS = R.hojeISO(), dS = (n) => R.somaDias(hojeS, n);
@@ -2558,6 +2560,51 @@
       }).join("");
       ligar(); ligarFiltro();
     } catch (e) { c.innerHTML = erroEcra(e, verSms); }
+  }
+
+  // Recado aos clientes por SMS (como no PC e no Android): escolher o grupo (ou marcar um a um) e escrever o texto.
+  // Fica na fila e sai pelo telemóvel de envio ou pelo envio automático pela Internet.
+  async function escreverRecadoSms() {
+    abrirFolha(`<h3>Recado aos clientes</h3><div class="sub">Por SMS</div>${spinner}`);
+    let clientes = [];
+    try { clientes = (await Dados.listarClientes("")).filter((c) => (c.telefone || "").replace(/\D/g, "").length >= 9); }
+    catch (e) { toast(e.message, true); fecharFolha(); return; }
+    const GRUPOS = [["Com empréstimo em curso", (c) => c.prestacoesPorPagar > 0], ["Em atraso", (c) => c.prestacoesEmAtraso > 0],
+      ["Todos os clientes", () => true], ["Escolher clientes (marcar na lista)", () => false]];
+    abrirFolha(`<h3>Recado aos clientes</h3><div class="sub">Por SMS · cada cliente recebe «Caro(a) &lt;nome&gt;,» + o recado + Kubatsira Microcrédito</div>
+      <div class="campo"><label>Enviar a</label><select id="rs-grupo">${GRUPOS.map((g, i) => `<option value="${i}">${g[0]}</option>`).join("")}</select></div>
+      <div class="cartao" id="rs-lista" style="box-shadow:none;background:var(--fundo);max-height:230px;overflow:auto;padding:8px 12px">
+        ${clientes.map((c, i) => `<label style="display:flex;align-items:center;gap:10px;padding:6px 0;font-size:.9rem;cursor:pointer">
+          <input type="checkbox" class="rs-c" value="${i}" style="width:18px;height:18px;flex:none"> <span style="flex:1">${esc(c.nome)}</span>
+          <span style="color:var(--texto-suave);font-size:.8rem">${esc(c.telefone)}</span></label>`).join("") || `<p class="sub">Não há clientes com telefone.</p>`}
+      </div>
+      <div class="sub" id="rs-qtd" style="margin:6px 0 10px"></div>
+      <div class="campo"><label>Recado</label><textarea id="rs-texto" rows="4" maxlength="600" placeholder="ex.: Amanhã o escritório está fechado (feriado)."></textarea>
+        <div class="sub" id="rs-conta" style="text-align:right;margin:4px 0 0">0 / 600</div></div>
+      <div class="erro-msg" id="rs-erro"></div>
+      <button class="btn" id="rs-ok" style="background:var(--roxo)">Enviar recado</button>`);
+    const caixas = () => [...document.querySelectorAll("#rs-lista .rs-c")];
+    const contar = () => { const n = caixas().filter((x) => x.checked).length; $("rs-qtd").textContent = n + " cliente(s) escolhido(s)"; $("rs-ok").textContent = n ? "Enviar recado a " + n + " cliente" + (n === 1 ? "" : "s") : "Enviar recado"; };
+    const aplicarGrupo = () => { const g = GRUPOS[Number($("rs-grupo").value)][1]; caixas().forEach((x) => { x.checked = g(clientes[Number(x.value)]); }); contar(); };
+    $("rs-grupo").onchange = aplicarGrupo;
+    caixas().forEach((x) => x.onchange = contar);
+    $("rs-texto").oninput = () => { $("rs-conta").textContent = $("rs-texto").value.length + " / 600"; };
+    aplicarGrupo();
+    $("rs-ok").onclick = async () => {
+      const escolhidos = caixas().filter((x) => x.checked).map((x) => clientes[Number(x.value)]);
+      const texto = $("rs-texto").value.trim();
+      if (!escolhidos.length) { $("rs-erro").textContent = "Escolha pelo menos um cliente."; return; }
+      if (!texto) { $("rs-erro").textContent = "Escreva o recado."; $("rs-texto").focus(); return; }
+      $("rs-ok").disabled = true;
+      try {
+        const r = await Dados.smsEnfileirarRecado(escolhidos.map((c) => ({ id: c.id, nome: c.nome, telefone: c.telefone })), texto, S.user.utilizador);
+        if (!r.ok) { $("rs-erro").textContent = r.msg; $("rs-ok").disabled = false; return; }
+        const inicio = texto.replace(/\s+/g, " ").slice(0, 120) + (texto.length > 120 ? "…" : "");
+        Promise.resolve(Dados.registarAcesso("MENSAGEM", S.user.utilizador, S.user.id, S.user.perfil,
+          "Recado por SMS a " + escolhidos.length + " cliente(s): \"" + inicio + "\"")).catch(() => {});
+        fecharFolha(); toast(r.msg); verSms();
+      } catch (e) { $("rs-erro").textContent = e.message; $("rs-ok").disabled = false; }
+    };
   }
 
   // Limpar o histórico de SMS (como no PC e no Android). Fica registado no Controlo de Acesso.

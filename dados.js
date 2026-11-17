@@ -1366,6 +1366,21 @@ const Dados = (() => {
   }
 
   // ---------- SMS enviados (só leitura; a tabela existe apenas na base real) ----------
+  // Recado aos clientes por SMS (como o PC, SmsDAO.EnfileirarRecado): fica na fila sms_fila e é enviado pelo
+  // telemóvel de envio ou pelo envio automático pela Internet. Cada cliente recebe "Caro(a) <nome>," + recado + a marca.
+  async function smsEnfileirarRecado(clientes, texto, quem) {
+    texto = (texto || "").trim();
+    if (!clientes.length) return { ok: false, msg: "Escolha pelo menos um cliente." };
+    if (!texto) return { ok: false, msg: "Escreva o recado." };
+    if (texto.length > 600) return { ok: false, msg: "O recado pode ter no máximo 600 caracteres." };
+    const agora = Regras.agoraLocal();
+    await DB.lote(clientes.map((c) => ({
+      sql: "INSERT INTO sms_fila (criado_em, criado_por, tipo, cliente_id, nome, telefone, texto) VALUES (?::timestamp, ?, 'RECADO', ?, ?, ?, ?)",
+      params: [agora, quem, c.id, c.nome, c.telefone || "", texto] })));
+    DB.limparCache();
+    return { ok: true, msg: "Recado guardado para " + clientes.length + " cliente(s). É enviado em poucos minutos." };
+  }
+
   // Limpar o histórico de SMS (como no PC e no Android): antesDeISO = apaga o anterior a esse dia; null = tudo.
   // Os pedidos que ainda estão na fila (por enviar) nunca são apagados.
   async function smsLimparHistorico(antesDeISO) {
@@ -1386,7 +1401,11 @@ const Dados = (() => {
         "COALESCE(estado,'') AS estado, COALESCE(valor,0) AS valor FROM (" +
         "SELECT nome, telefone, to_char(enviado_em,'DD/MM/YYYY HH24:MI') AS data_movimento_sms, texto, estado, valor, enviado_em, id " +
         "FROM sms_cobranca WHERE enviado_em IS NOT NULL" + (comPer ? " AND enviado_em::date BETWEEN ?::date AND ?::date" : "") +
-        ") t ORDER BY enviado_em DESC NULLS LAST, id DESC LIMIT " + (comPer ? 1000 : 100), comPer ? [deISO, ateISO] : []))
+        // + os recados (e pedidos) da fila: aparecem logo, "na fila" até serem enviados
+        " UNION ALL SELECT (CASE tipo WHEN 'COBRANCA' THEN 'Cobrança a todos (pedido)' ELSE nome END), COALESCE(telefone, ''), " +
+        "to_char(criado_em,'DD/MM/YYYY HH24:MI'), (CASE WHEN tipo = 'RECADO' THEN 'Recado: ' ELSE '' END) || COALESCE(texto, ''), estado, 0, criado_em, id " +
+        "FROM sms_fila" + (comPer ? " WHERE criado_em::date BETWEEN ?::date AND ?::date" : "") +
+        ") t ORDER BY enviado_em DESC NULLS LAST, id DESC LIMIT " + (comPer ? 1000 : 100), comPer ? [deISO, ateISO, deISO, ateISO] : []))
         .map((r) => ({ nome: r.nome, telefone: r.telefone, quando: r.quando, texto: r.texto, estado: r.estado, valor: Number(r.valor) }));
     } catch (e) { return null; }   // null = tabela não existe nesta base
   }
@@ -1405,7 +1424,7 @@ const Dados = (() => {
     PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
     poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar, lixoPreverAnulacao, lixoAnularPagamento, ehPagamento,
-    enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico,
+    enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico, smsEnfileirarRecado,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, acessosApagar, movimentosDoDia, smsEnviadosListar,
     alterarMulta, reporMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,

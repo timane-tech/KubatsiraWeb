@@ -31,6 +31,8 @@ AT_FROM = os.environ.get("AT_FROM", "").strip()
 AT_ENV = os.environ.get("AT_ENV", "").strip().lower()
 DRY_RUN = os.environ.get("DRY_RUN", "").strip() == "1"
 EVENTO = os.environ.get("EVENTO", "").strip()
+CRON = os.environ.get("CRON", "").strip()            # o horário (cron) que disparou esta corrida
+CRON_COBRANCA = "0 6,10,12 * * *"                     # 08:00, 12:00 e 14:00 em Moçambique
 
 MARCA = "Kubatsira Microcredito"
 MULTA_DIA = decimal.Decimal("0.02")
@@ -202,12 +204,52 @@ def registar_acesso(detalhe):
     except Exception:
         pass
 
+# ---------- Fila (sms_fila): recados aos clientes e pedidos "cobrança a todos" feitos na web ou no computador ----------
+def texto_recado(nome, recado):
+    # Igual à app Android (SmsCobranca.textoRecado)
+    return "Caro(a) %s,\n%s\n%s" % ((nome or "").strip(), (recado or "").strip(), MARCA)
+
+def tratar_fila(agora):
+    """Envia os recados pendentes. Devolve True se alguém pediu "cobrança a todos" (corre a cobrança à mão)."""
+    try:
+        fila = neon("UPDATE sms_fila SET estado = 'A_ENVIAR', tratado_em = ?::timestamp WHERE id IN "
+                    "(SELECT id FROM sms_fila WHERE estado = 'PENDENTE' ORDER BY id LIMIT 300 FOR UPDATE SKIP LOCKED) "
+                    "RETURNING id, tipo, nome, telefone, texto", [agora])
+    except Exception as e:
+        print("Fila de SMS indisponível: %s" % str(e)[:150]); return False
+    pediu_cobranca = False; enviados = falhados = 0
+    for r in fila:
+        if r["tipo"] == "COBRANCA":
+            pediu_cobranca = True
+            neon("UPDATE sms_fila SET estado = 'ENVIADO', tratado_em = ?::timestamp WHERE id = ?::int", [agora, r["id"]]); continue
+        tel = telefone_internacional(r["telefone"] or "")
+        if not tel:
+            neon("UPDATE sms_fila SET estado = 'SEM_NUMERO', tratado_em = ?::timestamp WHERE id = ?::int", [agora, r["id"]]); continue
+        ok, info = enviar_at(tel, texto_recado(r["nome"], r["texto"]))
+        neon("UPDATE sms_fila SET estado = ?, tratado_em = ?::timestamp WHERE id = ?::int", ["ENVIADO" if ok else "FALHOU", agora, r["id"]])
+        if ok:
+            enviados += 1; print("  RECADO OK  %s" % (r["nome"] or tel))
+        else:
+            falhados += 1; print("  RECADO FALHOU %s: %s" % (r["nome"] or tel, info))
+    if fila:
+        print("Fila: %d recado(s) enviado(s), %d falhado(s)%s." % (enviados, falhados, ", pedido de cobrança a todos" if pediu_cobranca else ""))
+    if enviados:
+        registar_acesso("Recados por SMS enviados: %d cliente(s)" % enviados)
+    return pediu_cobranca
+
 def main():
     if not NEON_URL:
         print("Ainda não configurado: falta o Secret NEON_URL. Nada enviado."); return
     if not DRY_RUN and (not AT_USERNAME or not AT_API_KEY):
         print("Ainda não configurado: faltam os Secrets AT_USERNAME/AT_API_KEY. Nada enviado."); return
-    turno = turno_atual()
+    agora = AGORA_MZ.replace(microsecond=0).isoformat(sep=" ")
+    # 1) A fila (recados e pedidos "cobrança a todos"): em todas as corridas
+    pediu_cobranca = False if DRY_RUN else tratar_fila(agora)
+    # 2) A cobrança: só nas corridas das 08/12/14, à mão (Run workflow) ou se alguém a pediu pela fila
+    so_fila = EVENTO == "schedule" and CRON != "" and CRON != CRON_COBRANCA
+    if so_fila and not pediu_cobranca:
+        return
+    turno = 0 if so_fila else turno_atual()
     # O horário automático respeita o interruptor das Configurações (web, telemóvel ou computador)
     if turno in HORAS and not DRY_RUN:
         if config("sms_automatico") != "1":
@@ -218,7 +260,6 @@ def main():
                 print("Ligado depois das %02d:00 de hoje: este horário não é enviado." % turno); return
         except ValueError:
             pass
-    agora = AGORA_MZ.replace(microsecond=0).isoformat(sep=" ")
     print("Turno %s · dia %s · %s" % (turno, HOJE, "DRY_RUN" if DRY_RUN else "envio real"))
 
     # Prestações que vencem hoje ou em atraso (candidatas a cobrança)
