@@ -1285,13 +1285,16 @@ const Dados = (() => {
   }
 
   // ---------- SMS enviados (só leitura; a tabela existe apenas na base real) ----------
-  async function smsEnviadosListar() {
+  // deISO/ateISO opcionais: só os SMS enviados nesse período (sem período = os 100 mais recentes)
+  async function smsEnviadosListar(deISO, ateISO) {
     try {
+      const comPer = !!(deISO && ateISO);
       return (await DB.consultar(
         "SELECT COALESCE(nome,'') AS nome, telefone, data_movimento_sms AS quando, COALESCE(texto,'') AS texto, " +
         "COALESCE(estado,'') AS estado, COALESCE(valor,0) AS valor FROM (" +
-        "SELECT nome, telefone, to_char(enviado_em,'DD/MM HH24:MI') AS data_movimento_sms, texto, estado, valor, enviado_em, id " +
-        "FROM sms_cobranca WHERE enviado_em IS NOT NULL) t ORDER BY enviado_em DESC NULLS LAST, id DESC LIMIT 100", []))
+        "SELECT nome, telefone, to_char(enviado_em,'DD/MM/YYYY HH24:MI') AS data_movimento_sms, texto, estado, valor, enviado_em, id " +
+        "FROM sms_cobranca WHERE enviado_em IS NOT NULL" + (comPer ? " AND enviado_em::date BETWEEN ?::date AND ?::date" : "") +
+        ") t ORDER BY enviado_em DESC NULLS LAST, id DESC LIMIT " + (comPer ? 1000 : 100), comPer ? [deISO, ateISO] : []))
         .map((r) => ({ nome: r.nome, telefone: r.telefone, quando: r.quando, texto: r.texto, estado: r.estado, valor: Number(r.valor) }));
     } catch (e) { return null; }   // null = tabela não existe nesta base
   }

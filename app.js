@@ -2165,25 +2165,47 @@
   }
 
   // ---------- Notificações ----------
+  // Período pela data da notificação + "Escolher datas"
+  let notPer = 0, notDe = null, notAte = null;
   async function verNotificacoes() {
+    mostrar("ecra-app");
     cabecalho("Notificações", "");
     const c = novoConteudo();
     c.innerHTML = spinner;
+    const hojeN = R.hojeISO(), dN = (n) => R.somaDias(hojeN, n);
+    if (!notDe) { notDe = dN(-29); notAte = hojeN; }
+    const PER = [["Todas", null, null], ["Hoje", hojeN, hojeN], ["Ontem", dN(-1), dN(-1)], ["Últimos 7 dias", dN(-6), hojeN],
+      ["Este mês", hojeN.slice(0, 8) + "01", hojeN], ["Últimos 30 dias", dN(-29), hojeN], ["📅 Escolher datas", null, null]];
+    const ESC = PER.length - 1;
+    const [de, ate] = notPer === ESC ? [notDe, notAte] : [PER[notPer][1], PER[notPer][2]];
+    const filtro = `<div class="chips" id="not-per">${PER.map((p, i) => `<button class="chip ${i === notPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div class="${notPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="not-de" type="date" value="${notDe}" max="${hojeN}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="not-ate" type="date" value="${notAte}" max="${hojeN}"></div></div>`;
     try {
-      const lista = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
+      const todas = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
+      const lista = todas.filter((n) => { const d = R.dataBase(n.data) || ""; return (!de || d >= de) && (!ate || d <= ate); });
       const cor = (t) => t === "SEGURANCA" ? CORES.vermelho : t === "ATUALIZACAO" ? CORES.verde : t === "RECADO" ? CORES.roxo : CORES.azul;
-      c.innerHTML = lista.length ? lista.map((n) => `<div class="cl" style="cursor:default;${n.lida ? "" : "border-left:4px solid var(--accent)"}">
+      c.innerHTML = filtro + (lista.length ? (notPer ? `<div class="resumo-lista">${lista.length} notificaç${lista.length === 1 ? "ão" : "ões"} neste período</div>` : "") : "") + (lista.length ? lista.map((n) => `<div class="cl" style="cursor:default;${n.lida ? "" : "border-left:4px solid var(--accent)"}">
         <div class="cl-topo"><span class="circ-ic" style="background:${cor(n.tipo)[1]};color:${cor(n.tipo)[0]};width:42px;height:42px">${icf("sino", 20)}</span>
           <div class="cl-meio"><div class="cl-tit">${esc(n.titulo || "Notificação")}${n.lida ? "" : ` ${pilula("Nova", CORES.azul)}`}</div>
             <div class="cl-sub" style="white-space:pre-line">${esc(n.mensagem || "")}</div>
             <div class="cl-sub" style="font-size:.76rem;margin-top:4px">${R.dataHora(n.data)}${n.autor ? " · " + esc(n.autor) : ""}</div></div>
           <button class="icone" data-rem="${n.id}" title="Remover" style="background:none;border:0;color:var(--texto-suave);cursor:pointer;font-size:1.1rem">✕</button>
-        </div></div>`).join("") : vazio("notificacoes", "Sem notificações.");
+        </div></div>`).join("") : vazio("notificacoes", notPer && todas.length ? "Sem notificações neste período." : "Sem notificações."));
+      $("not-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => { notPer = Number(ch.dataset.i); verNotificacoes(); });
+      // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+      const mudar = () => {
+        let d = $("not-de").value || hojeN, a = $("not-ate").value || d;
+        if (d > a) [d, a] = [a, d];
+        notDe = d; notAte = a; verNotificacoes();
+      };
+      $("not-de").onchange = mudar; $("not-ate").onchange = mudar;
       c.querySelectorAll("[data-rem]").forEach((b) => b.onclick = async () => {
         try { await Dados.removerNotificacao(S.user.id, Number(b.dataset.rem)); b.closest(".cl").remove(); } catch (e) { toast(e.message, true); }
       });
       // Abrir o sino marca tudo como lido (o número vermelho desaparece)
-      const porLer = lista.filter((n) => !n.lida).map((n) => n.id);
+      const porLer = todas.filter((n) => !n.lida).map((n) => n.id);
       if (porLer.length) Dados.marcarLidas(S.user.id, porLer).catch(() => {});
     } catch (e) { c.innerHTML = vazio("notificacoes", "Sem notificações."); }
   }
@@ -2392,18 +2414,44 @@
   }
 
   // ---------- SMS enviados ----------
+  // Período pela data de envio + "Escolher datas"
+  let smsPer = 0, smsDe = null, smsAte = null;
   async function verSms() {
+    mostrar("ecra-app");
     cabecalho("SMS aos clientes", "Cobranças e recados");
     const c = novoConteudo();
     c.innerHTML = spinner;
     // No iPhone não há envio automático: abre a app Mensagens já preenchida, um cliente de cada vez
     const btnTodos = pode("COBRANCAS") ? `<button class="btn" id="sms-todos" style="margin-bottom:14px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>` : "";
     const ligar = () => { if ($("sms-todos")) $("sms-todos").onclick = () => cobrarTodos(); };
+    const hojeS = R.hojeISO(), dS = (n) => R.somaDias(hojeS, n);
+    if (!smsDe) { smsDe = dS(-29); smsAte = hojeS; }
+    const PER = [["Mais recentes", null, null], ["Hoje", hojeS, hojeS], ["Ontem", dS(-1), dS(-1)], ["Últimos 7 dias", dS(-6), hojeS],
+      ["Este mês", hojeS.slice(0, 8) + "01", hojeS], ["Últimos 30 dias", dS(-29), hojeS], ["📅 Escolher datas", null, null]];
+    const ESC = PER.length - 1;
+    const [de, ate] = smsPer === ESC ? [smsDe, smsAte] : [PER[smsPer][1], PER[smsPer][2]];
+    const filtro = `<div class="chips" id="sms-per">${PER.map((p, i) => `<button class="chip ${i === smsPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div id="sms-datas" class="${smsPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="sms-de" type="date" value="${smsDe}" max="${hojeS}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="sms-ate" type="date" value="${smsAte}" max="${hojeS}"></div></div>`;
+    const ligarFiltro = () => {
+      if (!$("sms-per")) return;
+      $("sms-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => { smsPer = Number(ch.dataset.i); verSms(); });
+      // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+      const mudar = () => {
+        let d = $("sms-de").value || hojeS, a = $("sms-ate").value || d;
+        if (d > a) [d, a] = [a, d];
+        smsDe = d; smsAte = a; verSms();
+      };
+      $("sms-de").onchange = mudar; $("sms-ate").onchange = mudar;
+    };
     try {
-      const lista = pode("SMS_VER") ? await Dados.smsEnviadosListar() : [];
+      const lista = pode("SMS_VER") ? await Dados.smsEnviadosListar(de, ate) : [];
       if (lista === null) { c.innerHTML = btnTodos + vazio("sms", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); ligar(); return; }
-      if (!lista.length) { c.innerHTML = btnTodos + vazio("sms", "Ainda não há SMS enviados."); ligar(); return; }
-      c.innerHTML = btnTodos + `<div class="seccao-titulo">Enviados</div>` + lista.map((s) => {
+      const comFiltro = pode("SMS_VER") ? filtro : "";
+      if (!lista.length) { c.innerHTML = btnTodos + comFiltro + vazio("sms", smsPer ? "Nenhum SMS enviado neste período." : "Ainda não há SMS enviados."); ligar(); ligarFiltro(); return; }
+      const nOk = lista.filter((s) => s.estado === "ENVIADO").length;
+      c.innerHTML = btnTodos + comFiltro + `<div class="resumo-lista">${lista.length} SMS${smsPer ? "" : " (os mais recentes)"} · ${nOk} enviado${nOk === 1 ? "" : "s"} com sucesso${lista.length - nOk ? " · " + (lista.length - nOk) + " com falha" : ""}</div>` + lista.map((s) => {
         const ok = s.estado === "ENVIADO";
         return `<div class="item" style="cursor:default;align-items:flex-start">
           <span class="avatar" style="background:${ok ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${ok ? "var(--verde)" : "var(--vermelho)"}">${ic("sms", 18)}</span>
@@ -2411,7 +2459,7 @@
             <span class="det" style="white-space:normal">${esc(s.texto)}</span>
             <span class="det" style="font-size:.74rem">${esc(s.telefone)} · ${esc(s.quando || "")} · ${esc(s.estado || "")}</span></span></div>`;
       }).join("");
-      ligar();
+      ligar(); ligarFiltro();
     } catch (e) { c.innerHTML = erroEcra(e, verSms); }
   }
 
