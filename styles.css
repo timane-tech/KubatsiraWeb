@@ -46,7 +46,10 @@ button { font-family: inherit; }
 /* Cabeçalho (gradiente azul, como no Android) */
 .cabecalho {
   position: sticky; top: 0; z-index: 20;
-  background: linear-gradient(135deg, #16366a 0%, #1f4fa0 55%, #2f80ed 115%);
+  /* Cor sólida por baixo do gradiente: o Safari do iPhone (iOS 26) usa-a para pintar a barra de estado;
+     só com o gradiente, não a consegue ler e desfoca o topo do cabeçalho */
+  background-color: #16366a;
+  background-image: linear-gradient(135deg, #16366a 0%, #1f4fa0 55%, #2f80ed 115%);
   color: #fff;
   padding: calc(env(safe-area-inset-top) + 16px) 18px 18px;
   display: flex; align-items: center; gap: 12px;
@@ -491,7 +494,7 @@ input, select, textarea, .campo input, .campo select, .campo textarea, .pesquisa
 
 /* ---------- Ecrã de entrada (activity_login.xml) ---------- */
 .login { min-height: 100dvh; background: var(--fundo); padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
-.login-marca { background: linear-gradient(135deg, #16366a 0%, #1f4fa0 55%, #2f80ed 115%); color: #fff;
+.login-marca { background-color: #16366a; background-image: linear-gradient(135deg, #16366a 0%, #1f4fa0 55%, #2f80ed 115%); color: #fff;
   padding: calc(env(safe-area-inset-top) + 28px) 24px 64px; border-radius: 0 0 28px 28px; }
 .login-idioma { display: flex; width: max-content; margin-left: auto; background: rgba(255,255,255,.2); border-radius: 999px; padding: 3px; }
 .login-idioma button { background: none; border: 0; color: #fff; font-weight: 700; font-family: inherit; font-size: .9rem; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
