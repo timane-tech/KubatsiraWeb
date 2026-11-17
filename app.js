@@ -2189,35 +2189,82 @@
   }
 
   // ---------- Poupança de Clientes ----------
+  // Período pela data dos movimentos (depósitos e usos) + "Escolher datas"
+  let pouPer = 0, pouDe = null, pouAte = null;
   async function verPoupanca() {
+    mostrar("ecra-app");
     cabecalho("Poupança de Clientes", "Cofres dos clientes");
     const c = novoConteudo();
-    c.innerHTML = spinner;
-    try {
-      const lista = await Dados.poupancaSaldos(false);
-      const comSaldo = lista.filter((x) => x.saldo > 0.005);
-      const total = comSaldo.reduce((s, x) => s + x.saldo, 0);
-      const itens = lista.length ? lista.map((x) => `<button class="item" data-cid="${x.clienteId}">
-        <span class="avatar" style="background:${x.saldo > 0.005 ? "var(--navy)" : "var(--fundo)"};color:${x.saldo > 0.005 ? "#fff" : "var(--texto-suave)"}">${esc(R.iniciais(x.nome))}</span>
-        <span class="meio"><span class="nome">${esc(x.nome)}</span>
-          <span class="det">Depositado ${vmt(x.depositado)} · usado ${vmt(x.usado)}</span></span>
-        <span class="fim"><span class="mt" style="${x.saldo > 0.005 ? "" : "color:var(--texto-suave)"}">${vmt(x.saldo)}</span></span></button>`).join("")
-        : vazio("poupanca", "Ainda não há poupança de clientes.");
-      c.innerHTML = `
-        <div class="kpis" style="grid-template-columns:1fr">
-          <div class="kpi destaque"><div class="rotulo">Total guardado nos cofres</div><div class="valor" style="font-size:1.5rem">${vmt(total)}</div></div>
-        </div>
-        <div class="seccao-titulo">Clientes (${comSaldo.length} com saldo)</div>${itens}`;
-      c.querySelectorAll("[data-cid]").forEach((b) => b.onclick = () => {
-        const x = lista.find((y) => y.clienteId == b.dataset.cid); abrirPoupancaCliente(x);
-      });
-    } catch (e) { c.innerHTML = erroEcra(e, verPoupanca); }
+    const hojeP = R.hojeISO(), dP = (n) => R.somaDias(hojeP, n);
+    if (!pouDe) { pouDe = dP(-29); pouAte = hojeP; }
+    const PER = [["Sempre", null, null], ["Hoje", hojeP, hojeP], ["Ontem", dP(-1), dP(-1)], ["Últimos 7 dias", dP(-6), hojeP],
+      ["Este mês", hojeP.slice(0, 8) + "01", hojeP], ["Últimos 30 dias", dP(-29), hojeP], ["📅 Escolher datas", null, null]];
+    const ESC = PER.length - 1;
+    const intervalo = () => pouPer === ESC ? [pouDe, pouAte] : [PER[pouPer][1], PER[pouPer][2]];
+    const nomePer = () => pouPer !== ESC ? PER[pouPer][0] : pouDe === pouAte ? R.data(pouDe) : R.data(pouDe) + " a " + R.data(pouAte);
+    c.innerHTML = `
+      <div class="chips" id="pou-per">${PER.map((p, i) => `<button class="chip ${i === pouPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
+      <div id="pou-datas" class="${pouPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="pou-de" type="date" value="${pouDe}" max="${hojeP}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="pou-ate" type="date" value="${pouAte}" max="${hojeP}"></div>
+      </div>
+      <div id="pou-lista">${spinner}</div>`;
+    const carregar = async () => {
+      $("pou-lista").innerHTML = spinner;
+      try {
+        const [de, ate] = intervalo();
+        const [lista, noPer] = await Promise.all([Dados.poupancaSaldos(false), pouPer ? Dados.poupancaNoPeriodo(de, ate) : null]);
+        const comSaldo = lista.filter((x) => x.saldo > 0.005);
+        const total = comSaldo.reduce((s, x) => s + x.saldo, 0);
+        // Com um período: só os clientes que tiveram depósitos/usos nesse período, com os valores do período
+        const mostrados = noPer ? lista.filter((x) => noPer.has(x.clienteId)) : lista;
+        let entrou = 0, saiu = 0;
+        if (noPer) noPer.forEach((v) => { entrou += v.depositado; saiu += v.usado; });
+        const itens = mostrados.length ? mostrados.map((x) => {
+          const p = noPer ? noPer.get(x.clienteId) : x;
+          return `<button class="item" data-cid="${x.clienteId}">
+            <span class="avatar" style="background:${corAvatar(x.nome)};color:#fff">${esc(R.iniciais(x.nome))}</span>
+            <span class="meio"><span class="nome">${esc(x.nome)}</span>
+              <span class="det">${noPer ? "No período: " : ""}depositado ${vmt(p.depositado)} · usado ${vmt(p.usado)}</span>
+              <span class="det" style="font-size:.76rem">Saldo atual</span></span>
+            <span class="fim"><span class="mt" style="${x.saldo > 0.005 ? "" : "color:var(--texto-suave)"}">${vmt(x.saldo)}</span></span></button>`;
+        }).join("") : vazio("poupanca", noPer ? "Nenhum depósito nem uso de poupança neste período." : "Ainda não há poupança de clientes.");
+        $("pou-lista").innerHTML = `
+          <div class="kpis" style="grid-template-columns:1fr${noPer ? " 1fr" : ""}">
+            <div class="kpi destaque"><div class="rotulo">Total guardado nos cofres</div><div class="valor" style="font-size:1.4rem">${vmt(total)}</div></div>
+            ${noPer ? `<div class="kpi"><div class="rotulo">${esc(nomePer())}</div>
+              <div style="font-size:.9rem;margin-top:6px;line-height:1.5"><span style="color:var(--verde)">↓ depositado ${vmt(entrou)}</span><br><span style="color:var(--laranja)">↑ usado ${vmt(saiu)}</span></div></div>` : ""}
+          </div>
+          <div class="seccao-titulo">${noPer ? `Clientes com movimentos (${mostrados.length})` : `Clientes (${comSaldo.length} com saldo)`}</div>${itens}`;
+        $("pou-lista").querySelectorAll("[data-cid]").forEach((b) => b.onclick = () => {
+          const x = lista.find((y) => y.clienteId == b.dataset.cid); abrirPoupancaCliente(x, noPer ? [de, ate, nomePer()] : null);
+        });
+      } catch (e) { $("pou-lista").innerHTML = erroEcra(e, carregar); }
+    };
+    $("pou-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => {
+      $("pou-per").querySelectorAll(".chip").forEach((x) => x.classList.toggle("ativo", x === ch));
+      pouPer = Number(ch.dataset.i);
+      $("pou-datas").classList.toggle("oculto", pouPer !== ESC);
+      carregar();
+    });
+    // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+    const mudarDatas = () => {
+      let de = $("pou-de").value || hojeP, ate = $("pou-ate").value || de;
+      if (de > ate) [de, ate] = [ate, de];
+      $("pou-de").value = de; $("pou-ate").value = ate;
+      pouDe = de; pouAte = ate; carregar();
+    };
+    $("pou-de").onchange = mudarDatas;
+    $("pou-ate").onchange = mudarDatas;
+    carregar();
   }
 
-  async function abrirPoupancaCliente(x) {
+  // periodo: [de, até, nome] para mostrar só os movimentos desse período (ou null = todos)
+  async function abrirPoupancaCliente(x, periodo) {
     abrirFolha(`<h3>${esc(x.nome)}</h3><div class="sub">Poupança</div>${spinner}`);
     let movs = [];
     try { movs = await Dados.poupancaMovimentos(x.clienteId); } catch (e) {}
+    if (periodo) movs = movs.filter((m) => { const d = R.dataBase(m.data) || ""; return d >= periodo[0] && d <= periodo[1]; });
     const linhas = movs.map((m) => {
       const dep = m.tipo === "DEPOSITO";
       return `<div class="item" style="cursor:default">
@@ -2230,8 +2277,8 @@
       <div class="linha-dados"><span class="r">Saldo atual</span><span class="v">${R.mt(x.saldo)}</span></div>
       <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${R.mt(x.depositado)}</span></div>
       <div class="linha-dados"><span class="r">Total usado</span><span class="v">${R.mt(x.usado)}</span></div>
-      <div class="seccao-titulo" style="margin-left:0">Movimentos</div>
-      ${linhas || `<p class="sub" style="color:var(--texto-suave)">Sem movimentos.</p>`}`);
+      <div class="seccao-titulo" style="margin-left:0">Movimentos${periodo ? " · " + esc(periodo[2]) : ""}</div>
+      ${linhas || `<p class="sub" style="color:var(--texto-suave)">Sem movimentos${periodo ? " neste período" : ""}.</p>`}`);
   }
 
   // ---------- Lixeira ----------

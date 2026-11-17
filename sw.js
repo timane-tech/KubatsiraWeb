@@ -2,7 +2,7 @@
  * Service worker: guarda a "casca" da app (HTML/CSS/JS/ícones) para abrir depressa e offline.
  * Os dados (consultas à Neon) NUNCA são guardados aqui — vão sempre à base de dados pela rede.
  */
-const CACHE = "kubatsira-v37";
+const CACHE = "kubatsira-v38";
 const CASCA = [
   "./", "./index.html", "./styles.css", "./dicionario.js", "./idioma.js", "./icones.js","./regras.js", "./db.js", "./dados.js", "./app.js",
   "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png",

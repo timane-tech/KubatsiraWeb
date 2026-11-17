@@ -973,6 +973,18 @@ const Dados = (() => {
       depositado: Number(r.depositado), usado: Number(r.usado), saldo: Number(r.saldo), ultimo: r.ultimo }));
   }
 
+  // Depósitos e usos de cada cliente num período (pela data do movimento)
+  async function poupancaNoPeriodo(deISO, ateISO) {
+    const rows = await DB.consultar(
+      "SELECT cliente_id, COALESCE(SUM(valor) FILTER (WHERE tipo='DEPOSITO'),0) AS dep, " +
+      "COALESCE(SUM(valor) FILTER (WHERE tipo<>'DEPOSITO'),0) AS uso, COUNT(*) AS n " +
+      "FROM poupanca_clientes WHERE data_movimento::date BETWEEN ?::date AND ?::date GROUP BY cliente_id",
+      [deISO || "1900-01-01", ateISO || "2999-12-31"]);
+    const m = new Map();
+    rows.forEach((r) => m.set(Number(r.cliente_id), { depositado: Number(r.dep), usado: Number(r.uso), movimentos: Number(r.n) }));
+    return m;
+  }
+
   async function poupancaMovimentos(clienteId) {
     return (await DB.consultar(
       "SELECT tipo, valor, data_movimento, COALESCE(descricao,'') AS descricao, COALESCE(registado_por,'') AS registado_por " +
@@ -1296,7 +1308,7 @@ const Dados = (() => {
     alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao,
     configLer, configGravar, sinoAtivo, smsAutomaticoAtivo, definirSmsAutomatico,
     PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
-    poupancaSaldos, poupancaMovimentos,
+    poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, acessosApagar, movimentosDoDia, smsEnviadosListar,
