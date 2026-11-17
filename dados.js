@@ -866,6 +866,37 @@ const Dados = (() => {
       "ON CONFLICT (notificacao_id, usuario_id) DO UPDATE SET removida = TRUE", [id, usuarioId]);
   }
 
+  // ---------- Recados (sino): Administrador → agentes (todos ou um) · Agente → Administração ----------
+  // O mesmo formato do Kubatsira para Windows (NotificacaoController.EnviarRecado): tipo RECADO, máx. 500 caracteres.
+  async function enviarRecado(texto, paraUsuarioId, u) {
+    if (!u || !u.id) return { ok: false, msg: "Não foi possível identificar a sua conta. Termine a sessão e entre de novo." };
+    texto = (texto || "").trim();
+    if (!texto) return { ok: false, msg: "Escreva o recado antes de enviar." };
+    if (texto.length > 500) return { ok: false, msg: "O recado pode ter no máximo 500 caracteres." };
+    const admin = u.perfil === "ADMIN", nome = nomeSessao();
+    await DB.executar("INSERT INTO notificacoes (tipo, titulo, mensagem, de_usuario_id, de_nome, para_perfil, para_usuario_id, criada_em) " +
+      "VALUES ('RECADO', ?, ?, ?, ?, ?, ?, ?::timestamp)",
+      [("Recado de " + nome).slice(0, 150), texto, u.id, nome, admin ? (paraUsuarioId ? null : "AGENTE") : "ADMIN",
+        admin && paraUsuarioId ? paraUsuarioId : null, Regras.agoraLocal()]);
+    return { ok: true, msg: "Recado enviado!" };
+  }
+  async function recadosEnviados(usuarioId) {
+    try {
+      return (await DB.consultar(
+        "SELECT n.id, n.titulo, n.mensagem, n.criada_em, " +
+        "(CASE WHEN n.para_usuario_id IS NOT NULL THEN COALESCE(NULLIF(d.nome_exibicao, ''), d.telefone, '') " +
+        "      WHEN n.para_perfil = 'AGENTE' THEN 'Todos os agentes' WHEN n.para_perfil = 'ADMIN' THEN 'Administração' ELSE 'Todos' END) AS destino " +
+        "FROM notificacoes n LEFT JOIN usuarios d ON d.id = n.para_usuario_id " +
+        "WHERE n.tipo = 'RECADO' AND n.de_usuario_id = ? AND n.criada_em >= CURRENT_TIMESTAMP - INTERVAL '60 days' " +
+        "ORDER BY n.criada_em DESC LIMIT 30", [usuarioId]))
+        .map((r) => ({ id: Number(r.id), titulo: r.titulo, mensagem: r.mensagem, data: r.criada_em, destino: r.destino, tipo: "RECADO", lida: true }));
+    } catch (e) { return []; }
+  }
+  async function apagarRecado(id, autorId) {
+    const r = await DB.executar("DELETE FROM notificacoes WHERE id = ? AND tipo = 'RECADO' AND de_usuario_id = ?", [id, autorId]);
+    return r.afetadas === 1 ? { ok: true, msg: "Recado apagado." } : { ok: false, msg: "Só pode apagar os recados que escreveu." };
+  }
+
   // ---------- Configurações do sistema (iguais no Android e no computador) ----------
   async function configLer(chave) {
     try {
@@ -1010,6 +1041,48 @@ const Dados = (() => {
       { sql: "DELETE FROM caixa_eliminados WHERE id=?", params: [idLixo] },
     ]);
     return { ok: true, msg: "Lançamento restaurado. O saldo foi atualizado." };
+  }
+
+  // ---- Anular, a partir do lixo, um pagamento de prestação que ainda conta nas prestações ----
+  // A regra está na função da base kub_anular_pagamento (a mesma do PC e do Android): com FALSE só descreve
+  // o que vai mudar; com TRUE faz a anulação (as prestações voltam a ficar como antes do pagamento).
+  const PAG_ANTIGO = /^Pagamento (P[0-9]+ |de Prestação|da [0-9]+ª|das prestações)/;
+  function ehPagamento(tipo, categoria, justificativa) {
+    return tipo === "ENTRADA" && (categoria === "PRESTACAO" || (!categoria && !!justificativa && PAG_ANTIGO.test(justificativa)));
+  }
+  async function lancamentoDoLixo(idLixo) {
+    const r = (await DB.consultar("SELECT caixa_id, tipo, categoria, valor, emprestimo_id, prestacao_numero, justificativa, " +
+      "COALESCE(pagamento_anulado, FALSE)::text AS anulado FROM caixa_eliminados WHERE id=?", [idLixo]))[0];
+    if (!r) return null;
+    let emp = Number(r.emprestimo_id) > 0 ? Number(r.emprestimo_id) : null;
+    if (!emp) { const m = /#([0-9]{1,9})/.exec(r.justificativa || ""); emp = m ? Number(m[1]) : null; }
+    return { caixaId: Number(r.caixa_id), tipo: r.tipo, categoria: r.categoria || "", valor: Number(r.valor), emprestimoId: emp,
+      numeros: r.prestacao_numero, justificativa: r.justificativa || "", anulado: r.anulado === "true" || r.anulado === "t" };
+  }
+  // null = não é um pagamento; "ERRO: …" = não se pode anular; outro texto = as prestações que mudam
+  async function lixoPreverAnulacao(idLixo) {
+    const l = await lancamentoDoLixo(idLixo);
+    if (!l || !ehPagamento(l.tipo, l.categoria, l.justificativa)) return null;
+    if (l.anulado) return "ERRO: Este pagamento já foi anulado.";
+    try {
+      const r = await DB.consultar("SELECT kub_anular_pagamento(?::int, ?::int, ?::text, ?::numeric, ?::text, FALSE, '') AS r",
+        [l.caixaId, l.emprestimoId, l.numeros, l.valor, l.justificativa]);
+      return r[0] ? r[0].r : "ERRO: sem resposta da base de dados.";
+    } catch (e) { return "ERRO: " + e.message; }
+  }
+  async function lixoAnularPagamento(idLixo) {
+    const l = await lancamentoDoLixo(idLixo);
+    if (!l) return { ok: false, msg: "O lançamento já não está no lixo." };
+    if (!ehPagamento(l.tipo, l.categoria, l.justificativa)) return { ok: false, msg: "Este lançamento não é um pagamento de prestação." };
+    if (l.anulado) return { ok: false, msg: "Este pagamento já foi anulado." };
+    const prev = await lixoPreverAnulacao(idLixo);
+    if (prev && prev.startsWith("ERRO:")) return { ok: false, msg: prev.substring(5).trim() };
+    await DB.lote([
+      { sql: "SELECT kub_anular_pagamento(?::int, ?::int, ?::text, ?::numeric, ?::text, TRUE, ?::text)",
+        params: [l.caixaId, l.emprestimoId, l.numeros, l.valor, l.justificativa, nomeSessao()] },
+      { sql: "UPDATE caixa_eliminados SET pagamento_anulado = TRUE WHERE id=?", params: [idLixo] },
+    ]);
+    return { ok: true, msg: "Pagamento anulado nas prestações.\n\n" + String(prev || "").trim() };
   }
 
   async function lixoCaixaEliminar(idLixo) {
@@ -1225,6 +1298,14 @@ const Dados = (() => {
   }
 
   // ---------- Reconciliar o caixa ----------
+  // Histórico das reconciliações do caixa (o mesmo do PC: CaixaDAO, "📜 Histórico")
+  async function historicoReconciliacoes() {
+    return (await DB.consultar("SELECT data_referencia, saldo_sistema, saldo_contado, diferenca, ajuste_caixa_id, COALESCE(observacao, '') AS observacao, " +
+      "COALESCE(feito_por, '') AS feito_por, feito_em FROM caixa_reconciliacoes ORDER BY feito_em DESC, id DESC LIMIT 300", []))
+      .map((r) => ({ dataReferencia: Regras.dataBase(r.data_referencia), saldoSistema: Number(r.saldo_sistema), saldoContado: Number(r.saldo_contado),
+        diferenca: Number(r.diferenca), ajusteId: r.ajuste_caixa_id ? Number(r.ajuste_caixa_id) : null, observacao: r.observacao, feitoPor: r.feito_por, feitoEm: r.feito_em }));
+  }
+
   async function reconciliar(contado, observacao, registarAjuste, quem) {
     contado = Regras.arredondar(contado);
     if (contado < 0) return { ok: false, msg: "Indique o valor contado." };
@@ -1285,6 +1366,17 @@ const Dados = (() => {
   }
 
   // ---------- SMS enviados (só leitura; a tabela existe apenas na base real) ----------
+  // Limpar o histórico de SMS (como no PC e no Android): antesDeISO = apaga o anterior a esse dia; null = tudo.
+  // Os pedidos que ainda estão na fila (por enviar) nunca são apagados.
+  async function smsLimparHistorico(antesDeISO) {
+    const p = antesDeISO ? [antesDeISO, antesDeISO] : [];
+    const r = await DB.consultar("WITH a AS (DELETE FROM sms_cobranca" + (antesDeISO ? " WHERE dia < ?::date" : "") + " RETURNING 1), " +
+      "b AS (DELETE FROM sms_fila WHERE estado NOT IN ('PENDENTE', 'A_ENVIAR')" + (antesDeISO ? " AND criado_em < ?::date" : "") + " RETURNING 1) " +
+      "SELECT (SELECT COUNT(*) FROM a) + (SELECT COUNT(*) FROM b) AS n", p);
+    DB.limparCache();
+    return Number(r[0] ? r[0].n : 0);
+  }
+
   // deISO/ateISO opcionais: só os SMS enviados nesse período (sem período = os 100 mais recentes)
   async function smsEnviadosListar(deISO, ateISO) {
     try {
@@ -1312,7 +1404,8 @@ const Dados = (() => {
     configLer, configGravar, sinoAtivo, smsAutomaticoAtivo, definirSmsAutomatico,
     PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
     poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo,
-    lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar,
+    lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar, lixoPreverAnulacao, lixoAnularPagamento, ehPagamento,
+    enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, acessosApagar, movimentosDoDia, smsEnviadosListar,
     alterarMulta, reporMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,

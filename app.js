@@ -216,7 +216,7 @@
 
   // Botões do cabeçalho das abas (como no Android: ↻ redondo e pílula "PDF")
   const btnAtualizar = (id) => `<button class="icone" id="${id}" title="Atualizar">${icf("atualizar", 21)}</button>`;
-  const btnPdf = (id) => `<button class="pilula-cab" id="${id}" title="Exportar PDF">${icf("documento", 17)} PDF</button>`;
+  const btnPdf = (id) => `<button class="pilula-cab" id="${id}" title="Exportar (PDF ou Excel)">${icf("documento", 17)} Exportar</button>`;
 
   // Valor eventualmente oculto (modo privado)
   const vmt = (v) => (S.ocultar ? "••••" : R.mt(v));
@@ -1026,7 +1026,7 @@
               <span class="v" style="color:${ent ? "var(--verde)" : "var(--vermelho)"};white-space:nowrap;flex:none">${ent ? "+ " : "− "}${vmt(m.valor)}</span></div>`;
           }).join("") : `<div class="vazio" style="padding:14px">Ainda não há lançamentos.</div>`}
         </div>
-        ${pode("EXPORTAR") ? `<button class="btn contorno" id="bg-pdf">📄 Exportar o balanço em PDF</button>` : ""}`;
+        ${pode("EXPORTAR") ? `<button class="btn contorno" id="bg-pdf">📄 Exportar o balanço (PDF ou Excel)</button>` : ""}`;
       if ($("bg-pdf")) $("bg-pdf").onclick = () => exportarPDF("Balanço Geral", ["Indicador", "Valor"],
         cartoes.map(([t, v]) => [t, R.mt(v)]).concat([
           ["Prestações pagas / no prazo / em atraso", ind.prestacoesPagas + " / " + ind.prestacoesNoPrazo + " / " + ind.prestacoesAtrasadas],
@@ -1487,7 +1487,7 @@
         <div class="campo" style="margin:0"><label>De</label><input id="emp-de" type="date" value="${empDe}" max="${hojeE}"></div>
         <div class="campo" style="margin:0"><label>Até</label><input id="emp-ate" type="date" value="${empAte}" max="${hojeE}"></div>
       </div>
-      ${pode("EXPORTAR") ? `<button class="btn secundario" id="emp-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar PDF</button>` : ""}
+      ${pode("EXPORTAR") ? `<button class="btn secundario" id="emp-pdf" style="margin-bottom:10px">${ic("pdf", 16)} Exportar (PDF ou Excel)</button>` : ""}
       <div id="emp-lista">${spinner}</div>`;
     let fonte = [];
     if ($("emp-pdf")) $("emp-pdf").onclick = () => exportarPDF((ativa === "pendentes" ? "Pedidos pendentes" : "Empréstimos") + " — " + nomePerEmp(),
@@ -1884,8 +1884,9 @@
           <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
             <div class="titulo-cartao" style="margin:0">Lançamentos</div>
             <div style="display:flex;gap:6px">
-              ${pode("EXPORTAR") ? `<button class="pilula-btn" id="cx-pdf">${icf("documento", 14)} PDF</button>` : ""}
+              ${pode("EXPORTAR") ? `<button class="pilula-btn" id="cx-pdf">${icf("documento", 14)} Exportar</button>` : ""}
               ${pode("CAIXA_RECONCILIAR") ? `<button class="pilula-btn" id="cx-rec">Reconciliar</button>` : ""}
+              ${pode("CAIXA_RECONCILIAR") || pode("CAIXA") ? `<button class="pilula-btn" id="cx-hist">Histórico</button>` : ""}
             </div>
           </div>
           <div class="chips" id="lc-per" style="padding-bottom:6px">${periodos.map((p, i) => `<button class="chip ${i === cxPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
@@ -2029,6 +2030,26 @@
           } catch (e) { $("rc-erro").textContent = e.message; $("rc-ok").disabled = false; }
         };
       };
+      // Histórico das reconciliações (como "📜 Histórico" no PC)
+      if ($("cx-hist")) $("cx-hist").onclick = async () => {
+        abrirFolha(`<h3>Histórico de reconciliações</h3><div class="sub">Contagens do dinheiro em caixa</div>${spinner}`);
+        let lista = [];
+        try { lista = await Dados.historicoReconciliacoes(); } catch (e) { toast(e.message, true); }
+        abrirFolha(`<h3>Histórico de reconciliações</h3><div class="sub">${lista.length} contage${lista.length === 1 ? "m" : "ns"} do dinheiro em caixa</div>
+          ${lista.length ? lista.map((r) => {
+            const d = r.diferenca, sem = Math.abs(d) < 0.005;
+            return `<div class="item" style="cursor:default;align-items:flex-start">
+              <span class="avatar" style="background:${sem ? "var(--verde-bg)" : d > 0 ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${sem || d > 0 ? "var(--verde)" : "var(--vermelho)"}">${sem ? ic("check", 18) : icf("aviso", 18)}</span>
+              <span class="meio"><span class="nome">${R.data(r.dataReferencia)} · ${sem ? "Sem diferença" : (d > 0 ? "Sobra " : "Falta ") + vmt(Math.abs(d))}</span>
+                <span class="det">Sistema ${vmt(r.saldoSistema)} · contado ${vmt(r.saldoContado)}${r.ajusteId ? " · ajuste nº " + r.ajusteId : ""}</span>
+                ${r.observacao ? `<span class="det" style="white-space:normal">${esc(r.observacao)}</span>` : ""}
+                <span class="det" style="font-size:.74rem">Por ${esc(r.feitoPor || "—")} · ${R.dataHora(r.feitoEm)}</span></span></div>`;
+          }).join("") : `<p class="sub" style="color:var(--texto-suave)">Ainda não foi feita nenhuma reconciliação.</p>`}
+          ${lista.length && pode("EXPORTAR") ? `<button class="btn secundario" id="hr-exp" style="margin-top:12px">Exportar (PDF ou Excel)</button>` : ""}`);
+        if ($("hr-exp")) $("hr-exp").onclick = () => exportarPDF("Histórico de reconciliações",
+          ["Data", "Saldo do sistema (MT)", "Contado (MT)", "Diferença (MT)", "Ajuste", "Observação", "Feito por", "Feito em"],
+          lista.map((r) => [R.data(r.dataReferencia), R.mt(r.saldoSistema), R.mt(r.saldoContado), R.mt(r.diferenca), r.ajusteId ? "nº " + r.ajusteId : "", r.observacao || "", r.feitoPor || "", R.dataHora(r.feitoEm)]));
+      };
       if ($("cx-pdf")) $("cx-pdf").onclick = () => exportarPDF("Fluxo de Caixa — " + nomePeriodo(),
         ["Data", "Tipo", "Categoria", "Descrição", "Valor (MT)"],
         naLista.map((m) => [R.dataHora(m.dataMovimento), m.tipo, movCurto(m), m.justificativa || "", (m.tipo === "ENTRADA" ? "+" : "-") + R.mt(m.valor)]),
@@ -2166,7 +2187,7 @@
 
   // ---------- Notificações ----------
   // Período pela data da notificação + "Escolher datas"
-  let notPer = 0, notDe = null, notAte = null;
+  let notPer = 0, notDe = null, notAte = null, notEnviados = false;
   async function verNotificacoes() {
     mostrar("ecra-app");
     cabecalho("Notificações", "");
@@ -2182,17 +2203,25 @@
       <div class="${notPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
         <div class="campo" style="margin:0"><label>De</label><input id="not-de" type="date" value="${notDe}" max="${hojeN}"></div>
         <div class="campo" style="margin:0"><label>Até</label><input id="not-ate" type="date" value="${notAte}" max="${hojeN}"></div></div>`;
+    // Separadores (como no PC): recebidas / recados enviados, e o botão de escrever um recado
+    const podeRecado = S.user.perfil === "ADMIN" || S.user.perfil === "AGENTE";
+    const topo = podeRecado ? `<div class="chips" id="not-abas" style="padding-bottom:6px">
+        <button class="chip ${notEnviados ? "" : "ativo"}" data-a="0">Recebidas</button><button class="chip ${notEnviados ? "ativo" : ""}" data-a="1">Recados enviados</button></div>
+      <button class="btn" id="not-escrever" style="margin:0 0 12px">✉ ${S.user.perfil === "ADMIN" ? "Escrever recado aos agentes" : "Escrever recado ao Administrador"}</button>` : "";
     try {
-      const todas = await Dados.listarNotificacoes(S.user.id, S.user.perfil);
+      const todas = notEnviados && podeRecado ? await Dados.recadosEnviados(S.user.id) : await Dados.listarNotificacoes(S.user.id, S.user.perfil);
       const lista = todas.filter((n) => { const d = R.dataBase(n.data) || ""; return (!de || d >= de) && (!ate || d <= ate); });
       const cor = (t) => t === "SEGURANCA" ? CORES.vermelho : t === "ATUALIZACAO" ? CORES.verde : t === "RECADO" ? CORES.roxo : CORES.azul;
-      c.innerHTML = filtro + (lista.length ? (notPer ? `<div class="resumo-lista">${lista.length} notificaç${lista.length === 1 ? "ão" : "ões"} neste período</div>` : "") : "") + (lista.length ? lista.map((n) => `<div class="cl" style="cursor:default;${n.lida ? "" : "border-left:4px solid var(--accent)"}">
+      c.innerHTML = topo + filtro + (lista.length ? (notPer ? `<div class="resumo-lista">${lista.length} notificaç${lista.length === 1 ? "ão" : "ões"} neste período</div>` : "") : "") + (lista.length ? lista.map((n) => `<div class="cl" style="cursor:default;${n.lida ? "" : "border-left:4px solid var(--accent)"}">
         <div class="cl-topo"><span class="circ-ic" style="background:${cor(n.tipo)[1]};color:${cor(n.tipo)[0]};width:42px;height:42px">${icf("sino", 20)}</span>
           <div class="cl-meio"><div class="cl-tit">${esc(n.titulo || "Notificação")}${n.lida ? "" : ` ${pilula("Nova", CORES.azul)}`}</div>
             <div class="cl-sub" style="white-space:pre-line">${esc(n.mensagem || "")}</div>
-            <div class="cl-sub" style="font-size:.76rem;margin-top:4px">${R.dataHora(n.data)}${n.autor ? " · " + esc(n.autor) : ""}</div></div>
-          <button class="icone" data-rem="${n.id}" title="Remover" style="background:none;border:0;color:var(--texto-suave);cursor:pointer;font-size:1.1rem">✕</button>
-        </div></div>`).join("") : vazio("notificacoes", notPer && todas.length ? "Sem notificações neste período." : "Sem notificações."));
+            <div class="cl-sub" style="font-size:.76rem;margin-top:4px">${R.dataHora(n.data)}${n.autor ? " · " + esc(n.autor) : ""}${n.destino ? " · para: " + esc(n.destino) : ""}</div></div>
+          <button class="icone" data-rem="${n.id}" title="${notEnviados ? "Apagar o recado" : "Remover"}" style="background:none;border:0;color:var(--texto-suave);cursor:pointer;font-size:1.1rem">✕</button>
+        </div></div>`).join("") : vazio("notificacoes", notPer && todas.length ? (notEnviados ? "Nenhum recado enviado neste período." : "Sem notificações neste período.")
+          : notEnviados ? "Ainda não enviou nenhum recado." : "Sem notificações."));
+      if ($("not-abas")) $("not-abas").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => { notEnviados = ch.dataset.a === "1"; verNotificacoes(); });
+      if ($("not-escrever")) $("not-escrever").onclick = escreverRecado;
       $("not-per").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => { notPer = Number(ch.dataset.i); verNotificacoes(); });
       // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
       const mudar = () => {
@@ -2202,12 +2231,42 @@
       };
       $("not-de").onchange = mudar; $("not-ate").onchange = mudar;
       c.querySelectorAll("[data-rem]").forEach((b) => b.onclick = async () => {
-        try { await Dados.removerNotificacao(S.user.id, Number(b.dataset.rem)); b.closest(".cl").remove(); } catch (e) { toast(e.message, true); }
+        try {
+          if (notEnviados) {   // apagar um recado que escreveu (desaparece para todos)
+            if (!(await confirmar("Apagar recado", "O recado deixa de aparecer a quem o recebeu.", "Apagar", true))) return;
+            const r = await Dados.apagarRecado(Number(b.dataset.rem), S.user.id); toast(r.msg, !r.ok); if (r.ok) verNotificacoes();
+          } else { await Dados.removerNotificacao(S.user.id, Number(b.dataset.rem)); b.closest(".cl").remove(); }
+        } catch (e) { toast(e.message, true); }
       });
       // Abrir o sino marca tudo como lido (o número vermelho desaparece)
-      const porLer = todas.filter((n) => !n.lida).map((n) => n.id);
+      const porLer = notEnviados ? [] : todas.filter((n) => !n.lida).map((n) => n.id);
       if (porLer.length) Dados.marcarLidas(S.user.id, porLer).catch(() => {});
     } catch (e) { c.innerHTML = vazio("notificacoes", "Sem notificações."); }
+  }
+
+  // Escrever um recado (Administrador → todos os agentes ou um utilizador; Agente → Administração)
+  async function escreverRecado() {
+    const admin = S.user.perfil === "ADMIN";
+    let destinos = [];
+    if (admin) { try { destinos = (await Dados.listarUtilizadores()).filter((u) => u.ativo && u.id !== S.user.id); } catch (e) {} }
+    abrirFolha(`<h3>Escrever recado</h3><div class="sub">${admin ? "Aparece no sino de quem escolher" : "Aparece no sino da Administração"}</div>
+      ${admin ? `<div class="campo"><label>Para</label><select id="rc-para"><option value="">Todos os agentes</option>
+        ${destinos.map((u) => `<option value="${u.id}">${esc((u.nome || u.utilizador) + " (" + perfilNome(u.perfil) + ")")}</option>`).join("")}</select></div>` : ""}
+      <div class="campo"><label>Recado</label><textarea id="rc-texto" rows="5" maxlength="500" placeholder="Escreva aqui o recado…"></textarea>
+        <div class="sub" id="rc-conta" style="text-align:right;margin:4px 0 0">0 / 500</div></div>
+      <div class="erro-msg" id="rc-erro"></div>
+      <button class="btn" id="rc-ok">Enviar recado</button>`);
+    $("rc-texto").oninput = () => { $("rc-conta").textContent = $("rc-texto").value.length + " / 500"; };
+    $("rc-texto").focus();
+    $("rc-ok").onclick = async () => {
+      $("rc-ok").disabled = true;
+      try {
+        const para = admin && $("rc-para").value ? Number($("rc-para").value) : null;
+        const r = await Dados.enviarRecado($("rc-texto").value, para, S.user);
+        if (!r.ok) { $("rc-erro").textContent = r.msg; $("rc-ok").disabled = false; return; }
+        fecharFolha(); toast(r.msg); notEnviados = true; verNotificacoes();
+      } catch (e) { $("rc-erro").textContent = e.message; $("rc-ok").disabled = false; }
+    };
   }
 
   // ---------- Poupança de Clientes ----------
@@ -2337,23 +2396,57 @@
           const tudo = await Dados.lixoCaixaListar();
           const lista = tudo.filter((m) => noPeriodo(m.eliminadoEm || m.data));
           if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", tudo.length ? "Nenhum lançamento apagado neste período." : "O lixo do caixa está vazio."); return; }
-          $("lix-lista").innerHTML = `<div class="resumo-lista">${lista.length} lançamento${lista.length === 1 ? "" : "s"} apagado${lista.length === 1 ? "" : "s"}${lixPer ? "" : " (todos)"}</div>` + lista.map((m) => {
+          const podeAnular = pode("CAIXA_EDITAR");
+          $("lix-lista").innerHTML = `<div class="resumo-lista" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+              <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="lix-todos" style="width:18px;height:18px"> Selecionar todos</label>
+              <span style="flex:1">${lista.length} lançamento${lista.length === 1 ? "" : "s"} apagado${lista.length === 1 ? "" : "s"}${lixPer ? "" : " (todos)"}</span>
+              <button class="btn" id="lix-rest-sel" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem;display:none">${ic("restaurar", 15)} Restaurar selecionados</button></div>` + lista.map((m) => {
             const entrada = m.tipo === "ENTRADA";
+            const pagamento = Dados.ehPagamento(m.tipo, m.categoria, m.justificativa);
             return `<div class="item" style="cursor:default;align-items:flex-start">
+              <input type="checkbox" class="lix-sel" value="${m.id}" data-anul="${m.anulado}" ${m.anulado ? "disabled" : ""} style="width:18px;height:18px;margin-top:12px;flex:none" title="Selecionar">
               <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${ic("lixeira", 18)}</span>
               <span class="meio"><span class="nome">Nº ${m.caixaId} · ${esc(curto(m.categoria))}</span>
                 <span class="det" style="white-space:normal">${esc(m.justificativa || "")}</span>
                 <span class="det" style="font-size:.74rem">Apagado por ${esc(m.eliminadoPor || "—")} · ${R.dataHora(m.eliminadoEm)}${m.anulado ? " · pagamento anulado" : ""}</span>
                 <span style="display:flex;gap:8px;margin-top:8px">
                   <button class="btn secundario" data-restaurar="${m.id}" data-anul="${m.anulado}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">${ic("restaurar", 15)} Restaurar</button>
+                  ${pagamento && !m.anulado && podeAnular ? `<button class="btn secundario" data-anular="${m.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem;color:var(--laranja)">↩ Anular pagamento</button>` : ""}
                   <button class="btn perigo" data-elim="${m.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">Eliminar</button>
-                </span></span>
+                </span>${pagamento && !m.anulado ? `<span class="det" style="font-size:.74rem;color:var(--laranja);margin-top:4px">Pagamento de prestação: ainda conta nas prestações do cliente</span>` : ""}</span>
               <span class="fim"><span class="mt" style="color:${entrada ? "var(--verde)" : "var(--vermelho)"}">${entrada ? "+" : "−"}${vmt(m.valor)}</span></span></div>`;
           }).join("") + `<button class="btn secundario" id="lix-esvaziar" style="margin-top:8px">Esvaziar todo o lixo do caixa</button>`;
           $("lix-lista").querySelectorAll("[data-restaurar]").forEach((b) => b.onclick = async () => {
             if (!(await confirmar("Restaurar lançamento", "O lançamento volta ao caixa e o saldo é atualizado.", "Restaurar"))) return;
             const r = await comErro(() => Dados.lixoCaixaRestaurar(Number(b.dataset.restaurar), b.dataset.anul === "true"));
             toast(r.msg, !r.ok); if (r.ok) carregar();
+          });
+          // Vários de uma vez (como "Restaurar Selecionado(s)" no PC)
+          const sels = () => [...$("lix-lista").querySelectorAll(".lix-sel:checked")];
+          const atualizarSel = () => { const n = sels().length; $("lix-rest-sel").style.display = n ? "" : "none"; $("lix-rest-sel").lastChild.textContent = " Restaurar selecionados (" + n + ")"; };
+          $("lix-lista").querySelectorAll(".lix-sel").forEach((cb) => cb.onchange = atualizarSel);
+          $("lix-todos").onchange = () => { $("lix-lista").querySelectorAll(".lix-sel:not(:disabled)").forEach((cb) => { cb.checked = $("lix-todos").checked; }); atualizarSel(); };
+          $("lix-rest-sel").onclick = async () => {
+            const ids = sels().map((cb) => Number(cb.value));
+            const efeito = lista.filter((m) => ids.includes(m.id)).reduce((s, m) => s + (m.tipo === "ENTRADA" ? m.valor : -m.valor), 0);
+            if (!(await confirmar("Restaurar " + ids.length + " lançamento" + (ids.length === 1 ? "" : "s"),
+              "Voltam ao caixa. O saldo vai " + (efeito >= 0 ? "AUMENTAR " : "DIMINUIR ") + R.mt(Math.abs(efeito)) + ".", "Restaurar"))) return;
+            let ok = 0;
+            for (const id of ids) { try { const r = await Dados.lixoCaixaRestaurar(id, false); if (r.ok) ok++; } catch (e) {} }
+            toast(ok === ids.length ? ok + " lançamento(s) restaurado(s). O saldo foi atualizado." : "Foram restaurados " + ok + " de " + ids.length + ".", ok !== ids.length);
+            carregar();
+          };
+          // Anular um pagamento apagado que ainda conta nas prestações (só quem pode editar o caixa)
+          $("lix-lista").querySelectorAll("[data-anular]").forEach((b) => b.onclick = async () => {
+            const id = Number(b.dataset.anular);
+            const prev = await comErro(() => Dados.lixoPreverAnulacao(id));
+            if (prev === null || prev === undefined) { toast("Este lançamento não é um pagamento de prestação.", true); return; }
+            if (String(prev).startsWith("ERRO:")) { toast(String(prev).substring(5).trim(), true); return; }
+            const m = lista.find((x) => x.id === id);
+            if (!(await confirmar("Anular pagamento", "Anular este pagamento nas prestações?\n\n" + semCardinal(m ? m.justificativa : "") + "\n\n" + String(prev).trim() +
+              "\n\nO cliente volta a dever esse valor. O lançamento fica no lixo (já não pode ser restaurado).", "Anular", true))) return;
+            const r = await comErro(() => Dados.lixoAnularPagamento(id));
+            toast(r.ok ? "Pagamento anulado nas prestações." : r.msg, !r.ok); if (r.ok) carregar();
           });
           $("lix-lista").querySelectorAll("[data-elim]").forEach((b) => b.onclick = async () => {
             if (!(await confirmar("Eliminar de vez", "Remove o lançamento do lixo definitivamente.", "Eliminar", true))) return;
@@ -2423,7 +2516,11 @@
     c.innerHTML = spinner;
     // No iPhone não há envio automático: abre a app Mensagens já preenchida, um cliente de cada vez
     const btnTodos = pode("COBRANCAS") ? `<button class="btn" id="sms-todos" style="margin-bottom:14px">${ic("sms", 16)} Enviar SMS a todos os que estão a dever</button>` : "";
-    const ligar = () => { if ($("sms-todos")) $("sms-todos").onclick = () => cobrarTodos(); };
+    const btnLimparSms = pode("SMS_AUTOMATICO") ? `<button class="btn secundario" id="sms-limpar" style="margin:0 0 14px;color:var(--vermelho)">🧹 Limpar histórico de SMS</button>` : "";
+    const ligar = () => {
+      if ($("sms-todos")) $("sms-todos").onclick = () => cobrarTodos();
+      if ($("sms-limpar")) $("sms-limpar").onclick = limparHistoricoSms;
+    };
     const hojeS = R.hojeISO(), dS = (n) => R.somaDias(hojeS, n);
     if (!smsDe) { smsDe = dS(-29); smsAte = hojeS; }
     const PER = [["Mais recentes", null, null], ["Hoje", hojeS, hojeS], ["Ontem", dS(-1), dS(-1)], ["Últimos 7 dias", dS(-6), hojeS],
@@ -2447,11 +2544,11 @@
     };
     try {
       const lista = pode("SMS_VER") ? await Dados.smsEnviadosListar(de, ate) : [];
-      if (lista === null) { c.innerHTML = btnTodos + vazio("sms", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); ligar(); return; }
+      if (lista === null) { c.innerHTML = btnTodos + btnLimparSms + vazio("sms", "Esta base de dados não tem registo de SMS.\n(Os SMS são enviados pela app no telemóvel Android.)"); ligar(); return; }
       const comFiltro = pode("SMS_VER") ? filtro : "";
-      if (!lista.length) { c.innerHTML = btnTodos + comFiltro + vazio("sms", smsPer ? "Nenhum SMS enviado neste período." : "Ainda não há SMS enviados."); ligar(); ligarFiltro(); return; }
+      if (!lista.length) { c.innerHTML = btnTodos + btnLimparSms + comFiltro + vazio("sms", smsPer ? "Nenhum SMS enviado neste período." : "Ainda não há SMS enviados."); ligar(); ligarFiltro(); return; }
       const nOk = lista.filter((s) => s.estado === "ENVIADO").length;
-      c.innerHTML = btnTodos + comFiltro + `<div class="resumo-lista">${lista.length} SMS${smsPer ? "" : " (os mais recentes)"} · ${nOk} enviado${nOk === 1 ? "" : "s"} com sucesso${lista.length - nOk ? " · " + (lista.length - nOk) + " com falha" : ""}</div>` + lista.map((s) => {
+      c.innerHTML = btnTodos + btnLimparSms + comFiltro + `<div class="resumo-lista">${lista.length} SMS${smsPer ? "" : " (os mais recentes)"} · ${nOk} enviado${nOk === 1 ? "" : "s"} com sucesso${lista.length - nOk ? " · " + (lista.length - nOk) + " com falha" : ""}</div>` + lista.map((s) => {
         const ok = s.estado === "ENVIADO";
         return `<div class="item" style="cursor:default;align-items:flex-start">
           <span class="avatar" style="background:${ok ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${ok ? "var(--verde)" : "var(--vermelho)"}">${ic("sms", 18)}</span>
@@ -2461,6 +2558,27 @@
       }).join("");
       ligar(); ligarFiltro();
     } catch (e) { c.innerHTML = erroEcra(e, verSms); }
+  }
+
+  // Limpar o histórico de SMS (como no PC e no Android). Fica registado no Controlo de Acesso.
+  function limparHistoricoSms() {
+    const hoje = R.hojeISO();
+    const ops = [["Anteriores a hoje", hoje], ["Com mais de 7 dias", R.somaDias(hoje, -7)], ["Com mais de 30 dias", R.somaDias(hoje, -30)], ["Tudo (também os de hoje)", null]];
+    abrirFolha(`<h3>Limpar histórico de SMS</h3><div class="sub">Os pedidos que ainda estão na fila não são apagados.</div>
+      ${ops.map(([t], i) => `<button class="btn secundario" data-lh="${i}" style="margin-bottom:8px">${esc(t)}</button>`).join("")}`);
+    document.querySelectorAll("#folha [data-lh]").forEach((b) => b.onclick = async () => {
+      const [nome, antes] = ops[Number(b.dataset.lh)];
+      const aviso = antes ? "Apagar de vez o histórico de SMS anterior a " + R.data(antes) + "?"
+        : "Apagar TODO o histórico de SMS, também o de hoje?\n\nAtenção: os clientes que já receberam hoje podem voltar a receber no próximo envio.";
+      if (!(await confirmar("Limpar histórico", aviso, "Apagar", true))) return;
+      try {
+        const n = await Dados.smsLimparHistorico(antes);
+        Promise.resolve(Dados.registarAcesso("MENSAGEM", S.user.utilizador, S.user.id, S.user.perfil,
+          "Limpou o histórico de SMS (" + nome.toLowerCase() + "): " + n + " registo(s)")).catch(() => {});
+        toast(n === 0 ? "Não havia registos para apagar." : n === 1 ? "1 registo apagado." : n + " registos apagados.");
+      } catch (e) { toast(e.message, true); }
+      verSms();
+    });
   }
 
   // ---------- Acessos ----------
@@ -3390,6 +3508,40 @@
     if (ev.target.closest && ev.target.closest('#cb-atualizar, [id$="-atu"]')) DB.limparCache();
   }, true);
 
+  // ---------- Atalhos de teclado (no computador, como no Kubatsira para Windows) ----------
+  const ATALHOS = [["F5", "Atualizar o ecrã (dados novos)"], ["Ctrl + O", "Ocultar / mostrar valores"], ["Ctrl + F", "Pesquisar na lista"],
+    ["Ctrl + E", "Exportar (PDF ou Excel)"], ["Esc", "Fechar a janela aberta"], ["F1", "Ver estes atalhos"]];
+  function mostrarAtalhos() {
+    abrirFolha(`<h3>Atalhos de teclado</h3><div class="sub">No computador</div>
+      ${ATALHOS.map(([k, t]) => `<div class="linha-dados"><span class="r">${esc(t)}</span><span class="v"><kbd style="font-family:inherit;background:var(--fundo);border:1px solid var(--borda);border-radius:6px;padding:2px 8px">${esc(k)}</kbd></span></div>`).join("")}
+      <button class="btn" style="margin-top:16px" onclick="document.getElementById('fundo-escuro').classList.remove('aberto')">Fechar</button>`);
+  }
+  document.addEventListener("keydown", (ev) => {
+    if (!S.user || !$("ecra-app").classList.contains("ativo")) return;
+    const folhaAberta = $("fundo-escuro").classList.contains("aberto");
+    const k = ev.key, ctrl = ev.ctrlKey || ev.metaKey;
+    if (k === "Escape" && folhaAberta) { ev.preventDefault(); fecharFolha(); return; }
+    if (k === "F1") { ev.preventDefault(); mostrarAtalhos(); return; }
+    if (k === "F5" && !ctrl) {
+      ev.preventDefault();
+      const atu = document.querySelector('#cabecalho #cb-atualizar, #cabecalho [id$="-atu"]');
+      DB.limparCache();
+      if (atu) atu.click(); else if (S.ecra) navegar(S.ecra);
+      toast("Ecrã atualizado.");
+      return;
+    }
+    if (!ctrl || folhaAberta) return;
+    const tecla = k.toLowerCase();
+    if (tecla === "o") { ev.preventDefault(); alternarValores(() => { if (S.ecra) navegar(S.ecra); }); }
+    else if (tecla === "f") {
+      const p = document.querySelector("#conteudo .pesquisa input, #conteudo input[type=search]");
+      if (p) { ev.preventDefault(); p.focus(); p.select(); }
+    } else if (tecla === "e") {
+      const b = document.querySelector('#cabecalho [id$="-pdf"], #conteudo [id$="-pdf"]');
+      if (b) { ev.preventDefault(); b.click(); }
+    }
+  });
+
   // Avatar HTML com foto (se houver) ou iniciais. Para o utilizador atual usa S.user.foto.
   function avatarFoto(nome, foto, extra) {
     const ini = esc(R.iniciais(nome));
@@ -3548,7 +3700,7 @@
     return new Promise((res, rej) => {
       if ([...document.scripts].some((s) => s.src === src)) return res();
       const s = document.createElement("script");
-      s.src = src; s.onload = res; s.onerror = () => rej(new Error("Não foi possível carregar o gerador de PDF (precisa de Internet)."));
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error("Não foi possível carregar o gerador do relatório (precisa de Internet)."));
       document.head.appendChild(s);
     });
   }
@@ -3620,10 +3772,50 @@
     });
   }
 
-  // graficos: lista de graficoPdf/roscaPdf/barrasHPdf (ou uma função async que a devolve)
+  // Exportar: pergunta o formato (PDF com gráficos, ou Excel para fazer contas), como os botões "PDF" e "Excel" do PC
   async function exportarPDF(titulo, colunas, linhas, notas, graficos) {
-    // O PDF leva os valores reais: com os valores ocultos, pede primeiro a identidade (como no Android)
+    // O relatório leva os valores reais: com os valores ocultos, pede primeiro a identidade (como no Android)
     if (S.ocultar && !(await confirmarIdentidade("Exportar o relatório"))) return;
+    abrirFolha(`<h3>Exportar</h3><div class="sub">${esc(semCardinal(titulo))}</div>
+      <button class="btn" id="exp-pdf">${ic("pdf", 16)} PDF (com gráficos)</button>
+      <button class="btn secundario" id="exp-xls">${icf("documento", 16)} Excel (.xlsx)</button>`);
+    $("exp-pdf").onclick = () => { fecharFolha(); gerarPDF(titulo, colunas, linhas, notas, graficos); };
+    $("exp-xls").onclick = () => { fecharFolha(); exportarExcel(titulo, colunas, linhas, notas); };
+  }
+
+  // Excel: uma folha com o título, as notas (resumo) e a tabela. Os valores em MT ficam números (dá para somar).
+  async function exportarExcel(titulo, colunas, linhas, notas) {
+    toast("A preparar o Excel…");
+    const limpo = (s) => Idioma.T(semCardinal(String(s == null ? "" : s))).replace(/−/g, "-").trim();
+    // "1 287,00 MT" / "1.287,00" / "-120,50" -> número; o resto fica texto (nomes, datas, telefones)
+    const numero = (s) => {
+      const t = String(s).replace(/\s*MT$/i, "").replace(/[\s\u00a0\u202f]/g, "");
+      if (!/^-?\d{1,3}(\.?\d{3})*(,\d+)?$/.test(t) || /^0\d/.test(t)) return null;
+      return Number(t.replace(/\./g, "").replace(",", "."));
+    };
+    try {
+      await carregarScript("https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js");
+      const XLSX = window.XLSX;
+      const aoa = [["Kubatsira Microcrédito"], [limpo(titulo)], [limpo("Gerado em " + R.data(R.hojeISO())) + " · " + (S.user.nome || S.user.utilizador)]];
+      (notas || []).forEach((n) => aoa.push([limpo(n)]));
+      aoa.push([]);
+      const inicioTabela = aoa.length;
+      aoa.push(colunas.map(limpo));
+      linhas.forEach((l) => aoa.push(l.map((c) => { const v = limpo(c); const n = numero(v); return n === null ? v : n; })));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      // Largura das colunas pelo texto mais comprido; números com 2 casas decimais
+      ws["!cols"] = colunas.map((_, i) => ({ wch: Math.min(50, Math.max(10, ...aoa.slice(inicioTabela).map((l) => String(l[i] == null ? "" : l[i]).length + 2))) }));
+      Object.keys(ws).forEach((k) => { if (k[0] !== "!" && typeof ws[k].v === "number") ws[k].z = "#,##0.00"; });
+      ws["!autofilter"] = { ref: XLSX.utils.encode_range({ s: { r: inicioTabela, c: 0 }, e: { r: inicioTabela + linhas.length, c: Math.max(0, colunas.length - 1) } }) };
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, limpo(titulo).replace(/[\\/?*\[\]:]/g, " ").slice(0, 31) || "Relatório");
+      XLSX.writeFile(wb, "Kubatsira - " + limpo(titulo).replace(/[\\/:*?"<>|]/g, "-") + " - " + R.data(R.hojeISO()).replace(/\//g, "-") + ".xlsx");
+      toast("Excel gerado.");
+    } catch (e) { toast((e && e.message) || "Falha ao gerar o Excel.", true); }
+  }
+
+  // graficos: lista de graficoPdf/roscaPdf/barrasHPdf (ou uma função async que a devolve)
+  async function gerarPDF(titulo, colunas, linhas, notas, graficos) {
     toast("A preparar o PDF…");
     // A letra do PDF (Helvetica) não tem setas nem emojis: troca-os para não sair texto estragado.
     // E, como na app, tudo segue o idioma escolhido (os nomes e valores não mudam).
