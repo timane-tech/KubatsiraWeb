@@ -2417,25 +2417,40 @@
 
   // ---------- Acessos ----------
   // Controlo de Acesso (AcessosActivity): só o perfil Administrador
-  let acPer = 1, acEv = 0;
+  let acPer = 1, acEv = 0, acDe = null, acAte = null;
   async function verAcessos() {
     if (S.user.perfil !== "ADMIN") { toast("Sem permissão.", true); return; }
     mostrar("ecra-app");
     cabecalho("Controlo de Acesso", "Entradas e saídas no telemóvel e no computador");
     const c = novoConteudo();
-    const PERIODOS = ["Hoje", "7 dias", "30 dias", "90 dias", "1 ano"], DIAS = [0, 6, 29, 89, 364];
+    const hojeA = R.hojeISO();
+    if (!acDe) { acDe = R.somaDias(hojeA, -6); acAte = hojeA; }
+    const PERIODOS = ["Hoje", "7 dias", "30 dias", "90 dias", "1 ano", "📅 Escolher datas"], DIAS = [0, 6, 29, 89, 364];
+    const ESC = PERIODOS.length - 1;
     const EVENTOS = ["Todos", "Entradas", "Falhadas", "Saídas", "Ligações a clientes"];
     const chips = (id, ops, at) => `<div class="chips" id="${id}" style="padding-bottom:6px">${ops.map((o, i) => `<button class="chip ${i === at ? "ativo" : ""}" data-i="${i}">${o}</button>`).join("")}</div>`;
-    c.innerHTML = chips("ac-per", PERIODOS, acPer) + chips("ac-ev", EVENTOS, acEv) + `<div id="ac-lista">${spinner}</div>`;
+    c.innerHTML = chips("ac-per", PERIODOS, acPer) +
+      `<div id="ac-datas" class="${acPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
+        <div class="campo" style="margin:0"><label>De</label><input id="ac-de" type="date" value="${acDe}" max="${hojeA}"></div>
+        <div class="campo" style="margin:0"><label>Até</label><input id="ac-ate" type="date" value="${acAte}" max="${hojeA}"></div></div>` +
+      chips("ac-ev", EVENTOS, acEv) + `<div id="ac-lista">${spinner}</div>`;
     ["ac-per", "ac-ev"].forEach((id) => $(id).querySelectorAll(".chip").forEach((b) => b.onclick = () => {
       if (id === "ac-per") acPer = Number(b.dataset.i); else acEv = Number(b.dataset.i);
       verAcessos();
     }));
+    // Escolher datas: um dia (De = Até) ou um intervalo; se trocarem a ordem, corrige-se sozinho
+    const mudarDatas = () => {
+      let de = $("ac-de").value || hojeA, ate = $("ac-ate").value || de;
+      if (de > ate) [de, ate] = [ate, de];
+      acDe = de; acAte = ate; verAcessos();
+    };
+    $("ac-de").onchange = mudarDatas;
+    $("ac-ate").onchange = mudarDatas;
     const NOME_EV = { ENTRADA: "Entrou", SAIDA: "Saiu", FALHADA: "Tentativa falhada", BLOQUEIO: "Conta bloqueada", CONTA_DESATIVADA: "Conta desativada",
       REGISTOS_LIMPOS: "Registos limpos", LIGACAO: "📞 Ligou", MENSAGEM: "💬 Mensagem" };
     try {
       const hoje = R.hojeISO();
-      const todos = await Dados.acessosListar(R.somaDias(hoje, -DIAS[acPer]), hoje);
+      const todos = acPer === ESC ? await Dados.acessosListar(acDe, acAte) : await Dados.acessosListar(R.somaDias(hoje, -DIAS[acPer]), hoje);
       let entradas = 0, falhadas = 0, bloqueios = 0, ligacoes = 0, mensagens = 0; const pessoas = new Set();
       todos.forEach((a) => {
         if (a.evento === "ENTRADA") { entradas++; pessoas.add((a.utilizador || "").toLowerCase()); }
