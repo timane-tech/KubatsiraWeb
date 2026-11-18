@@ -1132,9 +1132,36 @@ const Dados = (() => {
 
   async function poupancaMovimentos(clienteId) {
     return (await DB.consultar(
-      "SELECT tipo, valor, data_movimento, COALESCE(descricao,'') AS descricao, COALESCE(registado_por,'') AS registado_por " +
+      "SELECT id, tipo, valor, data_movimento, COALESCE(descricao,'') AS descricao, COALESCE(registado_por,'') AS registado_por " +
       "FROM poupanca_clientes WHERE cliente_id=? ORDER BY data_movimento DESC, id DESC", [clienteId]))
-      .map((r) => ({ tipo: r.tipo, valor: Number(r.valor), data: r.data_movimento, descricao: r.descricao, registadoPor: r.registado_por }));
+      .map((r) => ({ id: Number(r.id), tipo: r.tipo, valor: Number(r.valor), data: r.data_movimento, descricao: r.descricao, registadoPor: r.registado_por }));
+  }
+
+  // Apagar um movimento da poupança (corrige só o cofre: o caixa e as prestações ficam como estão).
+  // Não deixa o saldo do cliente ficar negativo.
+  async function poupancaApagarMovimento(id, clienteId) {
+    const r = await DB.executar(
+      "DELETE FROM poupanca_clientes WHERE id=? AND cliente_id=? AND " +
+      "(SELECT COALESCE(SUM(CASE WHEN tipo='DEPOSITO' THEN valor ELSE -valor END),0) FROM poupanca_clientes WHERE cliente_id=? AND id<>?) >= -0.005",
+      [id, clienteId, clienteId, id]);
+    DB.limparCache();
+    return r.afetadas === 1 ? { ok: true, msg: "Movimento apagado. O saldo do cofre foi atualizado." }
+      : { ok: false, msg: "Não foi possível apagar: o saldo do cliente ficaria negativo (apague primeiro o uso correspondente)." };
+  }
+
+  // Esvaziar o cofre: o cliente levanta todo o saldo. Fica um "USO" na poupança e uma SAÍDA no caixa (o dinheiro sai).
+  async function poupancaEsvaziar(clienteId, nome, quem) {
+    const saldo = await poupancaSaldo(clienteId);
+    if (saldo <= 0.005) return { ok: false, msg: "O cofre deste cliente já está vazio." };
+    await DB.lote([
+      { sql: "INSERT INTO caixa (tipo, valor, justificativa, categoria, registado_por) VALUES ('SAIDA', ?, ?, 'POUPANCA', ?)",
+        params: [saldo, "Levantamento da poupança (cofre esvaziado) - Cliente: " + nome, quem] },
+      { sql: "INSERT INTO poupanca_clientes (cliente_id, tipo, valor, descricao, registado_por, origem_caixa_id) " +
+             "VALUES (?, 'USO', ?, 'Levantamento de todo o saldo (cofre esvaziado)', ?, currval(pg_get_serial_sequence('caixa','id')))",
+        params: [clienteId, saldo, quem] },
+    ]);
+    DB.limparCache();
+    return { ok: true, msg: "Cofre esvaziado: " + Regras.mt(saldo) + " devolvidos ao cliente (saída registada no caixa).", valor: saldo };
   }
 
   // ---------- Lixeira: lançamentos do caixa ----------
@@ -1231,6 +1258,14 @@ const Dados = (() => {
       "DELETE FROM emprestimos WHERE id=? AND status='REJEITADO' " +
       "AND NOT EXISTS (SELECT 1 FROM prestacoes WHERE emprestimo_id=?) AND NOT EXISTS (SELECT 1 FROM caixa WHERE emprestimo_id=?)", [id, id, id]);
     return r.afetadas === 1 ? { ok: true, msg: "Pedido nº " + id + " eliminado de vez." } : { ok: false, msg: "Não foi possível eliminar este pedido." };
+  }
+
+  // Esvaziar os pedidos rejeitados (as mesmas proteções do eliminar um a um: sem prestações nem caixa ligados)
+  async function rejeitadosEsvaziar() {
+    const r = await DB.executar(
+      "DELETE FROM emprestimos e WHERE e.status='REJEITADO' " +
+      "AND NOT EXISTS (SELECT 1 FROM prestacoes p WHERE p.emprestimo_id=e.id) AND NOT EXISTS (SELECT 1 FROM caixa x WHERE x.emprestimo_id=e.id)", []);
+    return { ok: true, msg: r.afetadas === 0 ? "Não havia pedidos para eliminar." : r.afetadas + " pedido(s) rejeitado(s) eliminado(s) de vez." };
   }
 
   // ---------- Acessos (registo de entradas) ----------
@@ -1556,10 +1591,10 @@ const Dados = (() => {
     registarCliente, atualizarCliente, novoCodigoAcesso, eliminarCliente, poupancaSaldo,
     pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,
     registarCaixa, listarUtilizadores, criarUtilizador, atualizarUtilizador, eliminarUtilizador,
-    alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao, removerNotificacoes, smsApagar, smsCancelarFila,
+    alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao, removerNotificacoes, smsApagar, smsCancelarFila, rejeitadosEsvaziar,
     configLer, configGravar, sinoAtivo, smsAutomaticoAtivo, definirSmsAutomatico,
     PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
-    poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo,
+    poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo, poupancaApagarMovimento, poupancaEsvaziar,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar, lixoPreverAnulacao, lixoAnularPagamento, ehPagamento,
     enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico, smsEnfileirarRecado, assinaturaSessao,
     balancoEmprestimosPeriodo, caixaPeriodo, graficoEntradasSaidasPeriodo, graficoEvolucaoCaixaPeriodo, topClientesPeriodo, ultimosMovimentosPeriodo,

@@ -2417,20 +2417,50 @@
     let movs = [];
     try { movs = await Dados.poupancaMovimentos(x.clienteId); } catch (e) {}
     if (periodo) movs = movs.filter((m) => { const d = R.dataBase(m.data) || ""; return d >= periodo[0] && d <= periodo[1]; });
+    const gere = S.user.perfil === "ADMIN" || pode("CAIXA_EDITAR");   // apagar movimentos / esvaziar o cofre
     const linhas = movs.map((m) => {
       const dep = m.tipo === "DEPOSITO";
-      return `<div class="item" style="cursor:default">
+      return `<div class="item" style="cursor:default;align-items:flex-start">
         <span class="avatar" style="background:${dep ? "var(--verde-bg)" : "var(--laranja-bg)"};color:${dep ? "var(--verde)" : "var(--laranja)"}">${ic(dep ? "entrada" : "saida", 18)}</span>
         <span class="meio"><span class="nome">${dep ? "Depósito" : "Uso"}</span><span class="det" style="white-space:normal">${esc(m.descricao)}</span>
-          <span class="det" style="font-size:.74rem">${R.dataHora(m.data)}</span></span>
-        <span class="fim"><span class="mt" style="color:${dep ? "var(--verde)" : "var(--laranja)"}">${dep ? "+" : "−"}${R.mt(m.valor)}</span></span></div>`;
+          <span class="det" style="font-size:.74rem">${R.dataHora(m.data)}${m.registadoPor ? " · " + esc(m.registadoPor) : ""}</span></span>
+        <span class="fim"><span class="mt" style="color:${dep ? "var(--verde)" : "var(--laranja)"}">${dep ? "+" : "−"}${R.mt(m.valor)}</span></span>
+        ${gere ? `<button data-pmov="${m.id}" aria-label="Apagar este movimento" title="Apagar este movimento" style="background:none;border:0;color:var(--vermelho);cursor:pointer;padding:8px;margin:-4px -8px 0 0;flex:none">${ic("lixeira", 18)}</button>` : ""}</div>`;
     }).join("");
     abrirFolha(`<h3>${esc(x.nome)}</h3><div class="sub">Poupança do cliente</div>
       <div class="linha-dados"><span class="r">Saldo atual</span><span class="v">${R.mt(x.saldo)}</span></div>
       <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${R.mt(x.depositado)}</span></div>
       <div class="linha-dados"><span class="r">Total usado</span><span class="v">${R.mt(x.usado)}</span></div>
+      ${gere && x.saldo > 0.005 ? `<button class="btn secundario" id="pou-esvaziar" style="margin:12px 0 4px;color:var(--vermelho)">${ic("lixeira", 16)} Esvaziar o cofre (devolver ${R.mt(x.saldo)})</button>` : ""}
       <div class="seccao-titulo" style="margin-left:0">Movimentos${periodo ? " · " + esc(periodo[2]) : ""}</div>
       ${linhas || `<p class="sub" style="color:var(--texto-suave)">Sem movimentos${periodo ? " neste período" : ""}.</p>`}`);
+    // Depois de mudar: atualiza a lista por trás e volta a abrir a ficha com os valores novos
+    const reabrir = async () => {
+      let nova = null;
+      try { nova = (await Dados.poupancaSaldos(false)).find((y) => y.clienteId === x.clienteId); } catch (e) {}
+      verPoupanca();
+      abrirPoupancaCliente(nova || { ...x, saldo: 0, depositado: 0, usado: 0 }, periodo);
+    };
+    if ($("pou-esvaziar")) $("pou-esvaziar").onclick = async () => {
+      if (!(await confirmar("Esvaziar o cofre", "O cliente " + x.nome + " levanta todo o saldo: " + R.mt(x.saldo) + ".\n\n" +
+        "Fica registado um uso na poupança e uma SAÍDA de " + R.mt(x.saldo) + " no caixa. O saldo do cofre fica 0.", "Esvaziar", true))) return;
+      try {
+        const r = await Dados.poupancaEsvaziar(x.clienteId, x.nome, S.user.utilizador);
+        toast(r.msg, !r.ok);
+      } catch (e) { toast(e.message, true); }
+      reabrir();
+    };
+    document.querySelectorAll("#folha [data-pmov]").forEach((b) => b.onclick = async () => {
+      const m = movs.find((y) => y.id === Number(b.dataset.pmov)); if (!m) return;
+      const dep = m.tipo === "DEPOSITO";
+      if (!(await confirmar("Apagar movimento", "Apagar este " + (dep ? "depósito" : "uso") + " de " + R.mt(m.valor) + "?\n\n" + (m.descricao || "") +
+        "\n\nO saldo do cofre passa a " + R.mt(x.saldo + (dep ? -m.valor : m.valor)) + ". O caixa e as prestações NÃO são alterados.", "Apagar", true))) return;
+      try {
+        const r = await Dados.poupancaApagarMovimento(m.id, x.clienteId);
+        toast(r.msg, !r.ok);
+        if (r.ok) reabrir();
+      } catch (e) { toast(e.message, true); }
+    });
   }
 
   // ---------- Lixeira ----------
@@ -2471,7 +2501,8 @@
           $("lix-lista").innerHTML = `<div class="resumo-lista" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
               <label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="checkbox" id="lix-todos" style="width:18px;height:18px"> Selecionar todos</label>
               <span style="flex:1">${lista.length} lançamento${lista.length === 1 ? "" : "s"} apagado${lista.length === 1 ? "" : "s"}${lixPer ? "" : " (todos)"}</span>
-              <button class="btn" id="lix-rest-sel" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem;display:none">${ic("restaurar", 15)} Restaurar selecionados</button></div>` + lista.map((m) => {
+              <button class="btn" id="lix-rest-sel" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem;display:none">${ic("restaurar", 15)} Restaurar selecionados</button></div>
+            <button class="btn secundario" id="lix-esvaziar-topo" style="margin:0 0 12px;color:var(--vermelho)">${ic("lixeira", 16)} Esvaziar o lixo do caixa (${tudo.length})</button>` + lista.map((m) => {
             const entrada = m.tipo === "ENTRADA";
             const pagamento = Dados.ehPagamento(m.tipo, m.categoria, m.justificativa);
             return `<div class="item" style="cursor:default;align-items:flex-start">
@@ -2524,15 +2555,16 @@
             const r = await comErro(() => Dados.lixoCaixaEliminar(Number(b.dataset.elim)));
             toast(r.msg, !r.ok); if (r.ok) carregar();
           });
-          $("lix-esvaziar").onclick = async () => {
-            if (!(await confirmar("Esvaziar lixo", "Remove TODOS os lançamentos do lixo do caixa, definitivamente.", "Esvaziar", true))) return;
+          $("lix-esvaziar").onclick = $("lix-esvaziar-topo").onclick = async () => {
+            if (!(await confirmar("Esvaziar lixo", "Remove TODOS os " + tudo.length + " lançamentos do lixo do caixa, definitivamente (também os de fora deste período).\n\nDepois já não podem ser restaurados.", "Esvaziar", true))) return;
             const r = await comErro(() => Dados.lixoCaixaEsvaziar()); toast(r.msg, !r.ok); carregar();
           };
         } else {
           const tudo = await Dados.rejeitadosListar();
           const lista = tudo.filter((e) => noPeriodo(e.rejeitadoEm || e.dataPedido));
           if (!lista.length) { $("lix-lista").innerHTML = vazio("lixeira", tudo.length ? "Nenhum pedido rejeitado neste período." : "Não há pedidos rejeitados."); return; }
-          $("lix-lista").innerHTML = `<div class="resumo-lista">${lista.length} pedido${lista.length === 1 ? "" : "s"} rejeitado${lista.length === 1 ? "" : "s"}${lixPer ? "" : " (todos)"}</div>` + lista.map((e) => `<div class="item" style="cursor:default;align-items:flex-start">
+          $("lix-lista").innerHTML = `<div class="resumo-lista">${lista.length} pedido${lista.length === 1 ? "" : "s"} rejeitado${lista.length === 1 ? "" : "s"}${lixPer ? "" : " (todos)"}</div>
+            <button class="btn secundario" id="lix-esv-ped" style="margin:0 0 12px;color:var(--vermelho)">${ic("lixeira", 16)} Esvaziar os pedidos rejeitados (${tudo.length})</button>` + lista.map((e) => `<div class="item" style="cursor:default;align-items:flex-start">
             <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
             <span class="meio"><span class="nome">${esc(e.nomeCliente)} · nº ${e.id}</span>
               <span class="det">${vmt(e.capital)} · pedido ${R.data(e.dataPedido)}</span>
@@ -2551,6 +2583,10 @@
             const r = await comErro(() => Dados.rejeitadoEliminar(Number(b.dataset.del)));
             toast(r.msg, !r.ok); if (r.ok) carregar();
           });
+          $("lix-esv-ped").onclick = async () => {
+            if (!(await confirmar("Esvaziar pedidos rejeitados", "Remove TODOS os " + tudo.length + " pedidos rejeitados, definitivamente (também os de fora deste período).\n\nDepois já não podem ser restaurados.", "Esvaziar", true))) return;
+            const r = await comErro(() => Dados.rejeitadosEsvaziar()); toast(r.msg, !r.ok); carregar();
+          };
         }
       } catch (e) { $("lix-lista").innerHTML = erroEcra(e, carregar); }
     };
