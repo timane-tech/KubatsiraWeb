@@ -3927,9 +3927,20 @@
     if (sinoOn) atualizarBadgeSino();
     try {
       // Tudo é filtrado pelo id DESTE cliente: nunca se leem dados de outros clientes
-      const [porPagar, meus] = await Promise.all([
-        Dados.porPagarDoCliente(S.user.clienteId), Dados.emprestimosDoCliente(S.user.clienteId)]);
+      const [porPagar, meus, movsPou] = await Promise.all([
+        Dados.porPagarDoCliente(S.user.clienteId), Dados.emprestimosDoCliente(S.user.clienteId),
+        Dados.poupancaMovimentos(S.user.clienteId).catch(() => [])]);
       const hoje = R.hojeISO();
+      // A minha poupança (só aparece se o cliente tiver movimentos de poupança)
+      let pouDep = 0, pouUso = 0;
+      movsPou.forEach((m) => { if (m.tipo === "DEPOSITO") pouDep += m.valor; else pouUso += m.valor; });
+      const pouSaldo = R.arredondar(pouDep - pouUso);
+      const cartaoPou = movsPou.length ? `<button class="cartao" id="cl-pou" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--borda);cursor:pointer;font-family:inherit;color:var(--texto)">
+          <span class="circ-ic" style="background:var(--verde-bg);color:var(--verde);width:46px;height:46px;flex:none">${ic("entrada", 22)}</span>
+          <span style="flex:1;min-width:0"><span style="display:block;font-size:.76rem;font-weight:700;color:var(--texto-suave);text-transform:uppercase">A minha poupança</span>
+            <span style="display:block;font-size:1.3rem;font-weight:800;color:var(--verde)">${vmt(pouSaldo)}</span>
+            <span style="display:block;font-size:.8rem;color:var(--texto-suave)">${pouSaldo > 0.005 ? "Guardado no seu cofre · toque para ver os movimentos" : "O seu cofre está vazio · toque para ver os movimentos"}</span></span>
+          <span style="color:var(--texto-suave);font-size:1.3rem">›</span></button>` : "";
       let divida = 0, multas = 0, atrasadas = 0, proxima = null;
       for (const p of porPagar) {
         divida += R.emFalta(p, hoje); multas += R.multaPrestacao(p, hoje);
@@ -3960,9 +3971,28 @@
           ${kpi("Em atraso", String(atrasadas), atrasadas > 0 ? "var(--vermelho)" : "var(--verde)")}
         </div>
         ${avisos}
+        ${cartaoPou}
         <div class="seccao-titulo">Os meus empréstimos</div>${lista}`;
       c.querySelectorAll(".cl[data-eid]").forEach((b) => b.onclick = () =>
         abrirEmprestimo(meus.find((x) => x.id == b.dataset.eid), verClienteInicio));
+      if ($("cl-pou")) $("cl-pou").onclick = () => {
+        const linhas = movsPou.map((m) => {
+          const dep = m.tipo === "DEPOSITO";
+          return `<div class="item" style="cursor:default">
+            <span class="avatar" style="background:${dep ? "var(--verde-bg)" : "var(--laranja-bg)"};color:${dep ? "var(--verde)" : "var(--laranja)"}">${ic(dep ? "entrada" : "saida", 18)}</span>
+            <span class="meio"><span class="nome">${dep ? "Depósito" : "Uso / levantamento"}</span><span class="det" style="white-space:normal">${esc(semCardinal(m.descricao))}</span>
+              <span class="det" style="font-size:.74rem">${R.dataHora(m.data)}</span></span>
+            <span class="fim"><span class="mt" style="color:${dep ? "var(--verde)" : "var(--laranja)"}">${dep ? "+" : "−"}${vmt(m.valor)}</span></span></div>`;
+        }).join("");
+        abrirFolha(`<h3>A minha poupança</h3><div class="sub">O dinheiro guardado no seu cofre</div>
+          <div class="linha-dados"><span class="r">Saldo atual</span><span class="v" style="color:var(--verde)">${vmt(pouSaldo)}</span></div>
+          <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${vmt(pouDep)}</span></div>
+          <div class="linha-dados"><span class="r">Total usado / levantado</span><span class="v">${vmt(pouUso)}</span></div>
+          <p class="sub" style="margin:10px 0 0">O saldo da poupança é usado nas prestações do próximo crédito, ou pode pedir para o levantar no escritório.</p>
+          <div class="seccao-titulo" style="margin-left:0">Movimentos</div>${linhas}
+          <button class="btn secundario" id="pou-fechar" style="margin-top:12px">Fechar</button>`);
+        $("pou-fechar").onclick = fecharFolha;
+      };
     } catch (e) { c.innerHTML = erroEcra(e, verClienteInicio); }
   }
 
