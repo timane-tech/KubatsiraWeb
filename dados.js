@@ -973,6 +973,13 @@ const Dados = (() => {
       "ON CONFLICT (notificacao_id, usuario_id) DO UPDATE SET removida = TRUE", [id, usuarioId]);
   }
 
+  // Apagar várias de uma vez (só para esta pessoa: os outros continuam a vê-las)
+  async function removerNotificacoes(usuarioId, ids) {
+    if (!ids.length) return;
+    await DB.executar("INSERT INTO notificacoes_lidas (notificacao_id, usuario_id, removida) SELECT unnest(?::int[]), ?, TRUE " +
+      "ON CONFLICT (notificacao_id, usuario_id) DO UPDATE SET removida = TRUE", ["{" + ids.join(",") + "}", usuarioId]);
+  }
+
   // ---------- Recados (sino): Administrador → agentes (todos ou um) · Agente → Administração ----------
   // O mesmo formato do Kubatsira para Windows (NotificacaoController.EnviarRecado): tipo RECADO, máx. 500 caracteres.
   async function enviarRecado(texto, paraUsuarioId, u) {
@@ -1499,21 +1506,44 @@ const Dados = (() => {
     return Number(r[0] ? r[0].n : 0);
   }
 
+  // Apagar SMS um a um. itens = [{ origem: "C" (sms_cobranca, histórico) | "F" (sms_fila, recados e pedidos), id }].
+  // Um pedido da fila que o envio automático já está a enviar (A_ENVIAR) não é apagado: devolve-o em "aEnviar".
+  async function smsApagar(itens) {
+    const ids = (o) => "{" + itens.filter((i) => i.origem === o).map((i) => Number(i.id)).join(",") + "}";
+    const r = await DB.consultar(
+      "WITH a AS (DELETE FROM sms_cobranca WHERE id = ANY(?::int[]) RETURNING 1), " +
+      "b AS (DELETE FROM sms_fila WHERE id = ANY(?::int[]) AND estado <> 'A_ENVIAR' RETURNING 1) " +
+      "SELECT (SELECT COUNT(*) FROM a) + (SELECT COUNT(*) FROM b) AS n", [ids("C"), ids("F")]);
+    DB.limparCache();
+    const n = Number(r[0] ? r[0].n : 0);
+    return { n, aEnviar: itens.length - n };
+  }
+
+  // Cancelar todos os pedidos que ainda estão na fila por enviar (PENDENTE)
+  async function smsCancelarFila() {
+    const r = await DB.consultar("WITH b AS (DELETE FROM sms_fila WHERE estado = 'PENDENTE' RETURNING 1) SELECT COUNT(*) AS n FROM b", []);
+    DB.limparCache();
+    return Number(r[0] ? r[0].n : 0);
+  }
+
   // deISO/ateISO opcionais: só os SMS enviados nesse período (sem período = os 100 mais recentes)
   async function smsEnviadosListar(deISO, ateISO) {
     try {
       const comPer = !!(deISO && ateISO);
       return (await DB.consultar(
         "SELECT COALESCE(nome,'') AS nome, telefone, data_movimento_sms AS quando, COALESCE(texto,'') AS texto, " +
-        "COALESCE(estado,'') AS estado, COALESCE(valor,0) AS valor FROM (" +
-        "SELECT nome, telefone, to_char(enviado_em,'DD/MM/YYYY HH24:MI') AS data_movimento_sms, texto, estado, valor, enviado_em, id " +
+        "COALESCE(estado,'') AS estado, COALESCE(valor,0) AS valor, origem, id, COALESCE(dia_iso,'') AS dia_iso FROM (" +
+        "SELECT nome, telefone, to_char(enviado_em,'DD/MM/YYYY HH24:MI') AS data_movimento_sms, texto, estado, valor, enviado_em, id, " +
+        "'C' AS origem, to_char(dia,'YYYY-MM-DD') AS dia_iso " +
         "FROM sms_cobranca WHERE enviado_em IS NOT NULL" + (comPer ? " AND enviado_em::date BETWEEN ?::date AND ?::date" : "") +
         // + os recados (e pedidos) da fila: aparecem logo, "na fila" até serem enviados
         " UNION ALL SELECT (CASE tipo WHEN 'COBRANCA' THEN 'Cobrança a todos (pedido)' ELSE nome END), COALESCE(telefone, ''), " +
-        "to_char(criado_em,'DD/MM/YYYY HH24:MI'), (CASE WHEN tipo = 'RECADO' THEN 'Recado: ' ELSE '' END) || COALESCE(texto, ''), estado, 0, criado_em, id " +
+        "to_char(criado_em,'DD/MM/YYYY HH24:MI'), (CASE WHEN tipo = 'RECADO' THEN 'Recado: ' ELSE '' END) || COALESCE(texto, ''), estado, 0, criado_em, id, " +
+        "'F', NULL " +
         "FROM sms_fila" + (comPer ? " WHERE criado_em::date BETWEEN ?::date AND ?::date" : "") +
         ") t ORDER BY enviado_em DESC NULLS LAST, id DESC LIMIT " + (comPer ? 1000 : 100), comPer ? [deISO, ateISO, deISO, ateISO] : []))
-        .map((r) => ({ nome: r.nome, telefone: r.telefone, quando: r.quando, texto: r.texto, estado: r.estado, valor: Number(r.valor) }));
+        .map((r) => ({ nome: r.nome, telefone: r.telefone, quando: r.quando, texto: r.texto, estado: r.estado, valor: Number(r.valor),
+          origem: r.origem, id: Number(r.id), dia: r.dia_iso }));
     } catch (e) { return null; }   // null = tabela não existe nesta base
   }
 
@@ -1526,7 +1556,7 @@ const Dados = (() => {
     registarCliente, atualizarCliente, novoCodigoAcesso, eliminarCliente, poupancaSaldo,
     pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,
     registarCaixa, listarUtilizadores, criarUtilizador, atualizarUtilizador, eliminarUtilizador,
-    alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao,
+    alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao, removerNotificacoes, smsApagar, smsCancelarFila,
     configLer, configGravar, sinoAtivo, smsAutomaticoAtivo, definirSmsAutomatico,
     PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
     poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo,

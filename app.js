@@ -2272,12 +2272,14 @@
       const todas = notEnviados && podeRecado ? await Dados.recadosEnviados(S.user.id) : await Dados.listarNotificacoes(S.user.id, S.user.perfil);
       const lista = todas.filter((n) => { const d = R.dataBase(n.data) || ""; return (!de || d >= de) && (!ate || d <= ate); });
       const cor = (t) => t === "SEGURANCA" ? CORES.vermelho : t === "ATUALIZACAO" ? CORES.verde : t === "RECADO" ? CORES.roxo : CORES.azul;
-      c.innerHTML = topo + filtro + (lista.length ? (notPer ? `<div class="resumo-lista">${lista.length} notificaç${lista.length === 1 ? "ão" : "ões"} neste período</div>` : "") : "") + (lista.length ? lista.map((n) => `<div class="cl" style="cursor:default;${n.lida ? "" : "border-left:4px solid var(--accent)"}">
+      const apagarTodas = !notEnviados && lista.length > 1
+        ? `<button class="btn secundario" id="not-apagar-todas" style="margin:0 0 12px;color:var(--vermelho)">${ic("lixeira", 16)} Apagar ${notPer ? "as " + lista.length + " deste período" : "todas (" + lista.length + ")"}</button>` : "";
+      c.innerHTML = topo + filtro + apagarTodas + (lista.length ? (notPer ? `<div class="resumo-lista">${lista.length} notificaç${lista.length === 1 ? "ão" : "ões"} neste período</div>` : "") : "") + (lista.length ? lista.map((n) => `<div class="cl" style="cursor:default;${n.lida ? "" : "border-left:4px solid var(--accent)"}">
         <div class="cl-topo"><span class="circ-ic" style="background:${cor(n.tipo)[1]};color:${cor(n.tipo)[0]};width:42px;height:42px">${icf("sino", 20)}</span>
           <div class="cl-meio"><div class="cl-tit">${esc(n.titulo || "Notificação")}${n.lida ? "" : ` ${pilula("Nova", CORES.azul)}`}</div>
             <div class="cl-sub" style="white-space:pre-line">${esc(n.mensagem || "")}</div>
             <div class="cl-sub" style="font-size:.76rem;margin-top:4px">${R.dataHora(n.data)}${n.autor ? " · " + esc(n.autor) : ""}${n.destino ? " · para: " + esc(n.destino) : ""}</div></div>
-          <button class="icone" data-rem="${n.id}" title="${notEnviados ? "Apagar o recado" : "Remover"}" style="background:none;border:0;color:var(--texto-suave);cursor:pointer;font-size:1.1rem">✕</button>
+          <button class="icone" data-rem="${n.id}" title="${notEnviados ? "Apagar o recado" : "Apagar"}" aria-label="Apagar" style="background:none;border:0;color:var(--vermelho);cursor:pointer;padding:8px;margin:-6px -6px 0 0;flex:none">${ic("lixeira", 19)}</button>
         </div></div>`).join("") : vazio("notificacoes", notPer && todas.length ? (notEnviados ? "Nenhum recado enviado neste período." : "Sem notificações neste período.")
           : notEnviados ? "Ainda não enviou nenhum recado." : "Sem notificações."));
       if ($("not-abas")) $("not-abas").querySelectorAll(".chip").forEach((ch) => ch.onclick = () => { notEnviados = ch.dataset.a === "1"; verNotificacoes(); });
@@ -2295,9 +2297,18 @@
           if (notEnviados) {   // apagar um recado que escreveu (desaparece para todos)
             if (!(await confirmar("Apagar recado", "O recado deixa de aparecer a quem o recebeu.", "Apagar", true))) return;
             const r = await Dados.apagarRecado(Number(b.dataset.rem), S.user.id); toast(r.msg, !r.ok); if (r.ok) verNotificacoes();
-          } else { await Dados.removerNotificacao(S.user.id, Number(b.dataset.rem)); b.closest(".cl").remove(); }
+          } else {
+            await Dados.removerNotificacao(S.user.id, Number(b.dataset.rem)); b.closest(".cl").remove(); toast("Notificação apagada.");
+            if (!c.querySelector("[data-rem]")) verNotificacoes();
+          }
         } catch (e) { toast(e.message, true); }
       });
+      if ($("not-apagar-todas")) $("not-apagar-todas").onclick = async () => {
+        if (!(await confirmar("Apagar notificações", "Apagar " + (lista.length === 1 ? "esta notificação" : "estas " + lista.length + " notificações") +
+          "?\n\nSó deixam de aparecer para si; os outros utilizadores continuam a vê-las.", "Apagar", true))) return;
+        try { await Dados.removerNotificacoes(S.user.id, lista.map((n) => n.id)); toast(lista.length + " notificações apagadas."); verNotificacoes(); }
+        catch (e) { toast(e.message, true); }
+      };
       // Abrir o sino marca tudo como lido (o número vermelho desaparece)
       const porLer = notEnviados ? [] : todas.filter((n) => !n.lida).map((n) => n.id);
       if (porLer.length) Dados.marcarLidas(S.user.id, porLer).catch(() => {});
@@ -2610,14 +2621,23 @@
       const comFiltro = pode("SMS_VER") ? filtro : "";
       if (!lista.length) { c.innerHTML = btnTodos + btnLimparSms + comFiltro + vazio("sms", smsPer ? "Nenhum SMS enviado neste período." : "Ainda não há SMS enviados."); ligar(); ligarFiltro(); return; }
       const nOk = lista.filter((s) => s.estado === "ENVIADO").length;
-      c.innerHTML = btnTodos + btnLimparSms + comFiltro + `<div class="resumo-lista">${lista.length} SMS${smsPer ? "" : " (os mais recentes)"} · ${nOk} enviado${nOk === 1 ? "" : "s"} com sucesso${lista.length - nOk ? " · " + (lista.length - nOk) + " com falha" : ""}</div>` + lista.map((s) => {
-        const ok = s.estado === "ENVIADO";
+      const naFila = (s) => s.origem === "F" && (s.estado === "PENDENTE" || s.estado === "A_ENVIAR");
+      const nFila = lista.filter(naFila).length;
+      const podeApagar = pode("SMS_AUTOMATICO");
+      const ESTADO = { PENDENTE: "na fila (por enviar)", A_ENVIAR: "a enviar agora", ENVIADO: "enviado", FALHOU: "falhou", SEM_NUMERO: "sem número" };
+      c.innerHTML = btnTodos + btnLimparSms + comFiltro + `<div class="resumo-lista">${lista.length} SMS${smsPer ? "" : " (os mais recentes)"} · ${nOk} enviado${nOk === 1 ? "" : "s"} com sucesso${nFila ? " · " + nFila + " na fila" : ""}${lista.length - nOk - nFila ? " · " + (lista.length - nOk - nFila) + " com falha" : ""}</div>` + lista.map((s, i) => {
+        const ok = s.estado === "ENVIADO", fila = naFila(s);
+        const corA = ok ? ["var(--verde-bg)", "var(--verde)"] : fila ? ["var(--laranja-bg)", "var(--laranja)"] : ["var(--vermelho-bg)", "var(--vermelho)"];
+        // Apagar: os pedidos por enviar são cancelados; o que já está a ser enviado (A_ENVIAR) não se pode parar
+        const btn = podeApagar && s.estado !== "A_ENVIAR"
+          ? `<button data-sms="${i}" aria-label="${s.estado === "PENDENTE" ? "Cancelar o envio" : "Apagar"}" title="${s.estado === "PENDENTE" ? "Cancelar o envio" : "Apagar"}" style="background:none;border:0;color:var(--vermelho);cursor:pointer;padding:8px;margin:-6px -6px 0 0;flex:none">${ic("lixeira", 19)}</button>` : "";
         return `<div class="item" style="cursor:default;align-items:flex-start">
-          <span class="avatar" style="background:${ok ? "var(--verde-bg)" : "var(--vermelho-bg)"};color:${ok ? "var(--verde)" : "var(--vermelho)"}">${ic("sms", 18)}</span>
+          <span class="avatar" style="background:${corA[0]};color:${corA[1]}">${ic("sms", 18)}</span>
           <span class="meio"><span class="nome">${esc(s.nome || s.telefone)}</span>
             <span class="det" style="white-space:normal">${esc(s.texto)}</span>
-            <span class="det" style="font-size:.74rem">${esc(s.telefone)} · ${esc(s.quando || "")} · ${esc(s.estado || "")}</span></span></div>`;
+            <span class="det" style="font-size:.74rem">${esc(s.telefone)}${s.telefone ? " · " : ""}${esc(s.quando || "")} · ${esc(ESTADO[s.estado] || s.estado || "")}</span></span>${btn}</div>`;
       }).join("");
+      c.querySelectorAll("[data-sms]").forEach((b) => b.onclick = () => apagarSms(lista[Number(b.dataset.sms)]));
       ligar(); ligarFiltro();
     } catch (e) { c.innerHTML = erroEcra(e, verSms); }
   }
@@ -2667,12 +2687,40 @@
     };
   }
 
+  // Apagar um SMS da lista: um pedido por enviar é cancelado (não chega a sair); o resto sai do histórico
+  async function apagarSms(s) {
+    const pendente = s.origem === "F" && s.estado === "PENDENTE";
+    const hoje = s.origem === "C" && s.dia === R.hojeISO();
+    const txt = pendente ? "Este SMS ainda não foi enviado. Ao cancelar, já não é enviado a " + (s.nome || s.telefone) + "."
+      : "Apagar este SMS do histórico?" + (hoje ? "\n\nAtenção: é de hoje — o cliente pode voltar a receber a cobrança no próximo envio." : "");
+    if (!(await confirmar(pendente ? "Cancelar o envio" : "Apagar SMS", txt, pendente ? "Cancelar envio" : "Apagar", true))) return;
+    try {
+      const r = await Dados.smsApagar([{ origem: s.origem, id: s.id }]);
+      if (!r.n) { toast("Este SMS já está a ser enviado e não pode ser cancelado.", true); verSms(); return; }
+      Promise.resolve(Dados.registarAcesso("MENSAGEM", S.user.utilizador, S.user.id, S.user.perfil,
+        (pendente ? "Cancelou o envio de um SMS a " : "Apagou um SMS de ") + (s.nome || s.telefone))).catch(() => {});
+      toast(pendente ? "Envio cancelado." : "SMS apagado.");
+    } catch (e) { toast(e.message, true); }
+    verSms();
+  }
+
   // Limpar o histórico de SMS (como no PC e no Android). Fica registado no Controlo de Acesso.
   function limparHistoricoSms() {
     const hoje = R.hojeISO();
     const ops = [["Anteriores a hoje", hoje], ["Com mais de 7 dias", R.somaDias(hoje, -7)], ["Com mais de 30 dias", R.somaDias(hoje, -30)], ["Tudo (também os de hoje)", null]];
-    abrirFolha(`<h3>Limpar histórico de SMS</h3><div class="sub">Os pedidos que ainda estão na fila não são apagados.</div>
-      ${ops.map(([t], i) => `<button class="btn secundario" data-lh="${i}" style="margin-bottom:8px">${esc(t)}</button>`).join("")}`);
+    abrirFolha(`<h3>Limpar histórico de SMS</h3><div class="sub">Os pedidos que ainda estão na fila não são apagados por estas opções.</div>
+      ${ops.map(([t], i) => `<button class="btn secundario" data-lh="${i}" style="margin-bottom:8px">${esc(t)}</button>`).join("")}
+      <button class="btn secundario" id="lh-fila" style="margin-top:6px;color:var(--vermelho)">${ic("lixeira", 16)} Cancelar os pedidos por enviar (na fila)</button>`);
+    $("lh-fila").onclick = async () => {
+      if (!(await confirmar("Cancelar pedidos", "Cancelar todos os SMS que ainda estão na fila por enviar?\n\nOs que já estão a ser enviados não podem ser parados.", "Cancelar pedidos", true))) return;
+      try {
+        const n = await Dados.smsCancelarFila();
+        Promise.resolve(Dados.registarAcesso("MENSAGEM", S.user.utilizador, S.user.id, S.user.perfil,
+          "Cancelou " + n + " pedido(s) de SMS na fila")).catch(() => {});
+        toast(n === 0 ? "Não havia pedidos por enviar." : n === 1 ? "1 pedido cancelado." : n + " pedidos cancelados.");
+      } catch (e) { toast(e.message, true); }
+      verSms();
+    };
     document.querySelectorAll("#folha [data-lh]").forEach((b) => b.onclick = async () => {
       const [nome, antes] = ops[Number(b.dataset.lh)];
       const aviso = antes ? "Apagar de vez o histórico de SMS anterior a " + R.data(antes) + "?"
@@ -3499,6 +3547,7 @@
   // ---------- Auxiliares ----------
   function mostrar(id) {
     ["ecra-ligar", "ecra-login", "ecra-app"].forEach((e) => $(e).classList.toggle("ativo", e === id));
+    if (id !== "ecra-app") botaoSms(0);   // o botão das SMS só aparece dentro da app
   }
   const primeiroNome = (n) => (n || "").trim().split(/\s+/)[0] || "";
   const perfilNome = (p) => p === "ADMIN" ? "Administrador" : p === "AGENTE" ? "Agente" : "Cliente";
@@ -3566,21 +3615,56 @@
   const HORAS_SMS = [8, 12, 14];
   const turnoAtual = () => { const h = new Date().getHours(); return [...HORAS_SMS].reverse().find((x) => h >= x) || 0; };
   let smsAutoCache = { quando: 0, ligado: false }, avisoAberto = false;
+
+  // Botão a piscar (todos os ecrãs) enquanto houver clientes deste horário por avisar; tocar = enviar
+  function botaoSms(qtd, turno) {
+    const b = $("sms-alerta"); if (!b) return;
+    const ver = !!(qtd && S.user && $("ecra-app").classList.contains("ativo"));
+    b.classList.toggle("oculto", !ver);
+    if (!ver) return;
+    b.innerHTML = `${ic("sms", 17)}<span>SMS das ${String(turno).padStart(2, "0")}:00</span><span class="qtd">${qtd}</span>`;
+    b.setAttribute("aria-label", "Mensagens de cobrança das " + turno + ":00 — " + qtd + " cliente(s) por avisar");
+    b.onclick = () => {
+      if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
+      cobrarTodos(turno);
+    };
+  }
+
+  // Som curto de alerta. O iPhone só deixa tocar som depois de um toque no ecrã: o primeiro toque "desbloqueia" o áudio.
+  let somCtx = null;
+  window.addEventListener("pointerdown", () => {
+    try { if (!somCtx) somCtx = new (window.AudioContext || window.webkitAudioContext)(); if (somCtx.state === "suspended") somCtx.resume(); } catch (e) {}
+  }, { passive: true });
+  function tocarAlerta() {
+    try { if (navigator.vibrate) navigator.vibrate([200, 100, 200]); } catch (e) {}
+    try {
+      if (!somCtx || somCtx.state !== "running") return;
+      [0, 0.22].forEach((t) => {
+        const o = somCtx.createOscillator(), g = somCtx.createGain(), t0 = somCtx.currentTime + t;
+        o.type = "sine"; o.frequency.value = 880; o.connect(g); g.connect(somCtx.destination);
+        g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(0.35, t0 + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.18);
+        o.start(t0); o.stop(t0 + 0.2);
+      });
+    } catch (e) {}
+  }
+
   async function verificarAvisoSms() {
-    if (!S.user || S.cliente || !pode("COBRANCAS") || avisoAberto) return;
-    if ($("fundo-escuro").classList.contains("aberto")) return;   // não interrompe uma folha aberta
-    const turno = turnoAtual(); if (!turno) return;
+    const turno = turnoAtual();
+    if (!S.user || S.cliente || !pode("COBRANCAS") || !turno) { botaoSms(0); return; }
     const hoje = R.hojeISO();
     const chave = `kub_aviso_sms_${S.user.id}_${hoje}_${turno}`;
-    try { if (localStorage.getItem(chave)) return; } catch (e) {}
     try {
       if (Date.now() - smsAutoCache.quando > 10 * 60 * 1000) smsAutoCache = { quando: Date.now(), ligado: await Dados.smsAutomaticoAtivo() };
-      if (smsAutoCache.ligado) return;
+      if (smsAutoCache.ligado) { botaoSms(0); return; }   // o envio automático trata disso
       const [cobr, ja] = await Promise.all([Dados.listarCobrancas(hoje), Dados.smsJaEnviados(hoje, turno)]);
+      if (!S.user) { botaoSms(0); return; }
       const clientes = new Set(cobr.filter((p) => p.telefoneCliente && !ja.has(p.clienteId)).map((p) => p.clienteId));
-      try { localStorage.setItem(chave, "1"); } catch (e) {}
-      if (!clientes.size || !S.user) return;
+      botaoSms(clientes.size, turno);
+      // O aviso grande abre uma vez por horário (e não por cima de outra folha aberta)
+      if (!clientes.size || avisoAberto || $("fundo-escuro").classList.contains("aberto")) return;
+      try { if (localStorage.getItem(chave)) return; localStorage.setItem(chave, "1"); } catch (e) {}
       const hora = String(turno).padStart(2, "0") + ":00";
+      tocarAlerta();
       // Se a app estiver aberta mas noutro separador/fundo: notificação do sistema (se autorizada)
       if (document.hidden && "Notification" in window && Notification.permission === "granted") {
         try { const reg = await navigator.serviceWorker.getRegistration();
@@ -3601,7 +3685,7 @@
         if ("Notification" in window && Notification.permission === "default") Notification.requestPermission().catch(() => {});
         cobrarTodos(turno);
       };
-      $("av-dep").onclick = () => { avisoAberto = false; fecharFolha(); toast("Pode enviar depois em Mais › SMS aos clientes."); };
+      $("av-dep").onclick = () => { avisoAberto = false; fecharFolha(); toast("O botão cor-de-laranja em baixo fica a piscar até enviar."); };
     } catch (e) { /* sem rede: tenta outra vez no minuto seguinte */ try { localStorage.removeItem(chave); } catch (e2) {} }
   }
   setInterval(verificarAvisoSms, 60 * 1000);
@@ -3630,7 +3714,7 @@
     const render = () => {
       if (i >= comTel.length) {
         abrirFolha(`<h3>Concluído</h3><p class="sub">Percorreste os ${comTel.length} cliente(s)${semTel ? " (" + semTel + " sem telefone foram ignorados)" : ""}.</p><button class="btn" id="ct-ok">Fechar</button>`);
-        $("ct-ok").onclick = fecharFolha; return;
+        $("ct-ok").onclick = fecharFolha; setTimeout(verificarAvisoSms, 1500); return;
       }
       const x = comTel[i];
       abrirFolha(`<h3>Enviar SMS a todos</h3><div class="sub">Cliente ${i + 1} de ${comTel.length}</div>
@@ -3648,7 +3732,7 @@
         abrirSMS(x.tel, x.texto, x.nome); i++; setTimeout(render, 500);
       };
       $("ct-salta").onclick = () => { i++; render(); };
-      $("ct-fim").onclick = fecharFolha;
+      $("ct-fim").onclick = () => { fecharFolha(); setTimeout(verificarAvisoSms, 1500); };
     };
     render();
   }
