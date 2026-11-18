@@ -2355,6 +2355,7 @@
     const intervalo = () => pouPer === ESC ? [pouDe, pouAte] : [PER[pouPer][1], PER[pouPer][2]];
     const nomePer = () => pouPer !== ESC ? PER[pouPer][0] : pouDe === pouAte ? R.data(pouDe) : R.data(pouDe) + " a " + R.data(pouAte);
     c.innerHTML = `
+      ${podeGerirPoupanca() ? `<button class="btn" id="pou-lev-topo" style="margin:0 0 12px">${ic("saida", 16)} Levantar dinheiro</button>` : ""}
       <div class="chips" id="pou-per">${PER.map((p, i) => `<button class="chip ${i === pouPer ? "ativo" : ""}" data-i="${i}">${p[0]}</button>`).join("")}</div>
       <div id="pou-datas" class="${pouPer === ESC ? "" : "oculto"}" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:2px 0 10px">
         <div class="campo" style="margin:0"><label>De</label><input id="pou-de" type="date" value="${pouDe}" max="${hojeP}"></div>
@@ -2408,7 +2409,52 @@
     };
     $("pou-de").onchange = mudarDatas;
     $("pou-ate").onchange = mudarDatas;
+    if ($("pou-lev-topo")) $("pou-lev-topo").onclick = escolherClienteLevantar;
     carregar();
+  }
+
+  const podeGerirPoupanca = () => S.user.perfil === "ADMIN" || pode("CAIXA_EDITAR");
+
+  // Formulário "Levantar dinheiro" de um cliente (x = {clienteId, nome, saldo}). voltar = Cancelar; depois = após levantar.
+  function formLevantar(x, voltar, depois) {
+    abrirFolha(`<h3>Levantar dinheiro</h3><div class="sub">${esc(x.nome)} · saldo no cofre: <b>${R.mt(x.saldo)}</b></div>
+      <div class="campo"><label>Valor a levantar (MT)</label><input id="lv-valor" type="number" inputmode="decimal" min="0" step="0.01" max="${x.saldo}" placeholder="0,00"></div>
+      <button class="pilula-btn" id="lv-tudo" type="button" style="margin:-4px 0 12px">Levantar tudo (${R.mt(x.saldo)})</button>
+      <div class="campo"><label>Nota (opcional)</label><input id="lv-nota" maxlength="200" placeholder="ex.: levantado pelo próprio cliente"></div>
+      <div class="sub" style="margin:-2px 0 10px">Fica registada uma saída no caixa com este valor.</div>
+      <div class="erro-msg" id="lv-erro"></div>
+      <div class="btn-linha"><button class="btn secundario" id="lv-nao">Cancelar</button><button class="btn" id="lv-ok">Levantar</button></div>`);
+    setTimeout(() => { if ($("lv-valor")) $("lv-valor").focus(); }, 200);
+    $("lv-tudo").onclick = () => { $("lv-valor").value = x.saldo.toFixed(2); };
+    $("lv-nao").onclick = voltar;
+    $("lv-ok").onclick = async () => {
+      const v = R.arredondar(Number(String($("lv-valor").value).replace(",", ".")) || 0), nota = $("lv-nota").value;
+      if (v <= 0) { $("lv-erro").textContent = "Indique o valor a levantar."; return; }
+      if (v > x.saldo + 0.005) { $("lv-erro").textContent = "O valor é maior que o saldo do cofre (" + R.mt(x.saldo) + ")."; return; }
+      if (!(await confirmar("Levantar dinheiro", "Entregar " + R.mt(v) + " a " + x.nome + "?\n\nFica no cofre: " + R.mt(R.arredondar(x.saldo - v)) + ".\nÉ registada uma SAÍDA de " + R.mt(v) + " no caixa.", "Levantar"))) return;
+      try {
+        const r = await Dados.poupancaLevantar(x.clienteId, x.nome, v, S.user.utilizador, nota);
+        toast(r.msg, !r.ok);
+      } catch (e) { toast(e.message, true); }
+      depois();
+    };
+  }
+
+  // Botão do topo da Poupança: escolher o cliente (só os que têm saldo) e depois o valor
+  async function escolherClienteLevantar() {
+    abrirFolha(`<h3>Levantar dinheiro</h3><div class="sub">Escolha o cliente</div>${spinner}`);
+    let lista = [];
+    try { lista = (await Dados.poupancaSaldos(true)); } catch (e) { toast(e.message, true); fecharFolha(); return; }
+    if (!lista.length) { abrirFolha(`<h3>Levantar dinheiro</h3><p class="sub">Nenhum cliente tem saldo na poupança.</p><button class="btn" id="lv-fechar">Fechar</button>`); $("lv-fechar").onclick = fecharFolha; return; }
+    abrirFolha(`<h3>Levantar dinheiro</h3><div class="sub">Escolha o cliente (${lista.length} com saldo)</div>
+      <div class="campo" style="margin:8px 0"><input id="lv-procura" placeholder="Procurar pelo nome…"></div>
+      <div id="lv-lista">${lista.map((x, i) => `<button class="item" data-i="${i}" data-nome="${esc((x.nome || "").toLowerCase())}">
+        <span class="avatar" style="background:${corAvatar(x.nome)};color:#fff">${esc(R.iniciais(x.nome))}</span>
+        <span class="meio"><span class="nome">${esc(x.nome)}</span><span class="det">${esc(x.telefone || "")}</span></span>
+        <span class="fim"><span class="mt" style="color:var(--verde)">${R.mt(x.saldo)}</span></span></button>`).join("")}</div>`);
+    $("lv-procura").oninput = () => { const q = $("lv-procura").value.trim().toLowerCase(); document.querySelectorAll("#lv-lista [data-i]").forEach((b) => b.classList.toggle("oculto", !!q && !b.dataset.nome.includes(q))); };
+    document.querySelectorAll("#lv-lista [data-i]").forEach((b) => b.onclick = () =>
+      formLevantar(lista[Number(b.dataset.i)], escolherClienteLevantar, () => { fecharFolha(); verPoupanca(); }));
   }
 
   // periodo: [de, até, nome] para mostrar só os movimentos desse período (ou null = todos)
@@ -2417,7 +2463,7 @@
     let movs = [];
     try { movs = await Dados.poupancaMovimentos(x.clienteId); } catch (e) {}
     if (periodo) movs = movs.filter((m) => { const d = R.dataBase(m.data) || ""; return d >= periodo[0] && d <= periodo[1]; });
-    const gere = S.user.perfil === "ADMIN" || pode("CAIXA_EDITAR");   // apagar movimentos / esvaziar o cofre
+    const gere = podeGerirPoupanca();   // levantar / apagar movimentos / esvaziar o cofre
     const linhas = movs.map((m) => {
       const dep = m.tipo === "DEPOSITO";
       return `<div class="item" style="cursor:default;align-items:flex-start">
@@ -2452,29 +2498,7 @@
       reabrir();
     };
     // Levantar uma parte (ou tudo) do saldo
-    if ($("pou-levantar")) $("pou-levantar").onclick = () => {
-      abrirFolha(`<h3>Levantar dinheiro</h3><div class="sub">${esc(x.nome)} · saldo no cofre: <b>${R.mt(x.saldo)}</b></div>
-        <div class="campo"><label>Valor a levantar (MT)</label><input id="lv-valor" type="number" inputmode="decimal" min="0" step="0.01" max="${x.saldo}" placeholder="0,00"></div>
-        <button class="pilula-btn" id="lv-tudo" type="button" style="margin:-4px 0 12px">Levantar tudo (${R.mt(x.saldo)})</button>
-        <div class="campo"><label>Nota (opcional)</label><input id="lv-nota" maxlength="200" placeholder="ex.: levantado pelo próprio cliente"></div>
-        <div class="sub" style="margin:-2px 0 10px">Fica registada uma saída no caixa com este valor.</div>
-        <div class="erro-msg" id="lv-erro"></div>
-        <div class="btn-linha"><button class="btn secundario" id="lv-nao">Cancelar</button><button class="btn" id="lv-ok">Levantar</button></div>`);
-      setTimeout(() => { if ($("lv-valor")) $("lv-valor").focus(); }, 200);
-      $("lv-tudo").onclick = () => { $("lv-valor").value = x.saldo.toFixed(2); };
-      $("lv-nao").onclick = () => abrirPoupancaCliente(x, periodo);
-      $("lv-ok").onclick = async () => {
-        const v = R.arredondar(Number(String($("lv-valor").value).replace(",", ".")) || 0), nota = $("lv-nota").value;
-        if (v <= 0) { $("lv-erro").textContent = "Indique o valor a levantar."; return; }
-        if (v > x.saldo + 0.005) { $("lv-erro").textContent = "O valor é maior que o saldo do cofre (" + R.mt(x.saldo) + ")."; return; }
-        if (!(await confirmar("Levantar dinheiro", "Entregar " + R.mt(v) + " a " + x.nome + "?\n\nFica no cofre: " + R.mt(R.arredondar(x.saldo - v)) + ".\nÉ registada uma SAÍDA de " + R.mt(v) + " no caixa.", "Levantar"))) return;
-        try {
-          const r = await Dados.poupancaLevantar(x.clienteId, x.nome, v, S.user.utilizador, nota);
-          toast(r.msg, !r.ok);
-        } catch (e) { toast(e.message, true); }
-        reabrir();
-      };
-    };
+    if ($("pou-levantar")) $("pou-levantar").onclick = () => formLevantar(x, () => abrirPoupancaCliente(x, periodo), reabrir);
     document.querySelectorAll("#folha [data-pmov]").forEach((b) => b.onclick = async () => {
       const m = movs.find((y) => y.id === Number(b.dataset.pmov)); if (!m) return;
       const dep = m.tipo === "DEPOSITO";
