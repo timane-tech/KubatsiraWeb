@@ -2,9 +2,12 @@
  * Service worker: guarda a "casca" da app (HTML/CSS/JS/ícones) para abrir depressa e offline.
  * Os dados (consultas à Neon) NUNCA são guardados aqui — vão sempre à base de dados pela rede.
  */
-const CACHE = "kubatsira-v1.1.2-3";
+const CACHE = "kubatsira-v1.1.2-4";
+// Sem "./index.html": o Cloudflare responde a /index.html com um redirecionamento (307 -> /) e o Safari
+// recusa abrir uma página servida pelo service worker que veio de um redirecionamento
+// ("Response served by service worker has redirections"). A página é sempre a cópia de "./".
 const CASCA = [
-  "./", "./index.html", "./styles.css", "./dicionario.js", "./idioma.js", "./icones.js","./regras.js", "./db.js", "./dados.js", "./app.js",
+  "./", "./styles.css", "./dicionario.js", "./idioma.js", "./icones.js","./regras.js", "./db.js", "./dados.js", "./app.js",
   "./manifest.webmanifest", "./icons/icon-192.png", "./icons/icon-512.png",
   "./icons/maskable-512.png", "./icons/apple-touch-180.png",
 ];
@@ -41,11 +44,22 @@ self.addEventListener("fetch", (e) => {
   // "Cache-first": os ficheiros da app abrem logo da cópia guardada (sem esperar pela rede).
   // Uma versão nova chega com um sw.js novo (o browser verifica-o sozinho): é descarregada inteira em
   // segundo plano e entra na abertura seguinte — nunca se misturam ficheiros de versões diferentes.
+  // Abrir a app (qualquer endereço da app: /, /index.html, /?…) = a página guardada em "./".
+  const pagina = e.request.mode === "navigate";
   e.respondWith(
-    caches.open(CACHE).then((c) => c.match(e.request, { ignoreSearch: true }).then((r) => r ||
-      fetch(e.request).then((resp) => {
-        if (resp.ok) c.put(e.request, resp.clone()).catch(() => {});
-        return resp;
-      }).catch(() => c.match("./index.html"))))
+    caches.open(CACHE).then((c) => c.match(pagina ? "./" : e.request, { ignoreSearch: true }).then((r) => {
+      if (r) return limpa(r);
+      return fetch(pagina ? "./" : e.request).then((resp) => {
+        if (resp.ok) c.put(pagina ? "./" : e.request, resp.clone()).catch(() => {});
+        return limpa(resp);
+      }).catch(() => c.match("./").then((x) => x ? limpa(x) : Response.error()));
+    }))
   );
 });
+
+// Uma resposta que passou por um redirecionamento não pode ser devolvida a uma navegação no Safari:
+// copia o conteúdo para uma resposta nova, "limpa".
+function limpa(r) {
+  if (!r || !r.redirected) return r;
+  return r.blob().then((b) => new Response(b, { status: r.status, statusText: r.statusText, headers: r.headers }));
+}

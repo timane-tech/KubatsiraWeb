@@ -3247,7 +3247,7 @@
   // Procura uma versão nova (service worker) e recarrega se houver
   async function procurarAtualizacoes() {
     try {
-      const r = await fetch("index.html?novo=" + Date.now(), { cache: "no-store" });
+      const r = await fetch("./?novo=" + Date.now(), { cache: "no-store" });
       const t = await r.text();
       const m = /KUB_VER\s*=\s*"([^"]+)"/.exec(t);
       const nova = m ? m[1] : null;
