@@ -2431,7 +2431,8 @@
       <div class="linha-dados"><span class="r">Saldo atual</span><span class="v">${R.mt(x.saldo)}</span></div>
       <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${R.mt(x.depositado)}</span></div>
       <div class="linha-dados"><span class="r">Total usado</span><span class="v">${R.mt(x.usado)}</span></div>
-      ${gere && x.saldo > 0.005 ? `<button class="btn secundario" id="pou-esvaziar" style="margin:12px 0 4px;color:var(--vermelho)">${ic("lixeira", 16)} Esvaziar o cofre (devolver ${R.mt(x.saldo)})</button>` : ""}
+      ${gere && x.saldo > 0.005 ? `<button class="btn" id="pou-levantar" style="margin:12px 0 8px">${ic("saida", 16)} Levantar dinheiro</button>
+        <button class="btn secundario" id="pou-esvaziar" style="margin:0 0 4px;color:var(--vermelho)">${ic("lixeira", 16)} Esvaziar o cofre (devolver ${R.mt(x.saldo)})</button>` : ""}
       <div class="seccao-titulo" style="margin-left:0">Movimentos${periodo ? " · " + esc(periodo[2]) : ""}</div>
       ${linhas || `<p class="sub" style="color:var(--texto-suave)">Sem movimentos${periodo ? " neste período" : ""}.</p>`}`);
     // Depois de mudar: atualiza a lista por trás e volta a abrir a ficha com os valores novos
@@ -2445,10 +2446,34 @@
       if (!(await confirmar("Esvaziar o cofre", "O cliente " + x.nome + " levanta todo o saldo: " + R.mt(x.saldo) + ".\n\n" +
         "Fica registado um uso na poupança e uma SAÍDA de " + R.mt(x.saldo) + " no caixa. O saldo do cofre fica 0.", "Esvaziar", true))) return;
       try {
-        const r = await Dados.poupancaEsvaziar(x.clienteId, x.nome, S.user.utilizador);
+        const r = await Dados.poupancaLevantar(x.clienteId, x.nome, null, S.user.utilizador, "");
         toast(r.msg, !r.ok);
       } catch (e) { toast(e.message, true); }
       reabrir();
+    };
+    // Levantar uma parte (ou tudo) do saldo
+    if ($("pou-levantar")) $("pou-levantar").onclick = () => {
+      abrirFolha(`<h3>Levantar dinheiro</h3><div class="sub">${esc(x.nome)} · saldo no cofre: <b>${R.mt(x.saldo)}</b></div>
+        <div class="campo"><label>Valor a levantar (MT)</label><input id="lv-valor" type="number" inputmode="decimal" min="0" step="0.01" max="${x.saldo}" placeholder="0,00"></div>
+        <button class="pilula-btn" id="lv-tudo" type="button" style="margin:-4px 0 12px">Levantar tudo (${R.mt(x.saldo)})</button>
+        <div class="campo"><label>Nota (opcional)</label><input id="lv-nota" maxlength="200" placeholder="ex.: levantado pelo próprio cliente"></div>
+        <div class="sub" style="margin:-2px 0 10px">Fica registada uma saída no caixa com este valor.</div>
+        <div class="erro-msg" id="lv-erro"></div>
+        <div class="btn-linha"><button class="btn secundario" id="lv-nao">Cancelar</button><button class="btn" id="lv-ok">Levantar</button></div>`);
+      setTimeout(() => { if ($("lv-valor")) $("lv-valor").focus(); }, 200);
+      $("lv-tudo").onclick = () => { $("lv-valor").value = x.saldo.toFixed(2); };
+      $("lv-nao").onclick = () => abrirPoupancaCliente(x, periodo);
+      $("lv-ok").onclick = async () => {
+        const v = R.arredondar(Number(String($("lv-valor").value).replace(",", ".")) || 0), nota = $("lv-nota").value;
+        if (v <= 0) { $("lv-erro").textContent = "Indique o valor a levantar."; return; }
+        if (v > x.saldo + 0.005) { $("lv-erro").textContent = "O valor é maior que o saldo do cofre (" + R.mt(x.saldo) + ")."; return; }
+        if (!(await confirmar("Levantar dinheiro", "Entregar " + R.mt(v) + " a " + x.nome + "?\n\nFica no cofre: " + R.mt(R.arredondar(x.saldo - v)) + ".\nÉ registada uma SAÍDA de " + R.mt(v) + " no caixa.", "Levantar"))) return;
+        try {
+          const r = await Dados.poupancaLevantar(x.clienteId, x.nome, v, S.user.utilizador, nota);
+          toast(r.msg, !r.ok);
+        } catch (e) { toast(e.message, true); }
+        reabrir();
+      };
     };
     document.querySelectorAll("#folha [data-pmov]").forEach((b) => b.onclick = async () => {
       const m = movs.find((y) => y.id === Number(b.dataset.pmov)); if (!m) return;

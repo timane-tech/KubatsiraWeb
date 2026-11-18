@@ -1149,19 +1149,28 @@ const Dados = (() => {
       : { ok: false, msg: "Não foi possível apagar: o saldo do cliente ficaria negativo (apague primeiro o uso correspondente)." };
   }
 
-  // Esvaziar o cofre: o cliente levanta todo o saldo. Fica um "USO" na poupança e uma SAÍDA no caixa (o dinheiro sai).
-  async function poupancaEsvaziar(clienteId, nome, quem) {
+  // Levantar dinheiro da poupança: o cliente leva "valor" (null = todo o saldo, ou seja, esvaziar o cofre).
+  // Fica um "USO" na poupança e uma SAÍDA no caixa (o dinheiro sai), ligados por origem_caixa_id.
+  async function poupancaLevantar(clienteId, nome, valor, quem, nota) {
     const saldo = await poupancaSaldo(clienteId);
-    if (saldo <= 0.005) return { ok: false, msg: "O cofre deste cliente já está vazio." };
+    if (saldo <= 0.005) return { ok: false, msg: "O cofre deste cliente está vazio." };
+    const tudo = valor == null;
+    valor = tudo ? saldo : Regras.arredondar(Number(valor) || 0);
+    if (valor <= 0) return { ok: false, msg: "Indique um valor maior que zero." };
+    if (valor > saldo + 0.005) return { ok: false, msg: "O valor é maior que o saldo do cofre (" + Regras.mt(saldo) + ")." };
+    nota = (nota || "").trim().slice(0, 200);
+    const desc = (tudo || valor + 0.005 >= saldo ? "Levantamento de todo o saldo (cofre esvaziado)" : "Levantamento de dinheiro") + (nota ? " - " + nota : "");
     await DB.lote([
       { sql: "INSERT INTO caixa (tipo, valor, justificativa, categoria, registado_por) VALUES ('SAIDA', ?, ?, 'POUPANCA', ?)",
-        params: [saldo, "Levantamento da poupança (cofre esvaziado) - Cliente: " + nome, quem] },
+        params: [valor, "Levantamento da poupança - Cliente: " + nome + (nota ? " (" + nota + ")" : ""), quem] },
       { sql: "INSERT INTO poupanca_clientes (cliente_id, tipo, valor, descricao, registado_por, origem_caixa_id) " +
-             "VALUES (?, 'USO', ?, 'Levantamento de todo o saldo (cofre esvaziado)', ?, currval(pg_get_serial_sequence('caixa','id')))",
-        params: [clienteId, saldo, quem] },
+             "VALUES (?, 'USO', ?, ?, ?, currval(pg_get_serial_sequence('caixa','id')))",
+        params: [clienteId, valor, desc, quem] },
     ]);
     DB.limparCache();
-    return { ok: true, msg: "Cofre esvaziado: " + Regras.mt(saldo) + " devolvidos ao cliente (saída registada no caixa).", valor: saldo };
+    const resta = Regras.arredondar(saldo - valor);
+    return { ok: true, valor, resta,
+      msg: "Levantamento de " + Regras.mt(valor) + " registado (saída no caixa). " + (resta > 0.005 ? "Fica no cofre: " + Regras.mt(resta) + "." : "O cofre ficou vazio.") };
   }
 
   // ---------- Lixeira: lançamentos do caixa ----------
@@ -1594,7 +1603,7 @@ const Dados = (() => {
     alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao, removerNotificacoes, smsApagar, smsCancelarFila, rejeitadosEsvaziar,
     configLer, configGravar, sinoAtivo, smsAutomaticoAtivo, definirSmsAutomatico,
     PLANOS, METODOS, licencaEstado, licencaNovaExpiracao, licencaHistorico, licencaPagar,
-    poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo, poupancaApagarMovimento, poupancaEsvaziar,
+    poupancaSaldos, poupancaMovimentos, poupancaNoPeriodo, poupancaApagarMovimento, poupancaLevantar,
     lixoCaixaListar, lixoCaixaRestaurar, lixoCaixaEliminar, lixoCaixaEsvaziar, lixoPreverAnulacao, lixoAnularPagamento, ehPagamento,
     enviarRecado, recadosEnviados, apagarRecado, historicoReconciliacoes, smsLimparHistorico, smsEnfileirarRecado, assinaturaSessao,
     balancoEmprestimosPeriodo, caixaPeriodo, graficoEntradasSaidasPeriodo, graficoEvolucaoCaixaPeriodo, topClientesPeriodo, ultimosMovimentosPeriodo,
