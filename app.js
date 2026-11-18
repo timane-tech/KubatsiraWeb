@@ -1263,8 +1263,11 @@
       ${pode("REMOVER_MULTA") && p.multaAlteradaPor ? `<div class="aviso-caixa" style="margin:12px 0 6px">A multa desta prestação foi alterada por <b>${esc(p.multaAlteradaPor)}</b>.</div><button class="btn" id="pg-repor">Repor a multa (anular remoção)</button>` : ""}
     `);
     if ($("pg-ligar")) $("pg-ligar").onclick = () => ligarCliente(p.nomeCliente, p.telefoneCliente);
-    if ($("pg-sms")) $("pg-sms").onclick = () => abrirSMS(p.telefoneCliente, mensagemCobranca(p), p.nomeCliente);
-    if ($("pg-copiar")) $("pg-copiar").onclick = () => copiarMensagem(mensagemCobranca(p), p.nomeCliente, p.numero);
+    // A poupança é lida antes (o SMS tem de abrir logo no toque, por isso não se espera no clique)
+    let pouCli = 0;
+    saldosPoupanca().then((m) => { pouCli = m.get(p.clienteId) || 0; }).catch(() => {});
+    if ($("pg-sms")) $("pg-sms").onclick = () => abrirSMS(p.telefoneCliente, mensagemCobranca(p, pouCli), p.nomeCliente);
+    if ($("pg-copiar")) $("pg-copiar").onclick = () => copiarMensagem(mensagemCobranca(p, pouCli), p.nomeCliente, p.numero);
     if ($("pg-repor")) $("pg-repor").onclick = async () => {
       if (!(await confirmar("Repor a multa", "A multa volta a ser calculada normalmente (2% por dia de atraso). Serve para anular uma remoção feita por engano. Vale em todos os dispositivos.", "Repor"))) return;
       const r = await comErro(() => Dados.reporMulta(p.id));
@@ -1460,7 +1463,8 @@
         const ps = (await Dados.listarPorPagar()).filter((p) => p.clienteId === cl.id);
         if (!ps.length) { abrirSMS(cl.telefone, "Ola " + primeiroNome(cl.nome) + ", ", cl.nome); return; }
         const total = ps.reduce((s, p) => s + R.emFalta(p, R.hojeISO()), 0);
-        abrirSMS(cl.telefone, mensagemCobrancaGrupo(ps, total), cl.nome);
+        const pou = (await saldosPoupanca()).get(cl.id) || 0;
+        abrirSMS(cl.telefone, mensagemCobrancaGrupo(ps, total, pou), cl.nome);
       } catch (e) { toast(e.message, true); }
     };
     if ($("cl-sms")) $("cl-sms").onclick = smsCobrancaCliente;
@@ -2415,6 +2419,12 @@
 
   const podeGerirPoupanca = () => S.user.perfil === "ADMIN" || pode("CAIXA_EDITAR");
 
+  // SMS sobre o dinheiro poupado (sem acentos, como as cobranças: cabe melhor num SMS). Igual ao PC.
+  function mensagemPoupanca(nome, saldo) {
+    return "Caro(a) " + nome + ",\nKubatsira Microcredito informa que tem " + R.mt(saldo) + " guardados na sua poupanca. " +
+      "Este valor sera usado no seu proximo credito ou pode levanta-lo no escritorio.\nObrigado.";
+  }
+
   // Formulário "Levantar dinheiro" de um cliente (x = {clienteId, nome, saldo}). voltar = Cancelar; depois = após levantar.
   function formLevantar(x, voltar, depois) {
     abrirFolha(`<h3>Levantar dinheiro</h3><div class="sub">${esc(x.nome)} · saldo no cofre: <b>${R.mt(x.saldo)}</b></div>
@@ -2477,6 +2487,9 @@
       <div class="linha-dados"><span class="r">Saldo atual</span><span class="v">${R.mt(x.saldo)}</span></div>
       <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${R.mt(x.depositado)}</span></div>
       <div class="linha-dados"><span class="r">Total usado</span><span class="v">${R.mt(x.usado)}</span></div>
+      ${x.telefone ? `<div class="btn-linha" style="margin-top:12px">
+        <button class="btn secundario" id="pou-ligar" style="margin:0">📞 Ligar</button>
+        <button class="btn btn-verde" id="pou-sms" style="margin:0">💬 SMS de aviso</button></div>` : `<p class="sub" style="margin:10px 0 0">Este cliente não tem telefone registado.</p>`}
       ${gere && x.saldo > 0.005 ? `<button class="btn" id="pou-levantar" style="margin:12px 0 8px">${ic("saida", 16)} Levantar dinheiro</button>
         <button class="btn secundario" id="pou-esvaziar" style="margin:0 0 4px;color:var(--vermelho)">${ic("lixeira", 16)} Esvaziar o cofre (devolver ${R.mt(x.saldo)})</button>` : ""}
       <div class="seccao-titulo" style="margin-left:0">Movimentos${periodo ? " · " + esc(periodo[2]) : ""}</div>
@@ -2499,6 +2512,9 @@
     };
     // Levantar uma parte (ou tudo) do saldo
     if ($("pou-levantar")) $("pou-levantar").onclick = () => formLevantar(x, () => abrirPoupancaCliente(x, periodo), reabrir);
+    // Contactar o cliente sobre o dinheiro poupado
+    if ($("pou-ligar")) $("pou-ligar").onclick = () => ligarCliente(x.nome, x.telefone);
+    if ($("pou-sms")) $("pou-sms").onclick = () => abrirSMS(x.telefone, mensagemPoupanca(x.nome, x.saldo), x.nome);
     document.querySelectorAll("#folha [data-pmov]").forEach((b) => b.onclick = async () => {
       const m = movs.find((y) => y.id === Number(b.dataset.pmov)); if (!m) return;
       const dep = m.tipo === "DEPOSITO";
@@ -3665,8 +3681,15 @@
     registarContacto("MENSAGEM", "Copiou a mensagem de cobrança de " + (nome || "cliente") + (numero ? " (" + numero + "ª prestação)" : ""));
   }
 
+  // Saldos da poupança (clienteId → saldo), para as mensagens de cobrança dizerem quanto o cliente tem guardado
+  async function saldosPoupanca() {
+    try { return new Map((await Dados.poupancaSaldos(true)).map((x) => [x.clienteId, x.saldo])); } catch (e) { return new Map(); }
+  }
+  const linhaPoupanca = (saldo) => saldo > 0.005 ? "Tem " + R.mt(saldo) + " guardados na sua poupanca.\n" : "";
+
   // Mensagem agrupada: todas as prestações em dívida de um cliente (igual ao gateway/Android).
-  function mensagemCobrancaGrupo(prest, dividaTotal) {
+  // poupanca = saldo do cofre do cliente (se tiver, a mensagem diz quanto tem guardado)
+  function mensagemCobrancaGrupo(prest, dividaTotal, poupanca) {
     const hoje = R.hojeISO();
     const ps = [...prest].sort((a, b) => (a.vencimento || "").localeCompare(b.vencimento || "") || a.numero - b.numero);
     let total = 0, multas = 0, atraso = false, n = 0; const linhas = [];
@@ -3690,6 +3713,7 @@
     if (multas > 0) t += " (inclui multas de " + R.mt(multas) + ")";
     t += "\n";
     if (dividaTotal > total + 0.5) t += "Divida total (com prestacoes por vencer): " + R.mt(dividaTotal) + "\n";
+    t += linhaPoupanca(poupanca || 0);
     t += atraso ? "Regularize o pagamento o mais breve possivel. Obrigado." : "Obrigado.";
     return t;
   }
@@ -3782,14 +3806,15 @@
     const hoje = R.hojeISO();
     if (turno == null) turno = turnoAtual() || 0;   // 8, 12, 14 (ou 0 = fora do horário)
     let cobr, todas, jaEnviados;
-    try { [cobr, todas, jaEnviados] = await Promise.all([Dados.listarCobrancas(hoje), Dados.listarPorPagar(), Dados.smsJaEnviados(hoje, turno)]); }
+    let pouMapa = new Map();
+    try { [cobr, todas, jaEnviados, pouMapa] = await Promise.all([Dados.listarCobrancas(hoje), Dados.listarPorPagar(), Dados.smsJaEnviados(hoje, turno), saldosPoupanca()]); }
     catch (e) { toast(e.message, true); return; }
     const divida = {}; todas.forEach((p) => divida[p.clienteId] = (divida[p.clienteId] || 0) + R.emFalta(p, hoje));
     const grupos = {}; cobr.forEach((p) => { (grupos[p.clienteId] = grupos[p.clienteId] || []).push(p); });
     const lista = Object.keys(grupos).filter((cid) => !jaEnviados.has(Number(cid))).map((cid) => {
       const ps = grupos[cid];
       return { clienteId: Number(cid), nome: ps[0].nomeCliente, tel: ps[0].telefoneCliente,
-        texto: mensagemCobrancaGrupo(ps, divida[cid] || 0),
+        texto: mensagemCobrancaGrupo(ps, divida[cid] || 0, pouMapa.get(Number(cid)) || 0),
         total: ps.reduce((s, p) => s + R.emFalta(p, hoje), 0) };
     });
     const semTel = lista.filter((x) => !x.tel).length;
@@ -3823,14 +3848,16 @@
   }
 
   // Texto da cobrança (uma prestação).
-  function mensagemCobranca(p) {
+  function mensagemCobranca(p, poupanca) {
     const hoje = R.hojeISO();
     const atraso = R.diasAtraso(p.vencimento, hoje);
     const falta = R.emFalta(p, hoje);
     let m = `Kubatsira: Ola ${primeiroNome(p.nomeCliente)}, `;
     if (atraso > 0) m += `a sua ${p.numero}a prestacao (emprestimo n. ${p.emprestimoId}) venceu em ${R.data(p.vencimento)} e tem ${atraso} dia(s) de atraso. `;
     else m += `a sua ${p.numero}a prestacao (emprestimo n. ${p.emprestimoId}) vence em ${R.data(p.vencimento)}. `;
-    m += `Valor a pagar: ${R.mt(falta)}${p.multaCongelada || atraso > 0 ? " (inclui multa)" : ""}. Por favor regularize. Obrigado.`;
+    m += `Valor a pagar: ${R.mt(falta)}${p.multaCongelada || atraso > 0 ? " (inclui multa)" : ""}. `;
+    if (poupanca > 0.005) m += `Tem ${R.mt(poupanca)} guardados na sua poupanca. `;
+    m += "Por favor regularize. Obrigado.";
     return m;
   }
   const curto = (cat) => ({ PRESTACAO: "Pagamento", DESEMBOLSO: "Desembolso", CAPITAL: "Entrada de capital", DESPESA: "Despesa", POUPANCA: "Poupança" }[cat] || cat || "Movimento");

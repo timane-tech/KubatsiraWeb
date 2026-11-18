@@ -106,7 +106,17 @@ def carregar(cond):
     return out
 
 # ---------- Mensagem (fiel à app Android) ----------
-def mensagem(prest, divida_total):
+def saldos_poupanca():
+    """cliente_id -> saldo da poupança (só quem tem saldo). Se a tabela não existir, fica vazio."""
+    try:
+        rows = neon("SELECT cliente_id, SUM(CASE WHEN tipo='DEPOSITO' THEN valor ELSE -valor END) AS saldo "
+                    "FROM poupanca_clientes GROUP BY cliente_id "
+                    "HAVING SUM(CASE WHEN tipo='DEPOSITO' THEN valor ELSE -valor END) > 0.005")
+        return {int(r["cliente_id"]): decimal.Decimal(str(r["saldo"])) for r in rows}
+    except Exception:
+        return {}
+
+def mensagem(prest, divida_total, poupanca=decimal.Decimal("0")):
     prest = sorted(prest, key=lambda p: (p["venc"] or HOJE, p["numero"]))
     total = decimal.Decimal("0.00"); multas = decimal.Decimal("0.00")
     atraso = False; linhas = []; n = 0
@@ -132,6 +142,8 @@ def mensagem(prest, divida_total):
     txt += "\n"
     if divida_total > total + decimal.Decimal("0.5"):
         txt += "Divida total (com prestacoes por vencer): " + mt(divida_total) + "\n"
+    if poupanca and poupanca > decimal.Decimal("0.005"):
+        txt += "Tem " + mt(poupanca) + " guardados na sua poupanca.\n"
     txt += "Regularize o pagamento o mais breve possivel. Obrigado." if atraso else "Obrigado."
     return txt
 
@@ -276,11 +288,12 @@ def main():
     for p in cobrancas:
         por_cliente.setdefault(p["cliente_id"], []).append(p)
 
+    poupanca = saldos_poupanca()
     enviados = falhados = pulados = 0
     for cid, prest in por_cliente.items():
         nome = prest[0]["nome"]; tel = telefone_internacional(prest[0]["tel"])
         total_cliente = sum((em_falta(p) for p in prest), decimal.Decimal("0.00"))
-        texto = mensagem(prest, divida.get(cid, total_cliente))
+        texto = mensagem(prest, divida.get(cid, total_cliente), poupanca.get(cid, decimal.Decimal("0")))
         if not tel:
             print("  SEM TELEFONE: %s" % nome); continue
         if DRY_RUN:

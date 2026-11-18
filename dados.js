@@ -1160,12 +1160,13 @@ const Dados = (() => {
     if (valor > saldo + 0.005) return { ok: false, msg: "O valor é maior que o saldo do cofre (" + Regras.mt(saldo) + ")." };
     nota = (nota || "").trim().slice(0, 200);
     const desc = (tudo || valor + 0.005 >= saldo ? "Levantamento de todo o saldo (cofre esvaziado)" : "Levantamento de dinheiro") + (nota ? " - " + nota : "");
+    const agora = Regras.agoraLocal();   // hora de Moçambique (o relógio da Neon está em UTC)
     await DB.lote([
-      { sql: "INSERT INTO caixa (tipo, valor, justificativa, categoria, registado_por) VALUES ('SAIDA', ?, ?, 'POUPANCA', ?)",
-        params: [valor, "Levantamento da poupança - Cliente: " + nome + (nota ? " (" + nota + ")" : ""), quem] },
-      { sql: "INSERT INTO poupanca_clientes (cliente_id, tipo, valor, descricao, registado_por, origem_caixa_id) " +
-             "VALUES (?, 'USO', ?, ?, ?, currval(pg_get_serial_sequence('caixa','id')))",
-        params: [clienteId, valor, desc, quem] },
+      { sql: "INSERT INTO caixa (tipo, valor, justificativa, categoria, registado_por, data_movimento) VALUES ('SAIDA', ?, ?, 'POUPANCA', ?, ?::timestamp)",
+        params: [valor, "Levantamento da poupança - Cliente: " + nome + (nota ? " (" + nota + ")" : ""), quem, agora] },
+      { sql: "INSERT INTO poupanca_clientes (cliente_id, tipo, valor, descricao, registado_por, origem_caixa_id, data_movimento) " +
+             "VALUES (?, 'USO', ?, ?, ?, currval(pg_get_serial_sequence('caixa','id')), ?::timestamp)",
+        params: [clienteId, valor, desc, quem, agora] },
     ]);
     DB.limparCache();
     const resta = Regras.arredondar(saldo - valor);
