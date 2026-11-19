@@ -937,7 +937,9 @@ const Dados = (() => {
   // "lida"/"removida" ficam em notificacoes_lidas (a mesma notificação pode estar lida para uns e não para outros).
   const VISIVEL =
     "(n.para_usuario_id = ? OR (n.para_usuario_id IS NULL AND (n.para_perfil IS NULL OR n.para_perfil = ?)))" +
-    " AND (n.de_usuario_id IS NULL OR n.de_usuario_id <> ?) AND n.criada_em >= LOCALTIMESTAMP - INTERVAL '60 days'";
+    " AND (n.de_usuario_id IS NULL OR n.de_usuario_id <> ?) AND n.criada_em >= LOCALTIMESTAMP - INTERVAL '60 days'" +
+    // Os avisos "Nova versão" (com as novidades) são do PC e do telemóvel: a web atualiza-se sozinha, não os mostra
+    " AND COALESCE(n.chave, '') NOT LIKE 'versao-nova:%'";
 
   async function listarNotificacoes(usuarioId, perfil) {
     try {

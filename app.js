@@ -884,7 +884,7 @@
       }
       if (lic && lic.aExpirar && S.user.perfil === "ADMIN") {
         const quando = lic.diasRestantes === 0 ? "hoje" : lic.diasRestantes === 1 ? "amanhã" : "daqui a " + lic.diasRestantes + " dias";
-        avisos += aviso(`⚠ A licença do sistema expira <b>${quando}</b> (${R.data(lic.expiracao)}). Pague em <b>Mais › Licença</b> para evitar que o sistema entre em manutenção.`, CORES.laranja, "ini-lic");
+        avisos += aviso(`⚠ A licença do sistema expira <b>${quando}</b> (${R.data(lic.expiracao)}). ${podeAlterarLicenca() ? "Pague em <b>Mais › Licença</b>" : "Avise o responsável do sistema para a renovar"} para evitar que o sistema entre em manutenção.`, CORES.laranja, "ini-lic");
       }
 
       let balanco = "", dadosBal = null;
@@ -3455,8 +3455,14 @@
   // LICENÇA DO SISTEMA (LicencaActivity) — só o Administrador
   // ============================================================
   let licPlano = 0, licMetodo = 0;
+  // Só estas contas podem pagar / renovar a licença (mudar a data de validade) na web: o Elton.
+  // Os outros Administradores (ex.: Preselina) veem o estado e o histórico, mas não alteram.
+  const CONTAS_LICENCA = [936];
+  const podeAlterarLicenca = () => !!S.user && CONTAS_LICENCA.includes(Number(S.user.id));
+
   async function verLicenca(obrigatoria) {
     if (S.user.perfil !== "ADMIN") return;
+    const alterar = podeAlterarLicenca();
     mostrar("ecra-app");
     cabecalho("Licença do Sistema", "Pagamento e validade da licença");
     $("barra-inferior").classList.toggle("escondida", !!obrigatoria);
@@ -3474,7 +3480,8 @@
           <div style="font-size:.95rem;line-height:1.6">${e.expirada ? "Expirou a: " : "Válida até: "}<b>${R.data(e.expiracao)}</b><br>Plano: <b>${esc(e.nomePlano)}</b></div>
           ${e.expirada ? `<div style="color:var(--vermelho);font-size:.88rem;margin-top:10px">Enquanto a licença não for paga, os <b>Agentes e Clientes</b> veem <b>Sistema em manutenção</b> e não conseguem entrar.</div>` : ""}
         </div>
-        <div class="cartao"><div class="titulo-cfg">💳 ${e.expirada ? "Pagar a licença" : "Renovar a licença"}</div>
+        ${!alterar ? `<div class="cartao"><div class="explica">A licença só pode ser paga ou renovada pelo responsável do sistema.${e.expirada ? " Fale com ele para voltar a ativar o sistema." : ""}</div></div>` : ""}
+        <div class="cartao ${alterar ? "" : "oculto"}"><div class="titulo-cfg">💳 ${e.expirada ? "Pagar a licença" : "Renovar a licença"}</div>
           <div class="sub-secao">1. PLANO</div><div class="chips" id="lc-plano" style="flex-wrap:wrap"></div>
           <div class="sub-secao" style="margin-top:8px">2. MÉTODO DE PAGAMENTO</div><div class="chips" id="lc-metodo" style="flex-wrap:wrap"></div>
           <div id="lc-instr" style="font-size:.9rem;margin:10px 0"></div>
@@ -3505,6 +3512,7 @@
       };
       desenhar();
       $("lc-ok").onclick = async () => {
+        if (!podeAlterarLicenca()) { toast("Sem permissão para alterar a licença.", true); return; }
         const p = Dados.PLANOS[licPlano], metodo = Dados.METODOS[licMetodo];
         const ref = $("lc-ref").value.trim().toUpperCase();
         if (!(await confirmar("Confirmar pagamento", `Pagar a licença ${p.nome} (${R.mt(p.preco)}) por ${metodo}?\nReferência: ${ref}\nNova validade: ${R.data(Dados.licencaNovaExpiracao(e, p))}`, "Confirmar"))) return;
