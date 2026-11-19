@@ -884,7 +884,8 @@
       }
       if (lic && lic.aExpirar && S.user.perfil === "ADMIN") {
         const quando = lic.diasRestantes === 0 ? "hoje" : lic.diasRestantes === 1 ? "amanhã" : "daqui a " + lic.diasRestantes + " dias";
-        avisos += aviso(`⚠ A licença do sistema expira <b>${quando}</b> (${R.data(lic.expiracao)}). ${podeAlterarLicenca() ? "Pague em <b>Mais › Licença</b>" : "Avise o responsável do sistema para a renovar"} para evitar que o sistema entre em manutenção.`, CORES.laranja, "ini-lic");
+        avisos += aviso(`⚠ A licença do sistema expira <b>${quando}</b> (${R.data(lic.expiracao)}). ${podeAlterarLicenca() ? "Registe o pagamento em <b>Mais › Licença</b> para evitar que o sistema entre em manutenção."
+          : "Faça o pagamento da licença para evitar que o sistema entre em manutenção (valores e como pagar em <b>Mais › Licença</b>)."}`, CORES.laranja, "ini-lic");
       }
 
       let balanco = "", dadosBal = null;
@@ -3480,17 +3481,19 @@
           <div style="font-size:.95rem;line-height:1.6">${e.expirada ? "Expirou a: " : "Válida até: "}<b>${R.data(e.expiracao)}</b><br>Plano: <b>${esc(e.nomePlano)}</b></div>
           ${e.expirada ? `<div style="color:var(--vermelho);font-size:.88rem;margin-top:10px">Enquanto a licença não for paga, os <b>Agentes e Clientes</b> veem <b>Sistema em manutenção</b> e não conseguem entrar.</div>` : ""}
         </div>
-        ${!alterar ? `<div class="cartao"><div class="explica">A licença só pode ser paga ou renovada pelo responsável do sistema.${e.expirada ? " Fale com ele para voltar a ativar o sistema." : ""}</div></div>` : ""}
-        <div class="cartao ${alterar ? "" : "oculto"}"><div class="titulo-cfg">💳 ${e.expirada ? "Pagar a licença" : "Renovar a licença"}</div>
+        <div class="cartao"><div class="titulo-cfg">💳 ${e.expirada ? "Pagar a licença" : "Renovar a licença"}</div>
           <div class="sub-secao">1. PLANO</div><div class="chips" id="lc-plano" style="flex-wrap:wrap"></div>
           <div class="sub-secao" style="margin-top:8px">2. MÉTODO DE PAGAMENTO</div><div class="chips" id="lc-metodo" style="flex-wrap:wrap"></div>
           <div id="lc-instr" style="font-size:.9rem;margin:10px 0"></div>
-          <div class="campo"><label>Número / conta usado no pagamento</label><input id="lc-conta" type="tel" inputmode="tel"></div>
-          <div class="campo"><label>Referência da transação (ex.: 9JK4XL2M1Q)</label><input id="lc-ref" autocapitalize="characters" style="text-transform:uppercase"></div>
-          <label style="display:flex;align-items:center;gap:10px;font-size:.92rem"><input type="checkbox" id="lc-caixa" checked style="width:20px;height:20px"> Registar como despesa no Fluxo de Caixa</label>
+          <div class="${alterar ? "" : "oculto"}">
+            <div class="campo"><label>Número / conta usado no pagamento</label><input id="lc-conta" type="tel" inputmode="tel"></div>
+            <div class="campo"><label>Referência da transação (ex.: 9JK4XL2M1Q)</label><input id="lc-ref" autocapitalize="characters" style="text-transform:uppercase"></div>
+            <label style="display:flex;align-items:center;gap:10px;font-size:.92rem"><input type="checkbox" id="lc-caixa" checked style="width:20px;height:20px"> Registar como despesa no Fluxo de Caixa</label>
+          </div>
           <div id="lc-resumo" style="font-size:.95rem;margin:12px 0 4px"></div>
-          <div class="erro-msg" id="lc-erro"></div>
-          <button class="btn btn-verde" id="lc-ok">✓ Confirmar pagamento</button>
+          ${alterar ? `<div class="erro-msg" id="lc-erro"></div>
+          <button class="btn btn-verde" id="lc-ok">✓ Confirmar pagamento</button>`
+            : `<div class="aviso-painel" style="color:var(--accent);background:var(--accent-bg);margin-top:8px">Depois de enviar o pagamento, avise o responsável do sistema com a <b>referência da transação</b>: ele confirma o pagamento e a validade da licença é atualizada.</div>`}
         </div>
         <div class="cartao"><div class="titulo-cfg">🧾 Pagamentos da licença</div>
           ${hist.length ? hist.map((p) => `<div class="cl" style="cursor:default;box-shadow:none">
@@ -3511,7 +3514,7 @@
         $("lc-resumo").innerHTML = `Nova validade: <b>${R.data(Dados.licencaNovaExpiracao(e, p))}</b> (+${p.dias} dias)`;
       };
       desenhar();
-      $("lc-ok").onclick = async () => {
+      if ($("lc-ok")) $("lc-ok").onclick = async () => {
         if (!podeAlterarLicenca()) { toast("Sem permissão para alterar a licença.", true); return; }
         const p = Dados.PLANOS[licPlano], metodo = Dados.METODOS[licMetodo];
         const ref = $("lc-ref").value.trim().toUpperCase();
