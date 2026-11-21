@@ -825,7 +825,7 @@
     $("cabecalho").innerHTML = `
       <div class="cab-topo">
         <div class="avatar" id="cb-avatar" style="background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
-        <div class="cab-saud"><div class="ola">Início</div><div class="data">${esc(dataExtenso())}</div></div>
+        <div class="cab-saud"><div class="ola">${esc(saudacao())}, <span data-sem-traducao>${esc(primeiroNome(nome))}</span></div><div class="data">${esc(dataExtenso())}</div></div>
         <button class="icone" id="cb-atualizar" title="Atualizar">${icf("atualizar", 21)}</button>
         ${sinoOn ? `<button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>` : ""}
         <button class="icone" id="cb-sair" title="Sair">${icf("porta", 21)}</button>
@@ -3974,7 +3974,7 @@
     $("cabecalho").innerHTML = `
       <div class="cab-topo">
         <div class="avatar" id="cb-avatar" style="background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
-        <div class="cab-saud"><div class="ola">Início</div><div class="data">${esc(dataExtenso())}</div></div>
+        <div class="cab-saud"><div class="ola">${esc(saudacao())}, <span data-sem-traducao>${esc(primeiroNome(nome))}</span></div><div class="data">${esc(dataExtenso())}</div></div>
         <button class="icone" id="cb-atualizar" title="Atualizar">${icf("atualizar", 21)}</button>
         ${sinoOn ? `<button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>` : ""}
         <button class="icone" id="cb-sair" title="Sair">${icf("porta", 21)}</button>
