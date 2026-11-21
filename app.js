@@ -3400,8 +3400,17 @@
       const r = await fetch("./?novo=" + Date.now(), { cache: "no-store" });
       const t = await r.text();
       const m = /KUB_VER\s*=\s*"([^"]+)"/.exec(t);
-      const nova = m ? m[1] : null;
-      if (nova && nova !== window.KUB_VER) {
+      let nova = m && m[1] !== window.KUB_VER ? m[1] : null;
+      // Correções só da web mantêm o KUB_VER e mudam só o nome da cache no sw.js: compara-o também
+      if (!nova) {
+        try {
+          const sw = await (await fetch("./sw.js?novo=" + Date.now(), { cache: "no-store" })).text();
+          const c = /CACHE\s*=\s*"([^"]+)"/.exec(sw);
+          const minhas = (await caches.keys()).filter((k) => k.startsWith("kubatsira-"));
+          if (c && minhas.length && !minhas.includes(c[1])) nova = window.KUB_VER + " (" + c[1].replace(/^kubatsira-v/, "") + ")";
+        } catch (e) {}
+      }
+      if (nova) {
         if (await confirmar("Nova versão " + nova + " disponível", "Quer atualizar agora? A app volta a abrir (terá de entrar outra vez).", "Atualizar")) {
           toast("A descarregar a versão nova…");
           try {
@@ -4290,5 +4299,13 @@
   // Service worker (PWA offline shell)
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+    // Versão nova instalada logo ao abrir a app: recarrega já (a sessão e o ecrã mantêm-se),
+    // em vez de só aparecer na abertura seguinte. Mais tarde, a meio do trabalho, não interrompe.
+    const abertaEm = Date.now(), tinhaVersao = !!navigator.serviceWorker.controller;
+    let recarregou = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!tinhaVersao || recarregou || Date.now() - abertaEm > 30000) return;
+      recarregou = true; guardarSessao(); location.reload();
+    });
   }
 })();
