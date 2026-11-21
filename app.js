@@ -143,46 +143,46 @@
     const p = ICONES[nome];
     if (!p) return "";
     const s = tam || 22;
-    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;display:inline-block">${p}</svg>`;
+    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;display:inline-block">${p}</svg>`;
   }
 
-  // Ícones cheios (Material Icons, como na barra e nos menus da app Android)
+  // Ícones de linha (lucide), usados na barra, nos menus e nos cabeçalhos
   const ICONES_CHEIOS = {
-    inicio: "M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z",
-    cobrancas: "M20 3h-1V1h-2v2H7V1H5v2H4c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 18H4V8h16v13z",
-    clientes: "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
-    caixa: "M19 14V6c0-1.1-.9-2-2-2H3c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zm-9-1c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm13-6v11c0 1.1-.9 2-2 2H4v-2h17V7h2z",
-    credito: "M20 4H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V6c0-1.11-.89-2-2-2zm0 14H4v-6h16v6zm0-10H4V6h16v2z",
-    mais: "M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z",
-    balanco: "M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z",
-    editar: "M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z",
-    pasta: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
-    visto: "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
-    cadeado: "M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z",
-    cofre: "M20 3H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2v1h2v-1h12v1h2v-1c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 14H4V5h16v12zM7 7h7v6H7zm2 2v2h3V9zm7-2h2v6h-2z",
-    lixo: "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zm2.46-7.12 1.41-1.41L12 12.59l2.12-2.12 1.41 1.41L13.41 14l2.12 2.12-1.41 1.41L12 15.41l-2.12 2.12-1.41-1.41L10.59 14l-2.13-2.12zM15.5 4l-1-1h-5l-1 1H5v2h14V4z",
-    escudo: "M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z",
-    mensagem: "M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zM6 9h12v2H6V9zm8 5H6v-2h8v2zm4-6H6V6h12v2z",
-    chave: "M12.65 10A5.99 5.99 0 0 0 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6a5.99 5.99 0 0 0 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z",
-    olhofechado: "M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46A11.8 11.8 0 0 0 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78 3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z",
-    olhoaberto: "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z",
-    engrenagem: "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.48.48 0 0 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.48.48 0 0 0-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z",
-    telefone: "M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z",
-    local: "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z",
-    aviso: "M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z",
-    calendario: "M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zM9 14H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2zm-8 4H7v-2h2v2zm4 0h-2v-2h2v2zm4 0h-2v-2h2v2z",
-    atualizar: "M17.65 6.35A7.958 7.958 0 0 0 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08A5.99 5.99 0 0 1 12 18c-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z",
-    documento: "M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z",
-    tendencia: "m16 6 2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z",
-    sino: "M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z",
-    porta: "M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 0 0-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z",
-    robo: "M20 9V7c0-1.1-.9-2-2-2h-3c0-1.66-1.34-3-3-3S9 3.34 9 5H6c-1.1 0-2 .9-2 2v2c-1.66 0-3 1.34-3 3s1.34 3 3 3v4c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2v-4c1.66 0 3-1.34 3-3s-1.34-3-3-3zM7.5 11.5c0-.83.67-1.5 1.5-1.5s1.5.67 1.5 1.5S9.83 13 9 13s-1.5-.67-1.5-1.5zM16 17H8v-2h8v2zm-1-4c-.83 0-1.5-.67-1.5-1.5S14.17 10 15 10s1.5.67 1.5 1.5S15.83 13 15 13z",
+    inicio: "<path d=\"M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8\" /> <path d=\"M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\" />",
+    cobrancas: "<path d=\"M8 2v4\" /> <path d=\"M16 2v4\" /> <rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\" /> <path d=\"M3 10h18\" /> <path d=\"m9 16 2 2 4-4\" />",
+    clientes: "<path d=\"M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2\" /> <circle cx=\"9\" cy=\"7\" r=\"4\" /> <path d=\"M22 21v-2a4 4 0 0 0-3-3.87\" /> <path d=\"M16 3.13a4 4 0 0 1 0 7.75\" />",
+    caixa: "<path d=\"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1\" /> <path d=\"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4\" />",
+    credito: "<rect width=\"20\" height=\"14\" x=\"2\" y=\"5\" rx=\"2\" /> <line x1=\"2\" x2=\"22\" y1=\"10\" y2=\"10\" />",
+    mais: "<line x1=\"4\" x2=\"20\" y1=\"12\" y2=\"12\" /> <line x1=\"4\" x2=\"20\" y1=\"6\" y2=\"6\" /> <line x1=\"4\" x2=\"20\" y1=\"18\" y2=\"18\" />",
+    balanco: "<path d=\"M3 3v16a2 2 0 0 0 2 2h16\" /> <path d=\"M18 17V9\" /> <path d=\"M13 17V5\" /> <path d=\"M8 17v-3\" />",
+    editar: "<path d=\"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z\" /> <path d=\"m15 5 4 4\" />",
+    pasta: "<path d=\"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z\" />",
+    visto: "<path d=\"M20 6 9 17l-5-5\" />",
+    cadeado: "<rect width=\"18\" height=\"11\" x=\"3\" y=\"11\" rx=\"2\" ry=\"2\" /> <path d=\"M7 11V7a5 5 0 0 1 10 0v4\" />",
+    cofre: "<path d=\"M19 5c-1.5 0-2.8 1.4-3 2-3.5-1.5-11-.3-11 5 0 1.8 0 3 2 4.5V20h4v-2h3v2h4v-4c1-.5 1.7-1 2-2h2v-4h-2c0-1-.5-1.5-1-2V5z\" /> <path d=\"M2 9v1c0 1.1.9 2 2 2h1\" /> <path d=\"M16 11h.01\" />",
+    lixo: "<path d=\"M3 6h18\" /> <path d=\"M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6\" /> <path d=\"M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2\" /> <line x1=\"10\" x2=\"10\" y1=\"11\" y2=\"17\" /> <line x1=\"14\" x2=\"14\" y1=\"11\" y2=\"17\" />",
+    escudo: "<path d=\"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z\" />",
+    mensagem: "<path d=\"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z\" /> <path d=\"M13 8H7\" /> <path d=\"M17 12H7\" />",
+    chave: "<path d=\"M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z\" /> <circle cx=\"16.5\" cy=\"7.5\" r=\".5\" fill=\"currentColor\" />",
+    olhofechado: "<path d=\"M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49\" /> <path d=\"M14.084 14.158a3 3 0 0 1-4.242-4.242\" /> <path d=\"M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143\" /> <path d=\"m2 2 20 20\" />",
+    olhoaberto: "<path d=\"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0\" /> <circle cx=\"12\" cy=\"12\" r=\"3\" />",
+    engrenagem: "<path d=\"M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z\" /> <circle cx=\"12\" cy=\"12\" r=\"3\" />",
+    telefone: "<path d=\"M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z\" />",
+    local: "<path d=\"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0\" /> <circle cx=\"12\" cy=\"10\" r=\"3\" />",
+    aviso: "<path d=\"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3\" /> <path d=\"M12 9v4\" /> <path d=\"M12 17h.01\" />",
+    calendario: "<path d=\"M8 2v4\" /> <path d=\"M16 2v4\" /> <rect width=\"18\" height=\"18\" x=\"3\" y=\"4\" rx=\"2\" /> <path d=\"M3 10h18\" />",
+    atualizar: "<path d=\"M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8\" /> <path d=\"M21 3v5h-5\" /> <path d=\"M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16\" /> <path d=\"M8 16H3v5\" />",
+    documento: "<path d=\"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z\" /> <path d=\"M14 2v4a2 2 0 0 0 2 2h4\" /> <path d=\"M10 9H8\" /> <path d=\"M16 13H8\" /> <path d=\"M16 17H8\" />",
+    tendencia: "<polyline points=\"22 7 13.5 15.5 8.5 10.5 2 17\" /> <polyline points=\"16 7 22 7 22 13\" />",
+    sino: "<path d=\"M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9\" /> <path d=\"M10.3 21a1.94 1.94 0 0 0 3.4 0\" />",
+    porta: "<path d=\"M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4\" /> <polyline points=\"16 17 21 12 16 7\" /> <line x1=\"21\" x2=\"9\" y1=\"12\" y2=\"12\" />",
+    robo: "<path d=\"M12 8V4H8\" /> <rect width=\"16\" height=\"12\" x=\"4\" y=\"8\" rx=\"2\" /> <path d=\"M2 14h2\" /> <path d=\"M20 14h2\" /> <path d=\"M15 13v2\" /> <path d=\"M9 13v2\" />",
   };
   function icf(nome, tam) {
     const d = ICONES_CHEIOS[nome];
     if (!d) return ic(nome, tam);
     const s = tam || 22;
-    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="currentColor" style="vertical-align:middle;flex:none;display:inline-block"><path d="${d}"/></svg>`;
+    return `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;flex:none;display:inline-block">${d}</svg>`;
   }
 
   // Cor do avatar a partir do nome — a mesma fórmula do Android (Ui.corAvatar, String.hashCode do Java):
@@ -313,9 +313,9 @@
   const lerFalhas = () => { try { return JSON.parse(localStorage.getItem("kub_falhas") || "{}"); } catch (e) { return {}; } };
   const gravarFalhas = (o) => { try { localStorage.setItem("kub_falhas", JSON.stringify(o)); } catch (e) {} };
   const bloqueadoMs = () => Math.max(0, (lerFalhas().ate || 0) - Date.now());
-  const ICON_PESSOA = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>';
-  const ICON_CADEADO = '<svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>';
-  const ICON_DIGITAL = '<svg viewBox="0 0 24 24" width="30" height="30" fill="currentColor"><path d="M17.81 4.47c-.08 0-.16-.02-.23-.06C15.66 3.42 14 3 12.01 3c-1.98 0-3.86.47-5.57 1.41-.24.13-.54.04-.68-.2a.506.506 0 0 1 .2-.68C7.82 2.52 9.86 2 12.01 2c2.13 0 3.99.47 6.03 1.52.25.13.34.43.21.67a.49.49 0 0 1-.44.28zM3.5 9.72a.499.499 0 0 1-.41-.79c.99-1.4 2.25-2.5 3.75-3.27C9.98 4.04 14 4.03 17.15 5.65c1.5.77 2.76 1.86 3.75 3.25a.5.5 0 0 1-.12.7c-.23.16-.54.11-.7-.12a9.388 9.388 0 0 0-3.39-2.94c-2.87-1.47-6.54-1.47-9.4.01-1.36.7-2.5 1.7-3.4 2.96-.08.14-.23.21-.39.21zm6.25 12.07a.47.47 0 0 1-.35-.15c-.87-.87-1.34-1.43-2.01-2.64-.69-1.23-1.05-2.73-1.05-4.34 0-2.97 2.54-5.39 5.66-5.39s5.66 2.42 5.66 5.39c0 .28-.22.5-.5.5s-.5-.22-.5-.5c0-2.42-2.09-4.39-4.66-4.39-2.57 0-4.66 1.97-4.66 4.39 0 1.44.32 2.77.93 3.85.64 1.15 1.08 1.64 1.85 2.42.19.2.19.51 0 .71-.11.1-.24.15-.37.15zm7.17-1.85c-1.19 0-2.24-.3-3.1-.89-1.49-1.01-2.38-2.65-2.38-4.39 0-.28.22-.5.5-.5s.5.22.5.5c0 1.41.72 2.74 1.94 3.56.71.48 1.54.71 2.54.71.24 0 .64-.03 1.04-.1.27-.05.53.13.58.41.05.27-.13.53-.41.58-.57.11-1.07.12-1.21.12zM14.91 22c-.04 0-.09-.01-.13-.02-1.59-.44-2.63-1.03-3.72-2.1a7.297 7.297 0 0 1-2.17-5.22c0-1.62 1.38-2.94 3.08-2.94 1.7 0 3.08 1.32 3.08 2.94 0 1.07.93 1.94 2.08 1.94s2.08-.87 2.08-1.94c0-3.77-3.25-6.83-7.25-6.83-2.84 0-5.44 1.58-6.61 4.03-.39.81-.59 1.76-.59 2.8 0 .78.07 2.01.67 3.61.1.26-.03.55-.29.64-.26.1-.55-.04-.64-.29a11.14 11.14 0 0 1-.73-3.96c0-1.2.23-2.29.68-3.24 1.33-2.79 4.28-4.6 7.51-4.6 4.55 0 8.25 3.51 8.25 7.83 0 1.62-1.38 2.94-3.08 2.94s-3.08-1.32-3.08-2.94c0-1.07-.93-1.94-2.08-1.94s-2.08.87-2.08 1.94c0 1.71.66 3.31 1.87 4.51.95.94 1.86 1.46 3.27 1.85.27.07.42.35.35.61-.05.23-.26.38-.47.38z"/></svg>';
+  const ICON_PESSOA = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /> <circle cx="12" cy="7" r="4" /></svg>';
+  const ICON_CADEADO = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /> <path d="M7 11V7a5 5 0 0 1 10 0v4" /></svg>';
+  const ICON_DIGITAL = '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 10a2 2 0 0 0-2 2c0 1.02-.1 2.51-.26 4" /> <path d="M14 13.12c0 2.38 0 6.38-1 8.88" /> <path d="M17.29 21.02c.12-.6.43-2.3.5-3.02" /> <path d="M2 12a10 10 0 0 1 18-6" /> <path d="M2 16h.01" /> <path d="M21.8 16c.2-2 .131-5.354 0-6" /> <path d="M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" /> <path d="M8.65 22c.21-.66.45-1.32.57-2" /> <path d="M9 6.8a6 6 0 0 1 9 5.2v2" /></svg>';
 
   function verLogin() {
     // Primeira utilização neste aparelho: tem de aceitar os Termos e Condições (como na app)
@@ -334,7 +334,7 @@
           <div class="acesso">ACESSO</div>
           <div class="bemvindo">Bem-vindo</div>
           <div class="nota">Clientes: entram com o número de telefone.</div>
-          <div class="aviso-painel oculto" id="l-manut" style="color:var(--laranja);background:var(--laranja-bg);font-weight:700;margin:12px 0 0">🔧 Sistema em manutenção. De momento só a administração pode entrar.</div>
+          <div class="aviso-painel oculto" id="l-manut" style="color:var(--laranja);background:var(--laranja-bg);font-weight:600;margin:12px 0 0">🔧 Sistema em manutenção. De momento só a administração pode entrar.</div>
           <form id="login-form" autocomplete="on">
             <label class="campo-icone"><span class="ic">${ICON_PESSOA}</span>
               <input id="l-user" type="text" autocomplete="username" autocapitalize="none" placeholder="Utilizador ou telefone"></label>
@@ -745,10 +745,10 @@
       datas += `<text x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" style="fill:var(--texto-suave)">${d.slice(8, 10)}/${d.slice(5, 7)}</text>`;
     }
     return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;height:auto">
-      <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2f80ed" stop-opacity=".22"/><stop offset="1" stop-color="#2f80ed" stop-opacity=".02"/></linearGradient></defs>
+      <defs><linearGradient id="gl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent)" stop-opacity=".16"/><stop offset="1" style="stop-color:var(--accent)" stop-opacity="0"/></linearGradient></defs>
       ${g.svg}<path d="${area}" fill="url(#gl)"/>
-      <polyline points="${linha.join(" ")}" fill="none" stroke="#2f80ed" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
-      <circle cx="${x(n - 1).toFixed(1)}" cy="${y(pontos[n - 1].saldo).toFixed(1)}" r="4.5" fill="#2f80ed"/>${datas}
+      <polyline points="${linha.join(" ")}" fill="none" style="stroke:var(--accent)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <circle cx="${x(n - 1).toFixed(1)}" cy="${y(pontos[n - 1].saldo).toFixed(1)}" r="4" style="fill:var(--accent)"/>${datas}
     </svg>`;
   }
 
@@ -825,7 +825,7 @@
     $("cabecalho").innerHTML = `
       <div class="cab-topo">
         <div class="avatar" id="cb-avatar" style="background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
-        <div class="cab-saud"><div class="ola">${esc(saudacao())},</div><div class="data">${esc(dataExtenso())}</div></div>
+        <div class="cab-saud"><div class="ola">Início</div><div class="data">${esc(dataExtenso())}</div></div>
         <button class="icone" id="cb-atualizar" title="Atualizar">${icf("atualizar", 21)}</button>
         ${sinoOn ? `<button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>` : ""}
         <button class="icone" id="cb-sair" title="Sair">${icf("porta", 21)}</button>
@@ -840,7 +840,7 @@
     if (sinoOn) atualizarBadgeSino();
     const hoje = R.hojeISO();
     const aviso = (texto, cores, id) => `<div class="aviso-painel"${id ? ` id="${id}" style="cursor:pointer;color:${cores[0]};background:${cores[1]}"` : ` style="color:${cores[0]};background:${cores[1]}"`}>${texto}</div>`;
-    const kpi = (rot, txt, cor) => `<div class="kpi-card" style="--cor:${cor}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
+    const kpi = (rot, txt, cor) => `<div class="kpi-card${String(cor).includes("vermelho") ? " neg" : ""}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
     try {
       // ---------------- Agente ----------------
       if (S.user.perfil === "AGENTE") {
@@ -874,7 +874,7 @@
           avisos += aviso("💡 O caixa está vazio. Registe o <b>capital investido</b> no <b>Caixa</b> antes de aprovar créditos.", CORES.azul);
       }
       // "Por aprovar" com um sinalizador: a piscar verde/amarelo quando há pedidos à espera; tocar abre os pedidos
-      if (pode("APROVACOES")) kpis += `<div class="kpi-card tocavel" id="ini-aprovar" style="--cor:${pendentes.length ? "var(--laranja)" : "var(--verde)"}"
+      if (pode("APROVACOES")) kpis += `<div class="kpi-card tocavel" id="ini-aprovar"
           title="${pendentes.length ? "Há pedidos à espera de aprovação" : "Sem pedidos à espera"}">
         <span class="sinal${pendentes.length ? " piscar" : ""}"></span>
         <div class="rotulo">${esc("Por aprovar")}</div><div class="valor">${pendentes.length}</div></div>`;
@@ -1072,7 +1072,7 @@
       c.innerHTML = filtro + `
         ${comPer ? `<div class="resumo-lista">Período: <b>${esc(nomePer)}</b>${balPer !== ESC && de !== ate ? " (" + R.data(de) + " a " + R.data(ate) + ")" : ""} · o total a receber, o saldo e a situação das prestações são de agora</div>` : ""}
         <div class="ind-grelha">${cartoes.map(([t, v, cor, d]) => `<div class="ind"><div class="t">${esc(t)}</div>
-          <div class="v" style="color:${cor}">${vmt(v)}</div>${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`).join("")}</div>
+          <div class="v"${String(cor).includes("vermelho") ? ' style="color:var(--vermelho)"' : ""}>${vmt(v)}</div>${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`).join("")}</div>
         ${graficosBalanco(ind, cob, es, ev, subES, subEV)}
         <div class="grafico-cartao"><h3>Empréstimos por estado</h3><div class="sub">${comPer ? esc(nomePer) + " · aprovados, pedidos e rejeitados no período" : "Aprovados, pendentes e rejeitados"}</div>${S.ocultar ? ocultoCartao() : totalEstados ? donutSVG(estados, "empréstimos", totalEstados) : `<div class="vazio" style="padding:14px">Sem empréstimos neste período.</div>`}</div>
         <div class="grafico-cartao"><h3>Top 5 clientes</h3><div class="sub">${comPer ? "Maior capital emprestado · " + esc(nomePer) : "Maior capital emprestado (aprovados)"}</div>${S.ocultar ? ocultoCartao() : top.length ? barrasHorizontais(top) : `<div class="vazio" style="padding:14px">Sem empréstimos aprovados neste período.</div>`}</div>
@@ -1920,8 +1920,8 @@
             <button class="pilula-btn" id="cx-olho">${icf(S.ocultar ? "olhoaberto" : "olhofechado", 15)} ${S.ocultar ? "Mostrar" : "Ocultar"}</button></div>
           <div class="grande">${vmt(s.saldo)}</div>
           <div class="tiles">
-            <div class="tile"><div class="r">↓ ENTRADAS</div><div class="v">${vmt(s.entradas)}</div></div>
-            <div class="tile"><div class="r">↑ SAÍDAS</div><div class="v">${vmt(s.saidas)}</div></div>
+            <div class="tile"><div class="r">Entradas</div><div class="v">${vmt(s.entradas)}</div></div>
+            <div class="tile"><div class="r">Saídas</div><div class="v">${vmt(s.saidas)}</div></div>
           </div>
         </div>
         <div class="grafico-cartao"><div class="titulo-cartao">${icf("tendencia", 18)} Evolução do saldo · últimos 30 dias</div>${S.ocultar ? ocultoCartao() : svgLinha(ev)}</div>
@@ -1981,7 +1981,7 @@
             ld("↓ Outras entradas", d.outras, "var(--verde)", "+ ") +
             ld("↑ Empréstimos concedidos", d.emprestimos, "var(--vermelho)", "− ") +
             ld("↑ Despesas", d.despesas, "var(--vermelho)", "− ") +
-            `<div class="linha-dados" style="border-top:1.5px solid var(--borda);border-bottom:0;padding-top:12px"><span style="font-weight:700;font-size:1.02rem">Saldo de fecho</span><span class="v" style="color:var(--accent);font-size:1.15rem">${vmt(d.fecho)}</span></div>`;
+            `<div class="linha-dados" style="border-top:1.5px solid var(--borda);border-bottom:0;padding-top:12px"><span style="font-weight:600;font-size:1.02rem">Saldo de fecho</span><span class="v" style="color:var(--accent);font-size:1.15rem">${vmt(d.fecho)}</span></div>`;
         } catch (e) { $("cxd-corpo").innerHTML = erroEcra(e, mostrarDia); }
       };
       $("cxd-ant").onclick = () => { cxDia = R.somaDias(cxDia, -1); mostrarDia(); };
@@ -3155,7 +3155,7 @@
         : "align-self:flex-start;background:var(--cartao);border:1px solid var(--borda);border-bottom-left-radius:4px"}">${meu ? esc(texto) : markdownLeve(texto)}</div>`);
       chat.appendChild(d); window.scrollTo(0, document.body.scrollHeight); return d;
     };
-    bolha("Olá! Sou o **Assistente Kubatsira Microcrédito**. 👋\n\n" + boasVindasIA(), false);
+    bolha("Sou o **Assistente Kubatsira Microcrédito**.\n\n" + boasVindasIA(), false);
     iaHist.forEach((m) => bolha(m.texto, m.user));
 
     let aPensar = false;
@@ -3212,7 +3212,7 @@
     c.innerHTML = `
       <div class="cartao"><div class="titulo-cfg">👤 A minha conta</div>
         <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px">
-          <div class="avatar" id="cfg-avatar" style="width:92px;height:92px;font-size:2rem;flex:none;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:700;background-size:cover;background-position:center;background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
+          <div class="avatar" id="cfg-avatar" style="width:92px;height:92px;font-size:2rem;flex:none;border-radius:50%;display:grid;place-items:center;color:#fff;font-weight:600;background-size:cover;background-position:center;background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
           <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0">
             <button class="btn contorno" id="cfg-foto" style="margin:0;padding:10px">🖼 Escolher da galeria</button>
             <button class="btn contorno" id="cfg-camara" style="margin:0;padding:10px">📷 Tirar foto</button>
@@ -3477,12 +3477,12 @@
         : e.aExpirar ? "⚠ A licença expira daqui a " + e.diasRestantes + " dias" : "✓ Licença ativa";
       c.innerHTML = `
         <div class="cartao" style="background:${cor[1]};border-color:transparent">
-          <div style="font-weight:800;font-size:1.25rem;color:${cor[0]};margin-bottom:4px">${titulo}</div>
+          <div style="font-weight:600;font-size:1.25rem;color:${cor[0]};margin-bottom:4px">${titulo}</div>
           <div style="font-size:.95rem;line-height:1.6">${e.expirada ? "Expirou a: " : "Válida até: "}<b>${R.data(e.expiracao)}</b><br>Plano: <b>${esc(e.nomePlano)}</b></div>
           ${e.expirada ? `<div style="color:var(--vermelho);font-size:.88rem;margin-top:10px">Enquanto a licença não for paga, os <b>Agentes e Clientes</b> veem <b>Sistema em manutenção</b> e não conseguem entrar.</div>` : ""}
         </div>
         <div class="cartao"><div class="titulo-cfg">💳 ${e.expirada ? "Pagar a licença" : "Renovar a licença"}</div>
-          <div class="sub-secao">1. PLANO</div><div class="chips" id="lc-plano" style="flex-wrap:wrap"></div>
+          <div class="sub-secao">1. Plano</div><div class="chips" id="lc-plano" style="flex-wrap:wrap"></div>
           <div class="sub-secao" style="margin-top:8px">2. MÉTODO DE PAGAMENTO</div><div class="chips" id="lc-metodo" style="flex-wrap:wrap"></div>
           <div id="lc-instr" style="font-size:.9rem;margin:10px 0"></div>
           <div class="${alterar ? "" : "oculto"}">
@@ -3974,7 +3974,7 @@
     $("cabecalho").innerHTML = `
       <div class="cab-topo">
         <div class="avatar" id="cb-avatar" style="background-color:${corAvatar(nome)}">${esc(R.iniciais(nome))}</div>
-        <div class="cab-saud"><div class="ola">${esc(saudacao())},</div><div class="data">${esc(dataExtenso())}</div></div>
+        <div class="cab-saud"><div class="ola">Início</div><div class="data">${esc(dataExtenso())}</div></div>
         <button class="icone" id="cb-atualizar" title="Atualizar">${icf("atualizar", 21)}</button>
         ${sinoOn ? `<button class="icone" id="cb-sino" title="Notificações">${icf("sino", 21)}<span class="badge-sino oculto" id="cb-badge"></span></button>` : ""}
         <button class="icone" id="cb-sair" title="Sair">${icf("porta", 21)}</button>
@@ -3999,8 +3999,8 @@
       const pouSaldo = R.arredondar(pouDep - pouUso);
       const cartaoPou = movsPou.length ? `<button class="cartao" id="cl-pou" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;border:1px solid var(--borda);cursor:pointer;font-family:inherit;color:var(--texto)">
           <span class="circ-ic" style="background:var(--verde-bg);color:var(--verde);width:46px;height:46px;flex:none">${ic("entrada", 22)}</span>
-          <span style="flex:1;min-width:0"><span style="display:block;font-size:.76rem;font-weight:700;color:var(--texto-suave);text-transform:uppercase">A minha poupança</span>
-            <span style="display:block;font-size:1.3rem;font-weight:800;color:var(--verde)">${vmt(pouSaldo)}</span>
+          <span style="flex:1;min-width:0"><span style="display:block;font-size:.76rem;font-weight:400;color:var(--texto-suave)">A minha poupança</span>
+            <span style="display:block;font-size:1.3rem;font-weight:600;color:var(--verde)">${vmt(pouSaldo)}</span>
             <span style="display:block;font-size:.8rem;color:var(--texto-suave)">${pouSaldo > 0.005 ? "Guardado no seu cofre · toque para ver os movimentos" : "O seu cofre está vazio · toque para ver os movimentos"}</span></span>
           <span style="color:var(--texto-suave);font-size:1.3rem">›</span></button>` : "";
       let divida = 0, multas = 0, atrasadas = 0, proxima = null;
@@ -4012,7 +4012,7 @@
       divida = R.arredondar(divida); multas = R.arredondar(multas);
       const pendente = meus.find((e) => e.estado === "PENDENTE");
       const podePedir = !porPagar.length && !pendente;
-      const kpi = (rot, txt, cor) => `<div class="kpi-card" style="--cor:${cor}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
+      const kpi = (rot, txt, cor) => `<div class="kpi-card${String(cor).includes("vermelho") ? " neg" : ""}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
       const aviso = (t, cores) => `<div class="aviso-painel" style="color:${cores[0]};background:${cores[1]}">${t}</div>`;
       let avisos = "";
       if (atrasadas > 0) avisos = aviso(`⚠ Tem <b>${atrasadas} prestação(ões) em atraso</b>. A multa já vai em <b>${vmt(multas)}</b> e aumenta 2% por dia. Pague o quanto antes.`, CORES.vermelho);
@@ -4116,8 +4116,8 @@
 
   // ---------- Gráficos para o PDF (ExportadorPdf.GraficoPdf) ----------
   // Cores do tema CLARO: o relatório é sempre em fundo branco, mesmo com o tema escuro ligado
-  const CORES_PDF = { "--verde": "#1e9a55", "--roxo": "#6e3cb4", "--vermelho": "#c62828", "--accent": "#2f80ed", "--laranja": "#b26a00",
-    "--texto": "#1c2430", "--texto-suave": "#6e7887", "--borda": "#e6eaf0", "--cinzento-claro": "#eef1f5", "--fundo": "#f2f4f8" };
+  const CORES_PDF = { "--verde": "#15803d", "--roxo": "#64748b", "--vermelho": "#c53030", "--accent": "#1d4690", "--laranja": "#b45309",
+    "--texto": "#111827", "--texto-suave": "#4b5565", "--texto-mudo": "#6b7487", "--borda": "#e3e6eb", "--cinzento-claro": "#eceff4", "--fundo": "#f5f7fa" };
   const soSvg = (html) => { const m = /<svg[\s\S]*<\/svg>/.exec(html); return m ? m[0] : html; };
   // Gráfico com a legenda por cima (as legendas do ecrã são HTML; no PDF tudo tem de ser SVG)
   function graficoPdf(titulo, svg, legenda) {
@@ -4157,7 +4157,7 @@
     const linhas = lista.slice(0, 8).map((x, i) => {
       const y = 14 + i * 24, w = Math.max(2, (x.total / max) * 170);
       return `<text x="8" y="${y + 13}" font-size="11" fill="#1c2430">${esc((x.nome || "").slice(0, 22))}</text>
-        <rect x="140" y="${y}" width="${w.toFixed(1)}" height="17" rx="3" fill="#2f80ed"/>
+        <rect x="140" y="${y}" width="${w.toFixed(1)}" height="17" rx="2" fill="#1d4690"/>
         <text x="${(140 + w + 5).toFixed(1)}" y="${y + 13}" font-size="10" fill="#6e7887">${numCurto(x.total)}</text>`;
     }).join("");
     return graficoPdf(titulo, `<svg viewBox="0 0 340 ${Math.max(60, 20 + Math.min(8, lista.length) * 24)}">${linhas}</svg>`);
