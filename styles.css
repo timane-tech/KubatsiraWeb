@@ -172,6 +172,14 @@ b, strong { font-weight: 600; }
 .kpi-card .sinal { position: absolute; top: 20px; right: 16px; width: 8px; height: 8px; border-radius: 50%; background: var(--verde); }
 .kpi-card .sinal.piscar { background: var(--laranja); animation: sinal-piscar 1.6s var(--curva) infinite; }
 @keyframes sinal-piscar { 50% { opacity: .25; } }
+/* O mesmo sinal no menu "Aprovar Pedidos", com o número de pedidos */
+.op-menu .qtd-pend { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: var(--laranja); font-weight: 600; font-variant-numeric: tabular-nums; }
+.op-menu .qtd-pend + .seta { margin-left: 8px; }
+.op-menu .qtd-pend .sinal { width: 8px; height: 8px; border-radius: 50%; background: var(--laranja); animation: sinal-piscar 1.6s var(--curva) infinite; }
+/* Campos com erro (validação dos formulários) */
+input.invalido, select.invalido, textarea.invalido {
+  border-color: var(--vermelho) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--vermelho) 16%, transparent) !important; }
+.campo-erro { color: var(--vermelho); font-size: .8rem; font-weight: 500; margin: 5px 2px 0; line-height: 1.35; }
 .kpi-card.tocavel { cursor: pointer; transition: border-color .15s var(--curva); }
 .kpi-card.tocavel:hover { border-color: var(--borda-forte); }
 
@@ -632,6 +640,9 @@ input, select, textarea, .campo input, .campo select, .campo textarea, .pesquisa
 /* Movimento reduzido: sem piscar nem animações de entrada */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+  /* Os avisos que piscam continuam a piscar (são estados vivos: pedidos por aprovar, SMS por enviar).
+     Com a poupança de bateria ligada, o telemóvel pede "menos movimento" e antes paravam de piscar. */
+  .kpi-card .sinal.piscar, .op-menu .qtd-pend .sinal, .sms-alerta { animation-duration: 1.6s !important; animation-iteration-count: infinite !important; }
 }
 
 

@@ -20,7 +20,7 @@ const Regras = (() => {
   function taxaAssistencia(capital) { return arredondar(capital * TAXA_ASSISTENCIA); }
 
   function validarValor(valor) {
-    if (valor <= 0) return "Indique um valor de empréstimo válido.";
+    if (!Number.isFinite(valor) || valor <= 0) return "Indique um valor de empréstimo válido.";
     if (valor < VALOR_MINIMO || valor > VALOR_MAXIMO)
       return "O valor do empréstimo tem de estar entre " + mt(VALOR_MINIMO) + " e " + mt(VALOR_MAXIMO) + ".";
     return null;

@@ -528,7 +528,7 @@ const Dados = (() => {
     const hoje = Regras.hojeISO();
     const dia = diaISO || hoje;
     let valor = Regras.arredondar(valorPedido);
-    if (valor <= 0) return { ok: false, msg: "Indique um valor válido, maior que zero." };
+    if (!(valor > 0)) return { ok: false, msg: "Indique um valor válido, maior que zero." };
     if (Regras.diasEntre(hoje, dia) > 0) return { ok: false, msg: "A data do pagamento não pode ser depois de hoje." };
 
     const escolhidaRows = (await DB.consultar(SELECT_PREST + "WHERE p.id = ?", [prestacaoId])).map(lerPrest);
@@ -656,7 +656,7 @@ const Dados = (() => {
     const tel = (c.telefone || "").replace(/ /g, "");
     if (!/^\d{9,12}$/.test(tel)) return "Indique um telefone válido (só números, ex.: 841234567).";
     if (!c.morada || !c.morada.trim()) return "Indique a morada do cliente.";
-    if (c.rendaDiaria < 0) return "A renda diária não pode ser negativa.";
+    if (!(Number(c.rendaDiaria || 0) >= 0)) return "A renda diária tem de ser um número (0 ou mais).";
     return null;
   }
 
@@ -845,7 +845,7 @@ const Dados = (() => {
   async function registarCaixa(tipo, valor, justificativa, diaISO, registadoPor) {
     valor = Regras.arredondar(valor);
     if (tipo !== "ENTRADA" && tipo !== "SAIDA") return { ok: false, msg: "Tipo de movimento inválido." };
-    if (valor <= 0) return { ok: false, msg: "Indique um valor válido, maior que zero." };
+    if (!(valor > 0)) return { ok: false, msg: "Indique um valor válido, maior que zero." };
     if (!justificativa || !justificativa.trim()) return { ok: false, msg: "Indique a justificação." };
     const data = (diaISO || Regras.hojeISO()) + " " + new Date().toTimeString().slice(0, 8);
     await DB.executar(
@@ -1158,7 +1158,7 @@ const Dados = (() => {
     if (saldo <= 0.005) return { ok: false, msg: "O cofre deste cliente está vazio." };
     const tudo = valor == null;
     valor = tudo ? saldo : Regras.arredondar(Number(valor) || 0);
-    if (valor <= 0) return { ok: false, msg: "Indique um valor maior que zero." };
+    if (!(valor > 0)) return { ok: false, msg: "Indique um valor maior que zero." };
     if (valor > saldo + 0.005) return { ok: false, msg: "O valor é maior que o saldo do cofre (" + Regras.mt(saldo) + ")." };
     nota = (nota || "").trim().slice(0, 200);
     const desc = (tudo || valor + 0.005 >= saldo ? "Levantamento de todo o saldo (cofre esvaziado)" : "Levantamento de dinheiro") + (nota ? " - " + nota : "");
@@ -1320,7 +1320,7 @@ const Dados = (() => {
     const hoje = Regras.hojeISO();
     const atual = Regras.multaPrestacao(p, hoje);
     novaMulta = Regras.arredondar(novaMulta);
-    if (novaMulta < 0 || novaMulta > atual + 0.004)
+    if (!(novaMulta >= 0) || novaMulta > atual + 0.004)
       return { ok: false, msg: "A nova multa tem de estar entre 0 e " + Regras.mt(atual) + "." };
     const agora = Regras.agoraLocal();
     const ficaPaga = p.valorPago + 0.005 >= Regras.arredondar(p.valor + novaMulta);
@@ -1370,7 +1370,7 @@ const Dados = (() => {
   async function caixaEditar(id, tipo, valor, justificativa) {
     valor = Regras.arredondar(valor);
     if (tipo !== "ENTRADA" && tipo !== "SAIDA") return { ok: false, msg: "Tipo inválido." };
-    if (valor <= 0) return { ok: false, msg: "Indique um valor válido." };
+    if (!(valor > 0)) return { ok: false, msg: "Indique um valor válido." };
     if (!justificativa || justificativa.trim().length < 3) return { ok: false, msg: "Indique a descrição do movimento." };
     const agora = Regras.agoraLocal();
     const r = await DB.executar("UPDATE caixa SET tipo=?, valor=?, justificativa=?, editado_em=?, editado_por=? WHERE id=?",
@@ -1469,7 +1469,7 @@ const Dados = (() => {
 
   async function reconciliar(contado, observacao, registarAjuste, quem) {
     contado = Regras.arredondar(contado);
-    if (contado < 0) return { ok: false, msg: "Indique o valor contado." };
+    if (!(contado >= 0)) return { ok: false, msg: "Indique o valor contado." };
     const sistema = (await saldoCaixa()).saldo;
     const diferenca = Regras.arredondar(contado - sistema);
     const obs = (observacao || "").trim();

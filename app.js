@@ -232,6 +232,93 @@
     toast._t = setTimeout(() => (t.className = "toast"), 3200);
   }
 
+  // ---------- Validação dos formulários ----------
+  // Antes de gravar, cada formulário verifica TODOS os campos: o campo errado fica a vermelho com a explicação
+  // por baixo e o cursor vai para o primeiro erro. (O dados.js volta a verificar tudo antes de gravar na base.)
+  const valorDe = (id) => { const el = $(id); return el ? String(el.value || "").trim() : ""; };
+  // Número escrito pelo utilizador ("1500", "1500,50", "1.500,50", "1 500"); vazio ou inválido = NaN
+  const lerNumero = (id) => {
+    const el = $(id);
+    if (!el || (el.validity && el.validity.badInput)) return NaN;
+    const t = valorDe(id).replace(/\s/g, "").replace(/MT$/i, "");
+    if (!t) return NaN;
+    return Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+  };
+  const Val = {
+    texto(id, rotulo, min = 2, max = 200, obrig = true) {
+      if (!$(id)) return [id, null];
+      const v = valorDe(id);
+      if (!v) return [id, obrig ? "Indique " + rotulo + "." : null];
+      if (v.length < min) return [id, "Muito curto: escreva pelo menos " + min + " caracteres."];
+      if (v.length > max) return [id, "Muito longo: no máximo " + max + " caracteres."];
+      return [id, null];
+    },
+    nome(id, rotulo) {
+      const r = Val.texto(id, rotulo, 3, 100); if (r[1] || !$(id)) return r;
+      if (/\d/.test(valorDe(id))) return [id, "O nome não pode ter números."];
+      if (!/^[\p{L}][\p{L} .'-]*$/u.test(valorDe(id))) return [id, "Use só letras no nome."];
+      return [id, null];
+    },
+    telefone(id) {
+      if (!$(id)) return [id, null];
+      const v = valorDe(id).replace(/[\s-]/g, "");
+      if (!v) return [id, "Indique o número de telefone."];
+      if (!/^\+?\d+$/.test(v)) return [id, "Escreva só números (ex.: 841234567)."];
+      if (!/^(\+?258)?8[2-7]\d{7}$/.test(v)) return [id, "Número inválido: 9 algarismos a começar por 82–87 (ex.: 841234567)."];
+      return [id, null];
+    },
+    // Valor em MT: obrigatório (por omissão), só números, entre min e max
+    valor(id, rotulo, { min = 0.01, max = Infinity, obrig = true } = {}) {
+      const el = $(id); if (!el) return [id, null];
+      if (!valorDe(id) && !(el.validity && el.validity.badInput)) return [id, obrig ? "Indique " + rotulo + "." : null];
+      const n = lerNumero(id);
+      if (!Number.isFinite(n)) return [id, "Escreva só números (ex.: 1500 ou 1500,50)."];
+      if (min <= 0 && n < 0) return [id, "Não pode ser negativo."];
+      if (min > 0 && n <= 0) return [id, "Tem de ser maior que zero."];
+      if (n < min) return [id, "O mínimo é " + R.mt(min) + "."];
+      if (n > max + 0.004) return [id, "O máximo é " + R.mt(max) + "."];
+      return [id, null];
+    },
+    // Valor de um crédito: entre o mínimo e o máximo das regras (1 000 a 35 000 MT)
+    credito(id) { return Val.valor(id, "o valor do empréstimo", { min: R.VALOR_MINIMO, max: R.VALOR_MAXIMO }); },
+    data(id, rotulo, { min, max, obrig = true } = {}) {
+      if (!$(id)) return [id, null];
+      const v = valorDe(id);
+      if (!v) return [id, obrig ? "Escolha " + rotulo + "." : null];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return [id, "Data inválida."];
+      if (max && v > max) return [id, "A data não pode ser depois de " + R.data(max) + "."];
+      if (min && v < min) return [id, "A data não pode ser antes de " + R.data(min) + "."];
+      return [id, null];
+    },
+    senha(id, obrig = true) {
+      if (!$(id)) return [id, null];
+      const v = String($(id).value || "");
+      if (!v.trim()) return [id, obrig ? "Indique a senha." : null];
+      if (v.trim().length < 6) return [id, "A senha deve ter pelo menos 6 caracteres."];
+      return [id, null];
+    },
+  };
+  // Marca os campos com erro e devolve true só se estiver tudo certo
+  function validarCampos(...regras) {
+    let primeiro = null;
+    regras.forEach(([id, msg]) => {
+      const el = $(id); if (!el) return;
+      let nota = el.nextElementSibling && el.nextElementSibling.classList.contains("campo-erro") ? el.nextElementSibling : null;
+      const limpar = () => { el.classList.remove("invalido"); el.removeAttribute("aria-invalid"); if (nota && nota.isConnected) nota.remove(); };
+      if (!msg) { limpar(); return; }
+      el.classList.add("invalido"); el.setAttribute("aria-invalid", "true");
+      if (!nota) { nota = document.createElement("div"); nota.className = "campo-erro"; el.insertAdjacentElement("afterend", nota); }
+      nota.textContent = msg;
+      el.addEventListener("input", limpar, { once: true });
+      el.addEventListener("change", limpar, { once: true });
+      if (!primeiro) primeiro = el;
+    });
+    if (!primeiro) return true;
+    try { primeiro.focus({ preventScroll: true }); } catch (e) {}
+    primeiro.scrollIntoView({ block: "center", behavior: "smooth" });
+    return false;
+  }
+
   // ---------- Diálogo (folha deslizante) ----------
   function abrirFolha(html) {
     $("folha").innerHTML = '<div class="pega"></div>' + html;
@@ -1283,6 +1370,7 @@
         <div class="campo"><label>Nova data de vencimento</label><input id="vn-data" type="date" value="${p.vencimento}"></div>
         <div class="erro-msg" id="vn-erro"></div><button class="btn" id="vn-ok">Guardar</button>`);
       $("vn-ok").onclick = async () => {
+        if (!validarCampos(Val.data("vn-data", "a nova data de vencimento"))) return;
         $("vn-ok").disabled = true;
         try { const r = await Dados.alterarVencimento(p.id, $("vn-data").value, p.nomeCliente, p.numero);
           if (!r.ok) { $("vn-erro").textContent = r.msg; $("vn-ok").disabled = false; return; }
@@ -1297,9 +1385,10 @@
         <div class="btn-linha"><button class="btn secundario" id="mu-zero">Perdoar tudo (0)</button><button class="btn" id="mu-ok">Guardar</button></div>`);
       $("mu-zero").onclick = () => { $("mu-valor").value = "0"; };
       $("mu-ok").onclick = async () => {
+        if (!validarCampos(Val.valor("mu-valor", "a nova multa", { min: 0, max: multa }))) return;
         $("mu-ok").disabled = true;
         try {
-          const r = await Dados.alterarMulta(p.id, parseFloat($("mu-valor").value) || 0, nomeRegisto());
+          const r = await Dados.alterarMulta(p.id, lerNumero("mu-valor"), nomeRegisto());
           if (!r.ok) { $("mu-erro").textContent = r.msg; $("mu-ok").disabled = false; return; }
           fecharFolha(); toast(r.msg); if (recarregar) recarregar();
         } catch (e) { $("mu-erro").textContent = e.message; $("mu-ok").disabled = false; }
@@ -1307,9 +1396,9 @@
     };
     if (podePagar) {
       $("pg-btn").onclick = async () => {
-        const valor = parseFloat($("pg-valor").value);
-        const data = $("pg-data").value || hoje;
-        if (!valor || valor <= 0) { toast("Indique um valor válido.", true); return; }
+        if (!validarCampos(Val.valor("pg-valor", "o valor pago"), Val.data("pg-data", "a data do pagamento", { max: hoje, obrig: false }))) return;
+        const valor = lerNumero("pg-valor");
+        const data = ($("pg-data") && $("pg-data").value) || hoje;
         $("pg-btn").disabled = true;
         try {
           const r = await Dados.registarPagamento(p.id, valor, nomeRegisto(), data);
@@ -1506,10 +1595,14 @@
       <div class="erro-msg" id="f-erro"></div>
       <button class="btn" id="f-btn">${cl ? "Guardar" : "Registar"}</button>`);
     $("f-btn").onclick = async () => {
+      if (!validarCampos(Val.nome("f-nome", "o nome completo do cliente"), cl ? ["f-tel", null] : Val.telefone("f-tel"),
+        Val.texto("f-morada", "a morada", 3, 150), Val.texto("f-neg", "o tipo de negócio", 2, 80),
+        Val.texto("f-local", "o local do negócio", 2, 100), Val.valor("f-renda", "a renda diária", { min: 0, max: 10000000 }),
+        Val.texto("f-coab", "", 2, 150, false))) return;
       const dados = {
         id: e.id, nome: $("f-nome").value, telefone: cl ? e.telefone : $("f-tel").value,
         morada: $("f-morada").value, tipoNegocio: $("f-neg").value, localNegocio: $("f-local").value,
-        rendaDiaria: parseFloat($("f-renda").value) || 0, coabitantes: $("f-coab").value,
+        rendaDiaria: lerNumero("f-renda") || 0, coabitantes: $("f-coab").value,
       };
       $("f-btn").disabled = true;
       try {
@@ -1666,6 +1759,7 @@
           <input type="checkbox" id="dd-mover" checked style="width:auto;transform:scale(1.2)"> Mover também as datas das prestações</label>
         <div class="erro-msg" id="dd-erro"></div><button class="btn" id="dd-ok">Guardar</button>`);
       $("dd-ok").onclick = async () => {
+        if (!validarCampos(Val.data("dd-data", "a data de desembolso", { max: R.hojeISO() }))) return;
         $("dd-ok").disabled = true;
         try { const r = await Dados.alterarDataDesembolso(e, $("dd-data").value, nomeRegisto(), $("dd-mover").checked);
           if (!r.ok) { $("dd-erro").textContent = r.msg; $("dd-ok").disabled = false; return; }
@@ -1709,7 +1803,8 @@
     $("ap-valor").oninput = atualizarPlano;
     $("ap-mod").onchange = atualizarPlano;
     $("ap-ok").onclick = async () => {
-      const valor = parseFloat($("ap-valor").value);
+      if (!validarCampos(Val.credito("ap-valor"), Val.data("ap-data", "a data de aprovação", { min: e.dataPedido, max: R.hojeISO() }))) return;
+      const valor = lerNumero("ap-valor");
       const mod = $("ap-mod").value, data = $("ap-data").value;
       // A confirmação usa a mesma folha: depois dela o formulário (e o botão "Aprovar") já não existe,
       // por isso aqui não se mexe em $("ap-ok") — antes isso dava erro e o pedido nunca era aprovado.
@@ -1775,9 +1870,11 @@
     };
     $("pd-valor").oninput = simular; $("pd-mod").onchange = simular;
     $("pd-btn").onclick = async () => {
+      if (!validarCampos(Val.credito("pd-valor"), Val.texto("pd-mod", "a modalidade", 1),
+        Val.texto("pd-garantia", "os bens dados como garantia", 3, 300))) return;
       $("pd-btn").disabled = true;
       try {
-        const r = await Dados.pedirEmprestimo(cl.id, parseFloat($("pd-valor").value), $("pd-mod").value, $("pd-garantia").value, nomeRegisto());
+        const r = await Dados.pedirEmprestimo(cl.id, lerNumero("pd-valor"), $("pd-mod").value, $("pd-garantia").value, nomeRegisto());
         if (!r.ok) { $("pd-erro").textContent = r.msg; $("pd-btn").disabled = false; return; }
         fecharFolha(); toast(r.msg);
       } catch (e) { $("pd-erro").textContent = e.message; $("pd-btn").disabled = false; }
@@ -1831,6 +1928,13 @@
       $("cabecalho").classList.remove("oculto");
       maisAcao(b.dataset.op);
     });
+    // "Aprovar Pedidos" com o mesmo sinal a piscar do Início enquanto há pedidos à espera
+    const opAprovar = c.querySelector('[data-op="aprovar"]');
+    if (opAprovar) Dados.listarPendentes().then((l) => {
+      if (!l.length || !opAprovar.isConnected) return;
+      opAprovar.querySelector(".seta").insertAdjacentHTML("beforebegin",
+        `<span class="qtd-pend" title="Pedidos à espera de aprovação"><span class="sinal piscar"></span>${l.length}</span>`);
+    }).catch(() => {});
   }
 
   // "Novo Empréstimo" a partir do menu: escolher o cliente e abrir o pedido
@@ -2010,8 +2114,9 @@
         desenharTipo(); mostrarDiaNovo();
         $("nl-dia").onchange = mostrarDiaNovo;
         $("nl-ok").onclick = async () => {
-          const valor = parseFloat(String($("nl-valor").value).replace(",", "."));
-          if (!valor || valor <= 0) { $("nl-erro").textContent = "Indique um valor válido."; return; }
+          if (!validarCampos(Val.valor("nl-valor", "o valor"), Val.texto("nl-desc", "a descrição", 3, 200),
+            Val.data("nl-dia", "a data", { max: hoje, obrig: false }))) return;
+          const valor = lerNumero("nl-valor");
           $("nl-ok").disabled = true; $("nl-erro").textContent = "";
           try {
             const r = await Dados.registarCaixa(cxEntrada ? "ENTRADA" : "SAIDA", valor, $("nl-desc").value, $("nl-dia").value || hoje, nomeRegisto());
@@ -2092,8 +2197,9 @@
         };
         $("rc-contado").oninput = mostrarDif; mostrarDif();
         $("rc-ok").onclick = async () => {
+          if (!validarCampos(Val.valor("rc-contado", "o dinheiro contado", { min: 0 }), Val.texto("rc-obs", "", 2, 200, false))) return;
           $("rc-ok").disabled = true;
-          try { const r = await Dados.reconciliar(parseFloat($("rc-contado").value), $("rc-obs").value, $("rc-ajuste").checked, nomeRegisto());
+          try { const r = await Dados.reconciliar(lerNumero("rc-contado"), $("rc-obs").value, $("rc-ajuste").checked, nomeRegisto());
             if (!r.ok) { $("rc-erro").textContent = r.msg; $("rc-ok").disabled = false; return; }
             fecharFolha(); toast(r.msg); verCaixa();
           } catch (e) { $("rc-erro").textContent = e.message; $("rc-ok").disabled = false; }
@@ -2159,8 +2265,9 @@
         <div class="campo"><label>Descrição</label><input id="ge-just" value="${esc(m.justificativa || "")}"></div>
         <div class="erro-msg" id="ge-erro"></div><button class="btn" id="ge-ok">Guardar</button>`);
       $("ge-ok").onclick = async () => {
+        if (!validarCampos(Val.valor("ge-valor", "o valor"), Val.texto("ge-just", "a descrição", 3, 200))) return;
         $("ge-ok").disabled = true;
-        try { const r = await Dados.caixaEditar(m.id, $("ge-tipo").value, parseFloat($("ge-valor").value), $("ge-just").value);
+        try { const r = await Dados.caixaEditar(m.id, $("ge-tipo").value, lerNumero("ge-valor"), $("ge-just").value);
           if (!r.ok) { $("ge-erro").textContent = r.msg; $("ge-ok").disabled = false; return; }
           fecharFolha(); toast(r.msg); verCaixa();
         } catch (e) { $("ge-erro").textContent = e.message; $("ge-ok").disabled = false; }
@@ -2186,9 +2293,11 @@
       <div class="erro-msg" id="cx-erro"></div>
       <button class="btn" id="cx-btn">Registar</button>`);
     $("cx-btn").onclick = async () => {
+      if (!validarCampos(Val.valor("cx-valor", "o valor"), Val.texto("cx-just", "a justificação", 3, 200),
+        Val.data("cx-data", "a data", { max: hoje }))) return;
       $("cx-btn").disabled = true;
       try {
-        const r = await Dados.registarCaixa($("cx-tipo").value, parseFloat($("cx-valor").value), $("cx-just").value, $("cx-data").value, nomeRegisto());
+        const r = await Dados.registarCaixa($("cx-tipo").value, lerNumero("cx-valor"), $("cx-just").value, $("cx-data").value, nomeRegisto());
         if (!r.ok) { $("cx-erro").textContent = r.msg; $("cx-btn").disabled = false; return; }
         fecharFolha(); toast(r.msg); verCaixa();
       } catch (e) { $("cx-erro").textContent = e.message; $("cx-btn").disabled = false; }
@@ -2236,6 +2345,10 @@
       ${u && !u.principal ? `<button class="btn perigo" id="u-del">Eliminar</button>` : ""}</div>`);
     $("u-perfil").onchange = () => { $("u-perms").innerHTML = catHtml(); };
     $("u-btn").onclick = async () => {
+      const novoUser = valorDe("u-user");
+      const userErr = u ? null : !novoUser ? "Indique o nome de utilizador." : /\s/.test(novoUser) ? "O nome de utilizador não pode ter espaços."
+        : novoUser.length < 3 ? "Muito curto: pelo menos 3 caracteres." : novoUser.length > 40 ? "Muito longo: no máximo 40 caracteres." : null;
+      if (!validarCampos(["u-user", userErr], Val.texto("u-nome", "o nome a mostrar", 2, 60), Val.senha("u-senha", !u))) return;
       const perms = [...$("u-perms").querySelectorAll(".u-perm:checked")].map((x) => x.value).join(",");
       const perfil = $("u-perfil").value;
       $("u-btn").disabled = true;
@@ -2339,6 +2452,7 @@
     $("rc-texto").oninput = () => { $("rc-conta").textContent = $("rc-texto").value.length + " / 500"; };
     $("rc-texto").focus();
     $("rc-ok").onclick = async () => {
+      if (!validarCampos(Val.texto("rc-texto", "o recado", 2, 500))) return;
       $("rc-ok").disabled = true;
       try {
         const para = admin && $("rc-para").value ? Number($("rc-para").value) : null;
@@ -2443,9 +2557,8 @@
     $("lv-tudo").onclick = () => { $("lv-valor").value = x.saldo.toFixed(2); };
     $("lv-nao").onclick = voltar;
     $("lv-ok").onclick = async () => {
-      const v = R.arredondar(Number(String($("lv-valor").value).replace(",", ".")) || 0), nota = $("lv-nota").value;
-      if (v <= 0) { $("lv-erro").textContent = "Indique o valor a levantar."; return; }
-      if (v > x.saldo + 0.005) { $("lv-erro").textContent = "O valor é maior que o saldo do cofre (" + R.mt(x.saldo) + ")."; return; }
+      if (!validarCampos(Val.valor("lv-valor", "o valor a levantar", { max: x.saldo }), Val.texto("lv-nota", "", 2, 200, false))) return;
+      const v = R.arredondar(lerNumero("lv-valor")), nota = $("lv-nota").value;
       if (!(await confirmar("Levantar dinheiro", "Entregar " + R.mt(v) + " a " + x.nome + "?\n\nFica no cofre: " + R.mt(R.arredondar(x.saldo - v)) + ".\nÉ registada uma SAÍDA de " + R.mt(v) + " no caixa.", "Levantar"))) return;
       try {
         const r = await Dados.poupancaLevantar(x.clienteId, x.nome, v, S.user.utilizador, nota);
@@ -3313,6 +3426,7 @@
     };
     // --- Nome ---
     $("cfg-gnome").onclick = async () => {
+      if (!validarCampos(Val.texto("cfg-nome", "o nome a mostrar", 2, 60))) return;
       try {
         const r = await Dados.alterarNome(S.user.id, $("cfg-nome").value);
         if (r.ok === false) { $("cfg-nerro").textContent = r.msg; return; }
@@ -3323,7 +3437,8 @@
     // --- Senha ---
     $("cfg-ver").onchange = (e) => ["cfg-sat", "cfg-snova", "cfg-sconf"].forEach((id) => { $(id).type = e.target.checked ? "text" : "password"; });
     $("cfg-gsenha").onclick = async () => {
-      if ($("cfg-snova").value !== $("cfg-sconf").value) { $("cfg-serro").textContent = "A confirmação da nova senha não coincide."; return; }
+      if (!validarCampos(Val.texto("cfg-sat", "a senha atual", 1, 200), Val.senha("cfg-snova"),
+        ["cfg-sconf", !$("cfg-sconf").value ? "Repita a nova senha." : $("cfg-snova").value !== $("cfg-sconf").value ? "A confirmação da nova senha não coincide." : null])) return;
       $("cfg-gsenha").disabled = true;
       try {
         const r = await Dados.alterarSenha(S.user.id, $("cfg-sat").value, $("cfg-snova").value);
@@ -3638,6 +3753,7 @@
       <div class="campo"><label>Nome a mostrar</label><input id="n-nome" value="${esc(S.user.nome || "")}"></div>
       <div class="erro-msg" id="n-erro"></div><button class="btn" id="n-btn">Guardar</button>`);
     $("n-btn").onclick = async () => {
+      if (!validarCampos(Val.texto("n-nome", "o nome a mostrar", 2, 60))) return;
       const r = await comErro(() => Dados.alterarNome(S.user.id, $("n-nome").value));
       S.user.nome = $("n-nome").value.trim(); fecharFolha(); toast(r.msg); navegar("mais");
     };
@@ -3648,6 +3764,7 @@
       <div class="campo"><label>Nova senha</label><input id="s-nova" type="password"></div>
       <div class="erro-msg" id="s-erro"></div><button class="btn" id="s-btn">Alterar</button>`);
     $("s-btn").onclick = async () => {
+      if (!validarCampos(Val.texto("s-at", "a senha atual", 1, 200), Val.senha("s-nova"))) return;
       $("s-btn").disabled = true;
       try {
         const r = await Dados.alterarSenha(S.user.id, $("s-at").value, $("s-nova").value);
@@ -4104,9 +4221,11 @@
       };
       $("pd-valor").oninput = simular; $("pd-mod").onchange = simular;
       $("pd-btn").onclick = async () => {
+        if (!validarCampos(Val.credito("pd-valor"), Val.texto("pd-mod", "a modalidade", 1),
+          Val.texto("pd-garantia", "os bens dados como garantia", 3, 300))) return;
         $("pd-btn").disabled = true;
         try {
-          const r = await Dados.pedirEmprestimo(S.user.clienteId, parseFloat($("pd-valor").value), $("pd-mod").value, $("pd-garantia").value, S.user.nome || S.user.utilizador);
+          const r = await Dados.pedirEmprestimo(S.user.clienteId, lerNumero("pd-valor"), $("pd-mod").value, $("pd-garantia").value, S.user.nome || S.user.utilizador);
           if (!r.ok) { $("pd-erro").textContent = r.msg; $("pd-btn").disabled = false; return; }
           toast(r.msg); navegar("inicio");
         } catch (e) { $("pd-erro").textContent = e.message; $("pd-btn").disabled = false; }
