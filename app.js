@@ -4314,14 +4314,46 @@
 
   // Service worker (PWA offline shell)
   if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
-    // Versão nova instalada logo ao abrir a app: recarrega já (a sessão e o ecrã mantêm-se),
-    // em vez de só aparecer na abertura seguinte. Mais tarde, a meio do trabalho, não interrompe.
-    const abertaEm = Date.now(), tinhaVersao = !!navigator.serviceWorker.controller;
-    let recarregou = false;
+    // updateViaCache "none": o sw.js nunca vem de uma cópia antiga do browser, por isso uma versão publicada é vista logo
+    let registo = null;
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js", { updateViaCache: "none" })
+      .then((r) => { registo = r; }).catch(() => {}));
+
+    // App instalada no ecrã do telemóvel (Android/iPhone): fica aberta em segundo plano dias seguidos e o browser
+    // quase nunca volta a ver se há versão nova. Por isso a app pergunta sozinha: ao voltar a ficar à vista
+    // e de 15 em 15 minutos enquanto está aberta.
+    let ultimaVerificacao = 0;
+    const verificarVersao = () => {
+      if (!registo || !navigator.onLine || Date.now() - ultimaVerificacao < 60000) return;
+      ultimaVerificacao = Date.now();
+      registo.update().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { verificarVersao(); talvezRecarregar(); } });
+    window.addEventListener("focus", verificarVersao);
+    window.addEventListener("online", verificarVersao);
+    setInterval(verificarVersao, 15 * 60 * 1000);
+
+    // Versão nova instalada: recarrega sozinha (a sessão e o ecrã mantêm-se). Se a pessoa estiver a meio de
+    // escrever ou com uma janela aberta, espera até estar livre (ou até a app voltar a ficar à vista).
+    const tinhaVersao = !!navigator.serviceWorker.controller;
+    let versaoNova = false, recarregou = false;
+    const ocupado = () => {
+      if (document.querySelector(".fundo-escuro.aberto")) return true;
+      const a = document.activeElement;
+      return !!(a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && String(a.value || "").length > 0);
+    };
+    function talvezRecarregar() {
+      if (!versaoNova || recarregou) return;
+      if (document.visibilityState === "visible" && ocupado()) return;
+      recarregou = true;
+      try { guardarSessao(); } catch (e) {}
+      location.reload();
+    }
     navigator.serviceWorker.addEventListener("controllerchange", () => {
-      if (!tinhaVersao || recarregou || Date.now() - abertaEm > 30000) return;
-      recarregou = true; guardarSessao(); location.reload();
+      if (!tinhaVersao) return;   // primeira instalação: a página já é a versão certa
+      versaoNova = true;
+      talvezRecarregar();
     });
+    setInterval(talvezRecarregar, 5000);
   }
 })();
