@@ -762,3 +762,6 @@ body:has(.btn-fixo) .btn-topo { bottom: calc(var(--barra) + env(safe-area-inset-
   .btn-topo { right: 32px; bottom: 88px; }
   body:has(.btn-fixo) .btn-topo { bottom: 156px; }
 }
+
+/* Classificação automática do cliente, ao lado do nome */
+.pil-classe { font-size: .7rem; margin-left: 8px; vertical-align: 1px; letter-spacing: .02em; max-width: none; }

@@ -213,6 +213,17 @@
     }
   }
   const pilula = (texto, cores) => `<span class="pilula" style="color:${cores[0]};background:${cores[1]}">${esc(texto)}</span>`;
+  // Classificação automática do cliente (Dados.classificarClientes, de 5 em 5 dias, pela forma como paga)
+  function classeCliente(c) {
+    const v = String(c || "").trim().toUpperCase();
+    return !v || v === "-" ? "NOVO" : v.replace(/\s*\(.*$/, "");
+  }
+  function coresClasse(c) {
+    const v = classeCliente(c);
+    return v.startsWith("EXCELENTE") ? CORES.verde : v.startsWith("BOM") ? CORES.azul : v.startsWith("REGULAR") ? CORES.laranja
+      : v.startsWith("MAU") ? CORES.vermelho : CORES.cinzento;
+  }
+  const pilClasse = (c) => `<span class="pilula pil-classe" style="color:${coresClasse(c)[0]};background:${coresClasse(c)[1]}">${esc(classeCliente(c))}</span>`;
 
   // Botões do cabeçalho das abas (como no Android: ↻ redondo e pílula "PDF")
   const btnAtualizar = (id) => `<button class="icone" id="${id}" title="Atualizar">${icf("atualizar", 21)}</button>`;
@@ -593,6 +604,8 @@
     S.perms = calcularPerms(user);
     Dados._nome = user.nome || user.utilizador;   // autor dos registos de edição
     S.cliente = user.perfil === "CLIENTE";
+    // Classificação automática dos clientes: se já passaram 5 dias, quem entra primeiro (PC, telemóvel ou web) classifica todos
+    if (user.perfil !== "CLIENTE") Dados.classificarClientes(false).catch(() => {});
     S.ocultar = true;   // como no Android: cada sessão começa com os valores ocultos (Mostrar valores pede a identidade)
     // Guarda a sessão no aparelho: atualizar a página não volta ao login
     S.assinatura = "";
@@ -1039,7 +1052,7 @@
     if (e.bensGarantia && e.bensGarantia.trim()) linhas.push(`<div>🔒<span>Garantia: ${esc(e.bensGarantia.trim())}</span></div>`);
     return `<div class="cl" data-eid="${e.id}">
       <div class="cl-topo">${avatar(e.nomeCliente)}
-        <div class="cl-meio"><div class="cl-tit">${esc(e.nomeCliente)}</div><div class="cl-sub">${esc(sub)}</div></div>
+        <div class="cl-meio"><div class="cl-tit">${esc(e.nomeCliente)}${pilClasse(e.classificacao)}</div><div class="cl-sub">${esc(sub)}</div></div>
         <div class="cl-fim"><div class="cl-valor" style="color:var(--accent)">${vmt(e.capital)}</div>${pilula(sit, coresSituacao(sit))}</div>
       </div><div class="cl-det">${linhas.join("")}</div></div>`;
   }
@@ -1071,7 +1084,7 @@
     const valor = paga ? p.valorPago : R.emFalta(p, hoje);
     return `<div class="cl" data-pid="${p.id}">
       <div class="cl-topo">${avatar(p.nomeCliente)}
-        <div class="cl-meio"><div class="cl-tit">${esc(p.nomeCliente)}</div><div class="cl-sub">${esc(sub)}</div></div>
+        <div class="cl-meio"><div class="cl-tit">${esc(p.nomeCliente)}${pilClasse(p.classificacao)}</div><div class="cl-sub">${esc(sub)}</div></div>
         <div class="cl-fim"><div class="cl-valor" style="color:${dias > 0 && !paga ? "var(--vermelho)" : paga ? "var(--verde)" : "var(--accent)"}">${vmt(valor)}</div>${pilula(sit, coresSituacao(sit))}</div>
       </div>
       ${linhas.length ? `<div class="cl-det">${linhas.join("")}</div>` : ""}</div>`;
@@ -1417,8 +1430,6 @@
   const SIT_CLIENTE = ["Todos", "Em curso", "Atrasados", "Pagos", "Sem empréstimo"];
   let cliSit = 0, cliPer = 0, cliDe = null, cliAte = null;   // período pela data de registo do cliente
   function cartaoCliente(cl) {
-    const classe = (cl.classificacao || "NOVO").replace(/\s*\(.*$/, "");   // "BOM CLIENTE (…)" -> "BOM CLIENTE", como aparece no Android
-    const bom = classe.toUpperCase().startsWith("BOM");
     let valor = "";
     if (cl.prestacoesEmAtraso > 0) valor = `<div class="cl-valor" style="color:var(--vermelho)">${cl.prestacoesEmAtraso} em atraso</div>`;
     else if (pode("BALANCO") && cl.emDivida > 0) valor = `<div class="cl-valor" style="color:var(--laranja)">${vmt(cl.emDivida)}</div>`;
@@ -1428,7 +1439,7 @@
     return `<div class="cl" data-cid="${cl.id}">
       <div class="cl-topo">${avatar(cl.nome)}
         <div class="cl-meio"><div class="cl-tit">${esc(cl.nome)}</div><div class="cl-sub" style="white-space:normal">${sub}</div></div>
-        <div class="cl-fim">${valor}${pilula(bom ? "★ " + classe : classe, bom ? CORES.verde : CORES.azul)}</div>
+        <div class="cl-fim">${valor}${pilula(classeCliente(cl.classificacao), coresClasse(cl.classificacao))}</div>
       </div>
       ${det.trim() || cl.dataRegisto ? `<div class="cl-det">${det.trim() ? `<div>${icf("local", 15)}<span>${esc(det)}</span></div>` : ""}
         ${cl.dataRegisto ? `<div>${icf("calendario", 15)}<span>Registado em ${R.data(cl.dataRegisto)}</span></div>` : ""}</div>` : ""}</div>`;
@@ -1505,7 +1516,7 @@
       ["Total de clientes: " + lista.length], () => {
         if (!lista.length) return [];
         const porClasse = new Map();
-        lista.forEach((cl) => { const k = (cl.classificacao || "NOVO").replace(/\s*\(.*$/, ""); porClasse.set(k, (porClasse.get(k) || 0) + 1); });
+        lista.forEach((cl) => { const k = classeCliente(cl.classificacao); porClasse.set(k, (porClasse.get(k) || 0) + 1); });
         const paleta = ["var(--verde)", "var(--accent)", "var(--laranja)", "var(--roxo)", "var(--vermelho)", "#19969F", "#5A6E8C"];
         const atraso = lista.filter((cl) => cl.prestacoesEmAtraso > 0).length;
         return [
@@ -1518,7 +1529,7 @@
   }
 
   async function abrirCliente(cl) {
-    abrirFolha(`<h3>${esc(cl.nome)}</h3><div class="sub">${esc(cl.classificacao || "")}</div>${spinner}`);
+    abrirFolha(`<h3>${esc(cl.nome)}</h3><div class="sub">${pilClasse(cl.classificacao)}</div>${spinner}`);
     let emprestimos = [];
     try { emprestimos = (await Dados.listarEmprestimos()).filter((e) => e.clienteId === cl.id); } catch (e) {}
     let poup = 0; try { poup = await Dados.poupancaSaldo(cl.id); } catch (e) {}
@@ -1529,7 +1540,7 @@
         <span class="fim"><span class="mt">${e.emFalta > 0 ? vmt(e.emFalta) : `<span style="color:var(--verde)">${ic("check", 18)}</span>`}</span></span></button>`).join("")
       : `<p class="sub" style="color:var(--texto-suave)">Sem empréstimos.</p>`;
     abrirFolha(`
-      <h3>${esc(cl.nome)}</h3><div class="sub">${esc(cl.classificacao || "Cliente")}</div>
+      <h3>${esc(cl.nome)}</h3><div class="sub">Classificação: ${pilClasse(cl.classificacao)}</div>
       <div class="linha-dados"><span class="r">Telefone</span><span class="v">${esc(cl.telefone || "—")}</span></div>
       ${cl.telefone ? `<div class="btn-linha" style="margin:10px 0 4px">
         <button class="btn verde-contorno" id="cl-ligar">📞 Ligar</button>
@@ -1717,7 +1728,7 @@
     const cls = e.prestacoesEmAtraso > 0 ? "e-atraso" : e.estado === "PAGO" ? "e-ok" : e.estado === "PENDENTE" ? "e-aviso" : "e-neutro";
     return `<button class="item" data-eid="${e.id}">
       <span class="avatar">${esc(R.iniciais(e.nomeCliente))}</span>
-      <span class="meio"><span class="nome">${esc(e.nomeCliente)} · nº ${e.id}</span>
+      <span class="meio"><span class="nome">${esc(e.nomeCliente)} · nº ${e.id}${pilClasse(e.classificacao)}</span>
         <span class="det">${vmt(e.capital)} · ${e.modalidade === "PARCELADO" ? "6 prest." : "única"} · pedido ${R.data(e.dataPedido)}</span>
         <span class="etiqueta ${cls}">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></span>
       <span class="fim"><span class="mt">${e.estado === "PENDENTE" ? "" : (e.emFalta > 0 ? vmt(e.emFalta) : `<span style="color:var(--verde)">${ic("check", 18)}</span>`)}</span></span></button>`;

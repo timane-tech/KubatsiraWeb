@@ -127,7 +127,7 @@ const Dados = (() => {
   // ---------- Prestações ----------
   const SELECT_PREST =
     "SELECT p.id, p.emprestimo_id, p.numero_prestacao, p.data_vencimento, p.valor_esperado, p.valor_pago, " +
-    "p.multa_congelada, p.status, p.data_pagamento, c.id AS cliente_id, c.nome, u.telefone, c.local_negocio, p.multa_alterada_por " +
+    "p.multa_congelada, p.status, p.data_pagamento, c.id AS cliente_id, c.nome, c.classificacao, u.telefone, c.local_negocio, p.multa_alterada_por " +
     "FROM prestacoes p JOIN emprestimos e ON e.id = p.emprestimo_id " +
     "JOIN clientes c ON c.id = e.cliente_id JOIN usuarios u ON u.id = c.usuario_id ";
 
@@ -148,6 +148,7 @@ const Dados = (() => {
       dataPagamento: Regras.dataBase(r.data_pagamento),
       clienteId: Number(r.cliente_id),
       nomeCliente: r.nome,
+      classificacao: r.classificacao,
       telefoneCliente: r.telefone,
       localNegocio: r.local_negocio,
       multaAlteradaPor: r.multa_alterada_por,
@@ -449,13 +450,13 @@ const Dados = (() => {
 
   // ---------- Empréstimos ----------
   const SELECT_EMP =
-    "SELECT e.id, e.cliente_id, c.nome, u.telefone, e.valor_solicitado, e.taxa_assistencia, e.valor_total, " +
+    "SELECT e.id, e.cliente_id, c.nome, c.classificacao, u.telefone, e.valor_solicitado, e.taxa_assistencia, e.valor_total, " +
     "e.tipo_pagamento, e.data_solicitacao, e.data_aprovacao, e.bens_garantia, e.status, e.criado_por " +
     "FROM emprestimos e JOIN clientes c ON c.id = e.cliente_id JOIN usuarios u ON u.id = c.usuario_id ";
 
   function lerEmp(r) {
     return {
-      id: Number(r.id), clienteId: Number(r.cliente_id), nomeCliente: r.nome, telefoneCliente: r.telefone,
+      id: Number(r.id), clienteId: Number(r.cliente_id), nomeCliente: r.nome, classificacao: r.classificacao, telefoneCliente: r.telefone,
       capital: Number(r.valor_solicitado), taxaAssistencia: Number(r.taxa_assistencia || 0),
       totalAPagar: Number(r.valor_total), modalidade: r.tipo_pagamento,
       dataPedido: Regras.dataBase(r.data_solicitacao), dataAprovacao: Regras.dataBase(r.data_aprovacao),
@@ -751,8 +752,6 @@ const Dados = (() => {
     const divida = (await listarPorPagar()).filter((p) => p.clienteId === emp.clienteId).length;
     if (divida) return { ok: false, msg: "O cliente ainda tem prestações por pagar. Só se aprova um novo crédito depois de pagar toda a dívida." };
 
-    const aprovadosAntes = Number((await DB.consultar(
-      "SELECT COUNT(*) AS n FROM emprestimos WHERE cliente_id=? AND status IN ('APROVADO','PAGO')", [emp.clienteId]))[0].n);
     let poupanca = await poupancaSaldo(emp.clienteId);
 
     const dataAp = dataAprovacaoISO || hoje;
@@ -806,9 +805,10 @@ const Dados = (() => {
       if (quitadas === linhasN) comandos.push({ sql: "UPDATE emprestimos SET status='PAGO' WHERE id=?", params: [emp.id] });
     }
 
+    // A classificação é automática (classificarClientes, de 5 em 5 dias); aqui só quem ainda não tem passa a NOVO
     comandos.push({
-      sql: "UPDATE clientes SET classificacao=? WHERE id=?",
-      params: [aprovadosAntes >= 2 ? "BOM CLIENTE (ANTIGO)" : "REGULAR", emp.clienteId],
+      sql: "UPDATE clientes SET classificacao='NOVO' WHERE id=? AND COALESCE(classificacao,'-') IN ('-','')",
+      params: [emp.clienteId],
     });
 
     await DB.lote(comandos);
@@ -1248,6 +1248,53 @@ const Dados = (() => {
     return { ok: true, msg: r.afetadas + " lançamento(s) eliminado(s) de vez." };
   }
 
+  // ---------- Classificação automática dos clientes ----------
+  // Pela forma como pagam, de 5 em 5 dias (data em configuracoes_sistema 'classificacao_em'). O SQL é o mesmo
+  // do PC (DAO/ClassificacaoDAO.cs) e do Android: quem abrir o sistema primeiro classifica todos.
+  // Pontos por prestação vencida: a tempo 100; 1-3 dias de atraso 70; 4-7 dias 40; mais 10; por pagar 0.
+  // NOVO (sem prestações vencidas) · EXCELENTE (>= 85 e nada em atraso) · BOM (>= 65, atraso até 7 dias)
+  // · REGULAR (>= 40, atraso até 30 dias) · MAU PAGADOR (o resto).
+  const SQL_CLASSIFICAR = [
+    "WITH marca AS (",
+    "  INSERT INTO configuracoes_sistema (chave, valor) VALUES ('classificacao_em', '{HOJE}')",
+    "  ON CONFLICT (chave) DO UPDATE SET valor = EXCLUDED.valor",
+    "   WHERE {FORCAR} OR configuracoes_sistema.valor IS NULL OR configuracoes_sistema.valor !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'",
+    "      OR configuracoes_sistema.valor::date <= DATE '{HOJE}' - 5",
+    "  RETURNING 1",
+    "), pr AS (",
+    "  SELECT e.cliente_id,",
+    "    CASE WHEN p.status = 'PAGO' THEN",
+    "           CASE WHEN COALESCE(p.data_pagamento, p.data_vencimento) <= p.data_vencimento THEN 100",
+    "                WHEN p.data_pagamento - p.data_vencimento <= 3 THEN 70",
+    "                WHEN p.data_pagamento - p.data_vencimento <= 7 THEN 40",
+    "                ELSE 10 END",
+    "         ELSE 0 END AS pontos,",
+    "    CASE WHEN p.status <> 'PAGO' THEN DATE '{HOJE}' - p.data_vencimento ELSE 0 END AS atraso",
+    "  FROM prestacoes p JOIN emprestimos e ON e.id = p.emprestimo_id",
+    "  WHERE e.status IN ('APROVADO', 'PAGO') AND (p.status = 'PAGO' OR p.data_vencimento < DATE '{HOJE}')",
+    "), st AS (",
+    "  SELECT c.id,",
+    "    CASE WHEN COUNT(pr.pontos) = 0 THEN 'NOVO'",
+    "         WHEN AVG(pr.pontos) >= 85 AND COALESCE(MAX(pr.atraso), 0) = 0 THEN 'EXCELENTE'",
+    "         WHEN AVG(pr.pontos) >= 65 AND COALESCE(MAX(pr.atraso), 0) <= 7 THEN 'BOM'",
+    "         WHEN AVG(pr.pontos) >= 40 AND COALESCE(MAX(pr.atraso), 0) <= 30 THEN 'REGULAR'",
+    "         ELSE 'MAU PAGADOR' END AS classe",
+    "  FROM clientes c LEFT JOIN pr ON pr.cliente_id = c.id",
+    "  GROUP BY c.id",
+    ")",
+    "UPDATE clientes c SET classificacao = st.classe",
+    "FROM st",
+    "WHERE st.id = c.id AND EXISTS (SELECT 1 FROM marca) AND c.classificacao IS DISTINCT FROM st.classe",
+  ].join(String.fromCharCode(10));
+
+  async function classificarClientes(forcar) {
+    try {
+      const sql = SQL_CLASSIFICAR.split("{HOJE}").join(Regras.hojeISO()).split("{FORCAR}").join(forcar ? "TRUE" : "FALSE");
+      const r = await DB.executar(sql, []);
+      return r && r.afetadas != null ? Number(r.afetadas) : 0;
+    } catch (e) { return -1; }
+  }
+
   // ---------- Lixeira: pedidos rejeitados ----------
   async function rejeitadosListar() {
     return (await DB.consultar(
@@ -1601,7 +1648,7 @@ const Dados = (() => {
     movimentosPeriodo,
     saldoCaixa, caixaDoDia, ultimosMovimentos, registarPagamento,
     registarCliente, atualizarCliente, novoCodigoAcesso, eliminarCliente, poupancaSaldo,
-    pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,
+    classificarClientes, pedirEmprestimo, listarPendentes, aprovar, rejeitar, eliminarPendente, anular,
     registarCaixa, listarUtilizadores, criarUtilizador, atualizarUtilizador, eliminarUtilizador,
     alterarSenha, alterarNome, listarNotificacoes, contarNaoLidas, marcarLidas, removerNotificacao, removerNotificacoes, smsApagar, smsCancelarFila, rejeitadosEsvaziar,
     configLer, configGravar, sinoAtivo, smsAutomaticoAtivo, definirSmsAutomatico,
