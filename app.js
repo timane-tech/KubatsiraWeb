@@ -221,7 +221,8 @@
   // Valor eventualmente oculto (modo privado)
   const vmt = (v) => (S.ocultar ? "••••" : R.mt(v));
   // Cor de um valor (KPI, indicador): o "roxo" dos gráficos é ardósia, por isso nos números usa-se um roxo verdadeiro
-  const corValor = (cor) => (!cor ? "var(--texto)" : String(cor).includes("--roxo") ? "var(--valor-roxo)" : cor);
+  const corValor = (cor) => { const c = String(cor || "");
+    return !c ? "var(--texto)" : c.includes("--roxo") ? "var(--valor-roxo)" : /^#19969F$/i.test(c) ? "var(--valor-teal)" : /^#B8860B$/i.test(c) ? "var(--valor-ouro)" : c; };
 
   function toast(msg, erro) {
     const t = $("toast");
@@ -675,12 +676,12 @@
     }).join("");
     // Legenda como no Android: ● Pagas / "50 · 56%"
     const legenda = segs.map((s) => `<div class="l"><span class="p" style="background:${s.cor}"></span>
-      <div><div class="t">${esc(s.rotulo)}</div><div class="n">${s.valor} · ${Math.round((s.valor / total) * 100)}%</div></div></div>`).join("");
+      <div><div class="t">${esc(s.rotulo)}</div><div class="n" style="color:${corValor(s.cor)};font-weight:600">${s.valor} · ${Math.round((s.valor / total) * 100)}%</div></div></div>`).join("");
     return `<div style="display:flex;gap:18px;align-items:center">
       <svg viewBox="0 0 140 140" width="150" height="150" style="flex:none">
         <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" style="stroke:var(--cinzento-claro)" stroke-width="18"></circle>
         ${aneis}
-        <text x="${cx}" y="${cy + 3}" text-anchor="middle" font-size="22" font-weight="800" style="fill:var(--texto)">${centroValor}</text>
+        <text x="${cx}" y="${cy + 3}" text-anchor="middle" font-size="22" font-weight="800" style="fill:var(--accent)">${centroValor}</text>
         <text x="${cx}" y="${cy + 18}" text-anchor="middle" font-size="9" style="fill:var(--texto-suave)">${esc(centroTitulo)}</text>
       </svg>
       <div class="leg-donut" style="flex:1;min-width:0">${legenda}</div></div>`;
@@ -789,8 +790,9 @@
       const gx = x0 + i * gw + gw / 2;
       if (v > 0) {
         const yy = g.y(v);
-        barras += `<rect x="${(gx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(yBase - yy).toFixed(1)}" rx="1.5" style="fill:${corDe ? corDe(i, rot) : i === 0 ? "var(--vermelho)" : "var(--roxo)"}"/>` +
-          `<text x="${gx.toFixed(1)}" y="${(yy - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" style="fill:var(--texto-suave)">${numCurto(v)}</text>`;
+        const corB = corDe ? corDe(i, rot) : i === 0 ? "var(--vermelho)" : "var(--roxo)";
+        barras += `<rect x="${(gx - bw / 2).toFixed(1)}" y="${yy.toFixed(1)}" width="${bw.toFixed(1)}" height="${(yBase - yy).toFixed(1)}" rx="1.5" style="fill:${corB}"/>` +
+          `<text x="${gx.toFixed(1)}" y="${(yy - 5).toFixed(1)}" text-anchor="middle" font-size="9.5" font-weight="600" style="fill:${corValor(corB)}">${numCurto(v)}</text>`;
       }
       rotulos += `<text x="${gx.toFixed(1)}" y="${H - 8}" text-anchor="middle" font-size="10" style="fill:var(--texto-suave)">${esc(rot)}</text>`;
     });
@@ -806,7 +808,7 @@
       const dentro = pct > 62;   // o valor vai dentro da barra quando ela é comprida
       return `<div class="barra-h"><span class="n">${esc(x.nome)}</span><span class="tr">
         <span class="pr" style="width:${pct.toFixed(1)}%"></span>
-        <span class="vl" style="${dentro ? `right:${(100 - pct + 1).toFixed(1)}%;color:#fff` : `left:calc(${pct.toFixed(1)}% + 6px)`}">${numCurto(x.total)}</span></span></div>`;
+        <span class="vl" style="${dentro ? `right:${(100 - pct + 1).toFixed(1)}%;color:#fff` : `left:calc(${pct.toFixed(1)}% + 6px);color:var(--accent);font-weight:600`}">${numCurto(x.total)}</span></span></div>`;
     }).join("");
   }
 
