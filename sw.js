@@ -2,7 +2,7 @@
  * Service worker: guarda a "casca" da app (HTML/CSS/JS/ícones) para abrir depressa e offline.
  * Os dados (consultas à Neon) NUNCA são guardados aqui — vão sempre à base de dados pela rede.
  */
-const CACHE = "kubatsira-v1.1.3-8";
+const CACHE = "kubatsira-v1.1.4";
 // Sem "./index.html": o Cloudflare responde a /index.html com um redirecionamento (307 -> /) e o Safari
 // recusa abrir uma página servida pelo service worker que veio de um redirecionamento
 // ("Response served by service worker has redirections"). A página é sempre a cópia de "./".
