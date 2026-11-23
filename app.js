@@ -220,6 +220,8 @@
 
   // Valor eventualmente oculto (modo privado)
   const vmt = (v) => (S.ocultar ? "••••" : R.mt(v));
+  // Cor de um valor (KPI, indicador): o "roxo" dos gráficos é ardósia, por isso nos números usa-se um roxo verdadeiro
+  const corValor = (cor) => (!cor ? "var(--texto)" : String(cor).includes("--roxo") ? "var(--valor-roxo)" : cor);
 
   function toast(msg, erro) {
     const t = $("toast");
@@ -840,7 +842,7 @@
     if (sinoOn) atualizarBadgeSino();
     const hoje = R.hojeISO();
     const aviso = (texto, cores, id) => `<div class="aviso-painel"${id ? ` id="${id}" style="cursor:pointer;color:${cores[0]};background:${cores[1]}"` : ` style="color:${cores[0]};background:${cores[1]}"`}>${texto}</div>`;
-    const kpi = (rot, txt, cor) => `<div class="kpi-card${String(cor).includes("vermelho") ? " neg" : ""}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
+    const kpi = (rot, txt, cor) => `<div class="kpi-card${String(cor).includes("vermelho") ? " neg" : ""}"><div class="rotulo">${esc(rot)}</div><div class="valor" style="color:${corValor(cor)}">${txt}</div></div>`;
     try {
       // ---------------- Agente ----------------
       if (S.user.perfil === "AGENTE") {
@@ -877,7 +879,7 @@
       if (pode("APROVACOES")) kpis += `<div class="kpi-card tocavel" id="ini-aprovar"
           title="${pendentes.length ? "Há pedidos à espera de aprovação" : "Sem pedidos à espera"}">
         <span class="sinal${pendentes.length ? " piscar" : ""}"></span>
-        <div class="rotulo">${esc("Por aprovar")}</div><div class="valor">${pendentes.length}</div></div>`;
+        <div class="rotulo">${esc("Por aprovar")}</div><div class="valor" style="color:${pendentes.length ? "var(--laranja)" : "var(--verde)"}">${pendentes.length}</div></div>`;
       if (pode("BALANCO")) {
         kpis += kpi("Em dívida", vmt(emDivida), "var(--roxo)");
         kpis += kpi("Em atraso", vmt(emAtraso), emAtraso > 0 ? "var(--vermelho)" : "var(--verde)");
@@ -949,7 +951,7 @@
     return `<div class="cl" data-eid="${e.id}">
       <div class="cl-topo">${avatar(e.nomeCliente)}
         <div class="cl-meio"><div class="cl-tit">${esc(e.nomeCliente)}</div><div class="cl-sub">${esc(sub)}</div></div>
-        <div class="cl-fim"><div class="cl-valor">${vmt(e.capital)}</div>${pilula(sit, coresSituacao(sit))}</div>
+        <div class="cl-fim"><div class="cl-valor" style="color:var(--accent)">${vmt(e.capital)}</div>${pilula(sit, coresSituacao(sit))}</div>
       </div><div class="cl-det">${linhas.join("")}</div></div>`;
   }
 
@@ -981,7 +983,7 @@
     return `<div class="cl" data-pid="${p.id}">
       <div class="cl-topo">${avatar(p.nomeCliente)}
         <div class="cl-meio"><div class="cl-tit">${esc(p.nomeCliente)}</div><div class="cl-sub">${esc(sub)}</div></div>
-        <div class="cl-fim"><div class="cl-valor" style="color:${dias > 0 && !paga ? "var(--vermelho)" : "var(--texto)"}">${vmt(valor)}</div>${pilula(sit, coresSituacao(sit))}</div>
+        <div class="cl-fim"><div class="cl-valor" style="color:${dias > 0 && !paga ? "var(--vermelho)" : paga ? "var(--verde)" : "var(--accent)"}">${vmt(valor)}</div>${pilula(sit, coresSituacao(sit))}</div>
       </div>
       ${linhas.length ? `<div class="cl-det">${linhas.join("")}</div>` : ""}</div>`;
   }
@@ -1072,7 +1074,7 @@
       c.innerHTML = filtro + `
         ${comPer ? `<div class="resumo-lista">Período: <b>${esc(nomePer)}</b>${balPer !== ESC && de !== ate ? " (" + R.data(de) + " a " + R.data(ate) + ")" : ""} · o total a receber, o saldo e a situação das prestações são de agora</div>` : ""}
         <div class="ind-grelha">${cartoes.map(([t, v, cor, d]) => `<div class="ind"><div class="t">${esc(t)}</div>
-          <div class="v"${String(cor).includes("vermelho") ? ' style="color:var(--vermelho)"' : ""}>${vmt(v)}</div>${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`).join("")}</div>
+          <div class="v" style="color:${corValor(cor)}">${vmt(v)}</div>${d ? `<div class="d">${esc(d)}</div>` : ""}</div>`).join("")}</div>
         ${graficosBalanco(ind, cob, es, ev, subES, subEV)}
         <div class="grafico-cartao"><h3>Empréstimos por estado</h3><div class="sub">${comPer ? esc(nomePer) + " · aprovados, pedidos e rejeitados no período" : "Aprovados, pendentes e rejeitados"}</div>${S.ocultar ? ocultoCartao() : totalEstados ? donutSVG(estados, "empréstimos", totalEstados) : `<div class="vazio" style="padding:14px">Sem empréstimos neste período.</div>`}</div>
         <div class="grafico-cartao"><h3>Top 5 clientes</h3><div class="sub">${comPer ? "Maior capital emprestado · " + esc(nomePer) : "Maior capital emprestado (aprovados)"}</div>${S.ocultar ? ocultoCartao() : top.length ? barrasHorizontais(top) : `<div class="vazio" style="padding:14px">Sem empréstimos aprovados neste período.</div>`}</div>
@@ -1242,9 +1244,9 @@
       <div class="sub">${p.numero}ª prestação · Empréstimo nº ${p.emprestimoId}</div>
       <div class="linha-dados"><span class="r">Vencimento</span><span class="v">${R.data(p.vencimento)}</span></div>
       <div class="linha-dados"><span class="r">Situação</span><span class="v">${R.situacaoPrestacao(p)}${atraso > 0 ? ` (${atraso}d)` : ""}</span></div>
-      <div class="linha-dados"><span class="r">Valor da prestação</span><span class="v">${R.mt(p.valor)}</span></div>
-      <div class="linha-dados"><span class="r">Já pago</span><span class="v">${R.mt(p.valorPago)}</span></div>
-      <div class="linha-dados"><span class="r">Multa (2%/dia)</span><span class="v">${R.mt(multa)}${p.multaAlteradaPor ? " (alterada)" : ""}</span></div>
+      <div class="linha-dados"><span class="r">Valor da prestação</span><span class="v" style="color:var(--accent)">${R.mt(p.valor)}</span></div>
+      <div class="linha-dados"><span class="r">Já pago</span><span class="v" style="color:var(--verde)">${R.mt(p.valorPago)}</span></div>
+      <div class="linha-dados"><span class="r">Multa (2%/dia)</span><span class="v" style="color:var(--laranja)">${R.mt(multa)}${p.multaAlteradaPor ? " (alterada)" : ""}</span></div>
       <div class="linha-dados"><span class="r">Em falta</span><span class="v" style="color:var(--vermelho)">${R.mt(falta)}</span></div>
       ${p.telefoneCliente ? `<div class="linha-dados"><span class="r">Telefone</span><span class="v">${esc(p.telefoneCliente)}</span></div>
         <div class="btn-linha" style="margin-top:12px">
@@ -1443,9 +1445,9 @@
         <button class="btn contorno" id="cl-sms2">💬 SMS</button></div>` : ""}
       <div class="linha-dados"><span class="r">Morada</span><span class="v">${esc(cl.morada || "—")}</span></div>
       <div class="linha-dados"><span class="r">Negócio</span><span class="v">${esc(cl.tipoNegocio || "—")}${cl.localNegocio ? " · " + esc(cl.localNegocio) : ""}</span></div>
-      <div class="linha-dados"><span class="r">Renda diária</span><span class="v">${vmt(cl.rendaDiaria)}</span></div>
-      <div class="linha-dados"><span class="r">Dívida atual</span><span class="v" style="${cl.emDivida > 0 ? "color:var(--vermelho)" : ""}">${vmt(cl.emDivida)}</span></div>
-      ${poup > 0 ? `<div class="linha-dados"><span class="r">Poupança</span><span class="v">${vmt(poup)}</span></div>` : ""}
+      <div class="linha-dados"><span class="r">Renda diária</span><span class="v" style="color:var(--accent)">${vmt(cl.rendaDiaria)}</span></div>
+      <div class="linha-dados"><span class="r">Dívida atual</span><span class="v" style="color:${cl.emDivida > 0 ? "var(--vermelho)" : "var(--verde)"}">${vmt(cl.emDivida)}</span></div>
+      ${poup > 0 ? `<div class="linha-dados"><span class="r">Poupança</span><span class="v" style="color:var(--verde)">${vmt(poup)}</span></div>` : ""}
       <div class="seccao-titulo" style="margin-left:0">Empréstimos</div>
       ${empHtml}
       ${cl.emDivida > 0 && cl.telefone ? `<button class="btn" id="cl-sms" style="margin-top:14px">${ic("sms", 16)} Enviar SMS de cobrança</button>` : ""}
@@ -1644,8 +1646,8 @@
     abrirFolha(`
       <h3>Empréstimo nº ${e.id}</h3><div class="sub">${esc(e.nomeCliente)} · ${esc(e.telefoneCliente || "")}</div>
       <div class="linha-dados"><span class="r">Situação</span><span class="v">${R.situacaoEmprestimo(e.estado, e.prestacoesEmAtraso)}</span></div>
-      <div class="linha-dados"><span class="r">Capital</span><span class="v">${vmt(e.capital)}</span></div>
-      <div class="linha-dados"><span class="r">Total a pagar</span><span class="v">${vmt(e.totalAPagar)}</span></div>
+      <div class="linha-dados"><span class="r">Capital</span><span class="v" style="color:var(--valor-teal)">${vmt(e.capital)}</span></div>
+      <div class="linha-dados"><span class="r">Total a pagar</span><span class="v" style="color:var(--accent)">${vmt(e.totalAPagar)}</span></div>
       <div class="linha-dados"><span class="r">Modalidade</span><span class="v">${e.modalidade === "PARCELADO" ? "6 prestações (5/5 dias)" : "Única (30 dias)"}</span></div>
       <div class="linha-dados"><span class="r">Pedido</span><span class="v">${R.data(e.dataPedido)}</span></div>
       ${e.dataAprovacao ? `<div class="linha-dados"><span class="r">Desembolso</span><span class="v">${R.data(e.dataAprovacao)}</span></div>` : ""}
@@ -1734,11 +1736,11 @@
     const total = R.totalAPagar(v), linhas = R.plano(v, modalidade, dataPedidoISO || R.hojeISO());
     return `<div class="cartao" style="background:var(--fundo);margin:6px 0 12px;padding:12px 14px">
       <div class="titulo-cfg" style="margin-bottom:6px">📅 Prestações</div>
-      <div class="linha-dados"><span class="r">Capital</span><span class="v">${R.mt(v)}</span></div>
-      <div class="linha-dados"><span class="r">Juros (30%)</span><span class="v">${R.mt(total - v)}</span></div>
+      <div class="linha-dados"><span class="r">Capital</span><span class="v" style="color:var(--valor-teal)">${R.mt(v)}</span></div>
+      <div class="linha-dados"><span class="r">Juros (30%)</span><span class="v" style="color:var(--valor-ouro)">${R.mt(total - v)}</span></div>
       <div class="linha-dados"><span class="r">Total a pagar</span><span class="v" style="color:var(--accent)">${R.mt(total)}</span></div>
       <div class="sub-secao" style="margin-top:10px">${linhas.length} PRESTAÇ${linhas.length === 1 ? "ÃO" : "ÕES"}</div>
-      ${linhas.map((l) => `<div class="linha-dados"><span class="r">${l.numero}ª · vence ${R.data(l.vencimento)}</span><span class="v">${R.mt(l.valor)}</span></div>`).join("")}
+      ${linhas.map((l) => `<div class="linha-dados"><span class="r">${l.numero}ª · vence ${R.data(l.vencimento)}</span><span class="v" style="color:var(--accent)">${R.mt(l.valor)}</span></div>`).join("")}
     </div>`;
   }
 
@@ -1918,7 +1920,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span class="rot">SALDO EM CAIXA</span>
             <button class="pilula-btn" id="cx-olho">${icf(S.ocultar ? "olhoaberto" : "olhofechado", 15)} ${S.ocultar ? "Mostrar" : "Ocultar"}</button></div>
-          <div class="grande">${vmt(s.saldo)}</div>
+          <div class="grande" style="color:${s.saldo < 0 ? "var(--vermelho)" : "var(--accent)"}">${vmt(s.saldo)}</div>
           <div class="tiles">
             <div class="tile"><div class="r">Entradas</div><div class="v">${vmt(s.entradas)}</div></div>
             <div class="tile"><div class="r">Saídas</div><div class="v">${vmt(s.saidas)}</div></div>
@@ -1974,7 +1976,7 @@
         $("cxd-corpo").innerHTML = spinner;
         try {
           const d = await Dados.caixaDoDia(cxDia);
-          const ld = (r, v, cor, sinal) => `<div class="linha-dados"><span class="r">${r}</span><span class="v" style="color:${cor || "var(--texto)"}">${sinal || ""}${vmt(v)}</span></div>`;
+          const ld = (r, v, cor, sinal) => `<div class="linha-dados"><span class="r">${r}</span><span class="v" style="color:${cor || "var(--accent)"}">${sinal || ""}${vmt(v)}</span></div>`;
           $("cxd-corpo").innerHTML =
             ld("Saldo de abertura", d.abertura) +
             ld("↓ Prestações recebidas", d.prestacoes, "var(--verde)", "+ ") +
@@ -2140,7 +2142,7 @@
     const podeEditar = pode("CAIXA_EDITAR") && m.livre;
     abrirFolha(`<h3>${esc(curto(m.categoria))}</h3><div class="sub">Lançamento nº ${m.id} · ${R.dataHora(m.dataMovimento)}</div>
       <div class="linha-dados"><span class="r">Tipo</span><span class="v">${m.tipo === "ENTRADA" ? "Entrada" : "Saída"}</span></div>
-      <div class="linha-dados"><span class="r">Valor</span><span class="v">${R.mt(m.valor)}</span></div>
+      <div class="linha-dados"><span class="r">Valor</span><span class="v" style="color:${m.tipo === "ENTRADA" ? "var(--verde)" : "var(--vermelho)"}">${R.mt(m.valor)}</span></div>
       <div class="linha-dados"><span class="r">Descrição</span><span class="v" style="max-width:60%">${esc(m.justificativa || "")}</span></div>
       ${!m.livre ? `<p class="sub" style="margin-top:12px;color:var(--texto-suave)">Este lançamento está ligado a um empréstimo/prestação. Só pode ser ocultado aqui; para o anular, use o empréstimo.</p>` : ""}
       <div class="btn-linha" style="margin-top:14px">
@@ -2485,9 +2487,9 @@
         ${gere ? `<button data-pmov="${m.id}" aria-label="Apagar este movimento" title="Apagar este movimento" style="background:none;border:0;color:var(--vermelho);cursor:pointer;padding:8px;margin:-4px -8px 0 0;flex:none">${ic("lixeira", 18)}</button>` : ""}</div>`;
     }).join("");
     abrirFolha(`<h3>${esc(x.nome)}</h3><div class="sub">Poupança do cliente</div>
-      <div class="linha-dados"><span class="r">Saldo atual</span><span class="v">${R.mt(x.saldo)}</span></div>
-      <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${R.mt(x.depositado)}</span></div>
-      <div class="linha-dados"><span class="r">Total usado</span><span class="v">${R.mt(x.usado)}</span></div>
+      <div class="linha-dados"><span class="r">Saldo atual</span><span class="v" style="color:var(--verde)">${R.mt(x.saldo)}</span></div>
+      <div class="linha-dados"><span class="r">Total depositado</span><span class="v" style="color:var(--accent)">${R.mt(x.depositado)}</span></div>
+      <div class="linha-dados"><span class="r">Total usado</span><span class="v" style="color:var(--vermelho)">${R.mt(x.usado)}</span></div>
       ${x.telefone ? `<div class="btn-linha" style="margin-top:12px">
         <button class="btn secundario" id="pou-ligar" style="margin:0">📞 Ligar</button>
         <button class="btn btn-verde" id="pou-sms" style="margin:0">💬 SMS de aviso</button></div>` : `<p class="sub" style="margin:10px 0 0">Este cliente não tem telefone registado.</p>`}
@@ -3850,7 +3852,7 @@
       abrirFolha(`<h3>Enviar SMS a todos</h3><div class="sub">Cliente ${i + 1} de ${comTel.length}</div>
         <div class="linha-dados"><span class="r">Cliente</span><span class="v">${esc(x.nome)}</span></div>
         <div class="linha-dados"><span class="r">Telefone</span><span class="v">${esc(x.tel)}</span></div>
-        <div class="linha-dados"><span class="r">A pagar</span><span class="v">${vmt(x.total)}</span></div>
+        <div class="linha-dados"><span class="r">A pagar</span><span class="v" style="color:var(--laranja)">${vmt(x.total)}</span></div>
         <div class="cartao" style="background:var(--fundo);white-space:pre-wrap;font-size:.8rem;margin-top:10px">${esc(x.texto)}</div>
         <button class="btn" id="ct-env">${ic("sms", 16)} Enviar a ${esc(primeiroNome(x.nome))} e seguir</button>
         <div class="btn-linha" style="margin-top:10px">
@@ -4021,7 +4023,7 @@
       divida = R.arredondar(divida); multas = R.arredondar(multas);
       const pendente = meus.find((e) => e.estado === "PENDENTE");
       const podePedir = !porPagar.length && !pendente;
-      const kpi = (rot, txt, cor) => `<div class="kpi-card${String(cor).includes("vermelho") ? " neg" : ""}"><div class="rotulo">${esc(rot)}</div><div class="valor">${txt}</div></div>`;
+      const kpi = (rot, txt, cor) => `<div class="kpi-card${String(cor).includes("vermelho") ? " neg" : ""}"><div class="rotulo">${esc(rot)}</div><div class="valor" style="color:${corValor(cor)}">${txt}</div></div>`;
       const aviso = (t, cores) => `<div class="aviso-painel" style="color:${cores[0]};background:${cores[1]}">${t}</div>`;
       let avisos = "";
       if (atrasadas > 0) avisos = aviso(`⚠ Tem <b>${atrasadas} prestação(ões) em atraso</b>. A multa já vai em <b>${vmt(multas)}</b> e aumenta 2% por dia. Pague o quanto antes.`, CORES.vermelho);
@@ -4032,7 +4034,7 @@
         const prog = e.totalPrestacoes === 0 ? "Pedido em " + R.data(e.dataPedido) : `${e.prestacoesPagas}/${e.totalPrestacoes} prestações pagas`;
         return `<div class="cl" data-eid="${e.id}">
           <div class="cl-topo"><div class="cl-meio"><div class="cl-tit">Empréstimo nº ${e.id} · ${vmt(e.capital)}</div><div class="cl-sub">${esc(prog)}</div></div>
-            <div class="cl-fim"><div class="cl-valor" style="color:${e.emFalta > 0 ? "var(--laranja)" : "var(--texto)"}">${e.emFalta > 0 ? "Falta " + vmt(e.emFalta) : vmt(e.totalAPagar)}</div>${pilula(sit, coresSituacao(sit))}</div></div>
+            <div class="cl-fim"><div class="cl-valor" style="color:${e.emFalta > 0 ? "var(--laranja)" : "var(--verde)"}">${e.emFalta > 0 ? "Falta " + vmt(e.emFalta) : vmt(e.totalAPagar)}</div>${pilula(sit, coresSituacao(sit))}</div></div>
           <div class="cl-det"><div>📆<span>${e.modalidade === "PARCELADO" ? "6 prestações de 5 em 5 dias" : "Prestação única aos 30 dias"}</span></div></div></div>`;
       }).join("") : `<div class="vazio" style="padding:20px">Ainda não tem empréstimos. Toque em "Pedir crédito" para fazer o primeiro pedido.</div>`;
       c.innerHTML = `
@@ -4057,8 +4059,8 @@
         }).join("");
         abrirFolha(`<h3>A minha poupança</h3><div class="sub">O dinheiro guardado no seu cofre</div>
           <div class="linha-dados"><span class="r">Saldo atual</span><span class="v" style="color:var(--verde)">${vmt(pouSaldo)}</span></div>
-          <div class="linha-dados"><span class="r">Total depositado</span><span class="v">${vmt(pouDep)}</span></div>
-          <div class="linha-dados"><span class="r">Total usado / levantado</span><span class="v">${vmt(pouUso)}</span></div>
+          <div class="linha-dados"><span class="r">Total depositado</span><span class="v" style="color:var(--accent)">${vmt(pouDep)}</span></div>
+          <div class="linha-dados"><span class="r">Total usado / levantado</span><span class="v" style="color:var(--vermelho)">${vmt(pouUso)}</span></div>
           <p class="sub" style="margin:10px 0 0">O saldo da poupança é usado nas prestações do próximo crédito, ou pode pedir para o levantar no escritório.</p>
           <div class="seccao-titulo" style="margin-left:0">Movimentos</div>${linhas}
           <button class="btn secundario" id="pou-fechar" style="margin-top:12px">Fechar</button>`);
@@ -4289,6 +4291,18 @@
       toast("PDF gerado.");
     } catch (e) { toast(e.message || "Falha ao gerar o PDF.", true); }
   }
+
+  // ---------- Voltar ao topo: aparece em qualquer ecrã depois de descer um pouco ----------
+  (() => {
+    const b = document.createElement("button");
+    b.className = "btn-topo"; b.type = "button"; b.title = "Voltar ao topo"; b.setAttribute("aria-label", "Voltar ao topo");
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 7-7 7 7"/><path d="M12 19V5"/></svg>';
+    b.onclick = () => window.scrollTo({ top: 0, behavior: "smooth" });
+    document.body.appendChild(b);
+    let pendente = false;
+    const atualizar = () => { pendente = false; b.classList.toggle("ver", window.scrollY > 320); };
+    window.addEventListener("scroll", () => { if (!pendente) { pendente = true; requestAnimationFrame(atualizar); } }, { passive: true });
+  })();
 
   // ---------- Arranque ----------
   DB.iniciar();
