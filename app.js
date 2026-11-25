@@ -340,7 +340,7 @@
 
   function confirmar(titulo, texto, textoBtn, perigo) {
     return new Promise((res) => {
-      abrirFolha(`<h3>${esc(titulo)}</h3><p class="sub">${esc(texto)}</p>
+      abrirFolha(`<h3>${esc(titulo)}</h3><p class="sub" style="white-space:pre-line">${esc(texto)}</p>
         <div class="btn-linha">
           <button class="btn secundario" id="c-nao">Cancelar</button>
           <button class="btn ${perigo ? "perigo" : ""}" id="c-sim">${esc(textoBtn || "Confirmar")}</button>
@@ -2258,12 +2258,12 @@
   }
 
   function gerirCaixa(m) {
-    const podeEditar = pode("CAIXA_EDITAR") && m.livre;
+    const podeEditar = pode("CAIXA_EDITAR");
     abrirFolha(`<h3>${esc(curto(m.categoria))}</h3><div class="sub">Lançamento nº ${m.id} · ${R.dataHora(m.dataMovimento)}</div>
       <div class="linha-dados"><span class="r">Tipo</span><span class="v">${m.tipo === "ENTRADA" ? "Entrada" : "Saída"}</span></div>
       <div class="linha-dados"><span class="r">Valor</span><span class="v" style="color:${m.tipo === "ENTRADA" ? "var(--verde)" : "var(--vermelho)"}">${R.mt(m.valor)}</span></div>
       <div class="linha-dados"><span class="r">Descrição</span><span class="v" style="max-width:60%">${esc(m.justificativa || "")}</span></div>
-      ${!m.livre ? `<p class="sub" style="margin-top:12px;color:var(--texto-suave)">Este lançamento está ligado a um empréstimo/prestação. Só pode ser ocultado aqui; para o anular, use o empréstimo.</p>` : ""}
+      ${!m.livre ? `<p class="sub" style="margin-top:12px;color:var(--texto-suave)">Este lançamento está ligado a um empréstimo, prestação ou poupança. Ao apagá-lo, tudo o que ele mexeu volta a ficar como antes.</p>` : ""}
       <div class="btn-linha" style="margin-top:14px">
         ${podeEditar ? `<button class="btn secundario" id="g-editar">Editar</button>` : ""}
         ${pode("CAIXA_OCULTAR") ? `<button class="btn secundario" id="g-ocultar">${m.oculto ? "Mostrar" : "Ocultar"}</button>` : ""}
@@ -2277,10 +2277,16 @@
         <div class="erro-msg" id="ge-erro"></div><button class="btn" id="ge-ok">Guardar</button>`);
       $("ge-ok").onclick = async () => {
         if (!validarCampos(Val.valor("ge-valor", "o valor"), Val.texto("ge-just", "a descrição", 3, 200))) return;
+        const tipo = $("ge-tipo").value, valor = lerNumero("ge-valor"), just = $("ge-just").value;
         $("ge-ok").disabled = true;
-        try { const r = await Dados.caixaEditar(m.id, $("ge-tipo").value, lerNumero("ge-valor"), $("ge-just").value);
-          if (!r.ok) { $("ge-erro").textContent = r.msg; $("ge-ok").disabled = false; return; }
-          fecharFolha(); toast(r.msg); verCaixa();
+        try {
+          // Num desembolso, mostrar primeiro o que muda no empréstimo e nas prestações
+          const prev = await Dados.caixaPreverEditar(m.id, tipo, valor);
+          if (prev && prev.startsWith("ERRO:")) { $("ge-erro").textContent = prev.substring(5).trim(); $("ge-ok").disabled = false; return; }
+          if (prev && !(await confirmar("Ajustar o empréstimo", prev, "Guardar e ajustar"))) return;
+          const r = await Dados.caixaEditar(m.id, tipo, valor, just);
+          if (!r.ok) { if ($("ge-erro")) { $("ge-erro").textContent = r.msg; $("ge-ok").disabled = false; } else toast(r.msg, true); return; }
+          fecharFolha(); toast(r.msg.split("\n")[0]); verCaixa();
         } catch (e) { $("ge-erro").textContent = e.message; $("ge-ok").disabled = false; }
       };
     };
@@ -2288,8 +2294,15 @@
       const r = await comErro(() => Dados.caixaOcultar(m.id, !m.oculto)); fecharFolha(); toast(r.msg, !r.ok); verCaixa();
     };
     if ($("g-apagar")) $("g-apagar").onclick = async () => {
-      if (!(await confirmar("Apagar lançamento", "Vai para o Lixo do Caixa. O saldo é atualizado (pode restaurar depois).", "Apagar", true))) return;
-      const r = await comErro(() => Dados.caixaApagar(m.id, nomeRegisto())); fecharFolha(); toast(r.msg, !r.ok); verCaixa();
+      $("g-apagar").disabled = true;
+      const p = await Dados.caixaPreverApagar(m.id);   // não lança erros: devolve { erro }
+      if (p.erro) { fecharFolha(); toast(p.erro, true); return; }
+      const texto = (p.texto ? p.texto + "\n\n" : "") + "O lançamento vai para o Lixo do Caixa e o saldo é atualizado." +
+        (p.tipo === "SIMPLES" ? " Pode restaurá-lo depois." : "");
+      if (!(await confirmar("Apagar lançamento nº " + m.id, texto, "Apagar", true))) return;
+      const r = await comErro(() => Dados.caixaApagar(m.id, nomeRegisto()));
+      if (r) toast(r.ok ? r.msg.split("\n")[0] : r.msg, !r.ok);
+      verCaixa();
     };
   }
 
@@ -2704,7 +2717,7 @@
               <span class="avatar" style="background:var(--fundo);color:var(--texto-suave)">${ic("lixeira", 18)}</span>
               <span class="meio"><span class="nome">Nº ${m.caixaId} · ${esc(curto(m.categoria))}</span>
                 <span class="det" style="white-space:normal">${esc(m.justificativa || "")}</span>
-                <span class="det" style="font-size:.74rem">Apagado por ${esc(m.eliminadoPor || "—")} · ${R.dataHora(m.eliminadoEm)}${m.anulado ? " · pagamento anulado" : ""}</span>
+                <span class="det" style="font-size:.74rem">Apagado por ${esc(m.eliminadoPor || "—")} · ${R.dataHora(m.eliminadoEm)}${m.anulado ? (pagamento ? " · pagamento anulado" : " · efeito anulado") : ""}</span>
                 <span style="display:flex;gap:8px;margin-top:8px">
                   <button class="btn secundario" data-restaurar="${m.id}" data-anul="${m.anulado}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem">${ic("restaurar", 15)} Restaurar</button>
                   ${pagamento && !m.anulado && podeAnular ? `<button class="btn secundario" data-anular="${m.id}" style="margin:0;padding:8px 12px;width:auto;font-size:.82rem;color:var(--laranja)">↩ Anular pagamento</button>` : ""}

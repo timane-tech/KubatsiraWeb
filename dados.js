@@ -607,6 +607,13 @@ const Dados = (() => {
     // Excedente -> poupança do cliente
     if (excedente > 0) {
       const desc = "Excedente do pagamento do empréstimo #" + primeira.emprestimoId;
+      // Como no PC: origem_caixa_id = o pagamento (é o último caixa inserido até aqui) e
+      // caixa_id = o lançamento do depósito (preenchido logo a seguir). Assim, apagar o pagamento também tira o depósito.
+      comandos.push({
+        sql: "INSERT INTO poupanca_clientes (cliente_id, tipo, valor, emprestimo_id, descricao, registado_por, origem_caixa_id) " +
+             "VALUES (?, 'DEPOSITO', ?, ?, ?, ?, currval(pg_get_serial_sequence('caixa','id')))",
+        params: [primeira.clienteId, excedente, primeira.emprestimoId, desc, registadoPor],
+      });
       if (dataMov) {
         comandos.push({
           sql: "INSERT INTO caixa (tipo, valor, justificativa, categoria, registado_por, data_movimento) " +
@@ -621,9 +628,9 @@ const Dados = (() => {
         });
       }
       comandos.push({
-        sql: "INSERT INTO poupanca_clientes (cliente_id, tipo, valor, emprestimo_id, descricao, registado_por, origem_caixa_id) " +
-             "VALUES (?, 'DEPOSITO', ?, ?, ?, ?, currval(pg_get_serial_sequence('caixa','id')))",
-        params: [primeira.clienteId, excedente, primeira.emprestimoId, desc, registadoPor],
+        sql: "UPDATE poupanca_clientes SET caixa_id = currval(pg_get_serial_sequence('caixa','id')) " +
+             "WHERE id = currval(pg_get_serial_sequence('poupanca_clientes','id'))",
+        params: [],
       });
     }
 
@@ -1187,7 +1194,7 @@ const Dados = (() => {
   }
 
   async function lixoCaixaRestaurar(idLixo, anulado) {
-    if (anulado) return { ok: false, msg: "Este pagamento foi anulado (as prestações já não o contam), por isso não volta ao caixa." };
+    if (anulado) return { ok: false, msg: "Ao apagar este lançamento, o seu efeito foi desfeito (prestações, poupança ou empréstimo), por isso não volta ao caixa. Registe-o de novo no cliente certo." };
     await DB.lote([
       { sql: "INSERT INTO caixa (id, tipo, valor, justificativa, categoria, emprestimo_id, data_movimento, registado_por) " +
              "SELECT caixa_id, tipo, valor, justificativa, categoria, emprestimo_id, data_movimento, registado_por FROM caixa_eliminados WHERE id=?", params: [idLixo] },
@@ -1420,9 +1427,40 @@ const Dados = (() => {
     if (!(valor > 0)) return { ok: false, msg: "Indique um valor válido." };
     if (!justificativa || justificativa.trim().length < 3) return { ok: false, msg: "Indique a descrição do movimento." };
     const agora = Regras.agoraLocal();
-    const r = await DB.executar("UPDATE caixa SET tipo=?, valor=?, justificativa=?, editado_em=?, editado_por=? WHERE id=?",
-      [tipo, valor, justificativa.trim(), agora, nomeSessao(), id]);
+    const l = await lerLancamentoCaixa(id);
+    if (!l) return { ok: false, msg: "O lançamento já não existe." };
+    const mudouValor = tipo !== l.tipo || Math.abs(valor - l.valor) > 0.005;
+    const upd = { sql: "UPDATE caixa SET tipo=?, valor=?, justificativa=?, editado_em=?, editado_por=? WHERE id=?",
+      params: [tipo, valor, justificativa.trim(), agora, nomeSessao(), id] };
+
+    if (!ehLivre(l.categoria) && mudouValor) {
+      // Desembolso: o empréstimo e as prestações passam a corresponder ao novo valor (kub_ajustar_desembolso, como no PC)
+      if (ehDesembolso(l) && l.emprestimoId) {
+        if (tipo !== "SAIDA") return { ok: false, msg: "Um desembolso é sempre uma saída." };
+        const prev = await caixaPreverEditar(id, tipo, valor);
+        if (prev && prev.startsWith("ERRO:")) return { ok: false, msg: "Nada foi alterado: " + prev.substring(5).trim() };
+        const cmds = [upd];
+        if (prev) cmds.push({ sql: "SELECT kub_ajustar_desembolso(?::int, ?::numeric, TRUE)", params: [l.emprestimoId, valor] });
+        await DB.lote(cmds);
+        DB.limparCache();
+        return { ok: true, msg: prev ? "Lançamento alterado. O empréstimo e as prestações foram ajustados:\n\n" + prev : "Lançamento atualizado." };
+      }
+      return { ok: false, msg: "Este lançamento está ligado às prestações/poupança do cliente: aqui só se muda a descrição. " +
+        "Para corrigir o valor, apague-o (as prestações e a poupança voltam a ficar como antes) e registe o valor certo." };
+    }
+    const r = await DB.executar(upd.sql, upd.params);
+    DB.limparCache();
     return r.afetadas === 1 ? { ok: true, msg: "Lançamento atualizado." } : { ok: false, msg: "Não foi possível atualizar." };
+  }
+
+  // Num desembolso: o que acontece ao empréstimo com o novo valor. null = nada a ajustar; "ERRO: …" = não é possível.
+  async function caixaPreverEditar(id, tipo, valor) {
+    const l = await lerLancamentoCaixa(id);
+    if (!l || !ehDesembolso(l) || !l.emprestimoId || tipo !== "SAIDA") return null;
+    try {
+      const r = (await DB.consultar("SELECT kub_ajustar_desembolso(?::int, ?::numeric, FALSE) AS r", [l.emprestimoId, Regras.arredondar(valor)]))[0];
+      return r && r.r ? r.r : null;
+    } catch (e) { return "ERRO: " + e.message; }
   }
 
   async function caixaOcultar(id, ocultar) {
@@ -1432,14 +1470,127 @@ const Dados = (() => {
     return { ok: true, msg: ocultar ? "Lançamento ocultado (continua no saldo)." : "Lançamento visível outra vez." };
   }
 
+  // ---- Apagar um lançamento do caixa, refletindo em tudo o que ele mexe (como no PC) ----
+  // · Pagamento de prestação → o pagamento é anulado (kub_anular_pagamento): as prestações voltam a ficar como antes,
+  //   o empréstimo volta a "em curso" e o excedente que foi para a poupança também sai.
+  // · Depósito na poupança (excedente) → anula o pagamento de onde veio (tudo junto).
+  // · Levantamento da poupança → o dinheiro volta ao cofre do cliente.
+  // · Desembolso → o empréstimo é anulado (prestações apagadas), só se ainda não tiver pagamentos.
+  // · Uso da poupança ao aprovar um crédito → não se apaga aqui (são dois lançamentos ligados às prestações).
+  // · Os outros (capital, despesa, ajuste, licença) → só saem do caixa.
+  // Fica sempre uma cópia no Lixo do Caixa; pagamento_anulado = TRUE quando o efeito foi desfeito (não se restaura).
+
+  // Depósitos de excedente gravados por versões antigas do web: o elo ficava no próprio depósito (origem_caixa_id)
+  // e não no pagamento. Corrige para o formato do PC: caixa_id = lançamento do depósito; origem_caixa_id = pagamento.
+  const SQL_CORRIGIR_DEPOSITOS =
+    "UPDATE poupanca_clientes p SET caixa_id = p.origem_caixa_id, origem_caixa_id = (SELECT MAX(c2.id) FROM caixa c2 " +
+    "WHERE c2.emprestimo_id = p.emprestimo_id AND c2.categoria = 'PRESTACAO' AND c2.tipo = 'ENTRADA' AND c2.id < p.origem_caixa_id) " +
+    "WHERE p.tipo = 'DEPOSITO' AND p.caixa_id IS NULL AND EXISTS (SELECT 1 FROM caixa c " +
+    "WHERE c.id = p.origem_caixa_id AND c.categoria = 'POUPANCA' AND c.tipo = 'ENTRADA')";
+
+  async function lerLancamentoCaixa(id) {
+    const r = (await DB.consultar("SELECT id, tipo, categoria, valor, emprestimo_id, prestacao_numero, justificativa FROM caixa WHERE id=?", [id]))[0];
+    if (!r) return null;
+    let emp = Number(r.emprestimo_id) > 0 ? Number(r.emprestimo_id) : null;
+    if (!emp) { const m = /#([0-9]{1,9})/.exec(r.justificativa || ""); emp = m ? Number(m[1]) : null; }
+    return { id: Number(r.id), tipo: r.tipo, categoria: r.categoria || "", valor: Number(r.valor), emprestimoId: emp,
+      numeros: r.prestacao_numero, justificativa: r.justificativa || "" };
+  }
+  const ehDesembolso = (l) => l.tipo === "SAIDA" && (l.categoria === "DESEMBOLSO" || (!l.categoria && /^Desembolso/i.test(l.justificativa)));
+  const ehUsoNoCredito = (l) => /com a poupan[çc]a do cliente|^Uso da Poupan[çc]a/i.test(l.justificativa);
+
+  // Decide o que apagar este lançamento faz. Devolve { erro } ou { tipo, alvo (lançamento a apagar), texto, ... }
+  async function planoApagarCaixa(id) {
+    await DB.executar(SQL_CORRIGIR_DEPOSITOS, []);
+    let l = await lerLancamentoCaixa(id);
+    if (!l) return { erro: "O lançamento já não existe." };
+
+    if (l.categoria === "POUPANCA" && ehUsoNoCredito(l))
+      return { erro: "Este movimento é o uso da poupança do cliente ao aprovar o empréstimo nº " + (l.emprestimoId || "?") +
+        " (está ligado às prestações). Não pode ser apagado no caixa." };
+
+    // Depósito do excedente → apaga-se o pagamento de onde veio
+    if (l.categoria === "POUPANCA" && l.tipo === "ENTRADA") {
+      const d = (await DB.consultar("SELECT id, origem_caixa_id, cliente_id, valor FROM poupanca_clientes WHERE caixa_id=? AND tipo='DEPOSITO' LIMIT 1", [l.id]))[0];
+      if (d && Number(d.origem_caixa_id) > 0) {
+        const pag = await lerLancamentoCaixa(Number(d.origem_caixa_id));
+        if (pag) l = pag;
+      } else if (d) {
+        const saldo = Number((await DB.consultar("SELECT COALESCE(SUM(CASE WHEN tipo='DEPOSITO' THEN valor ELSE -valor END),0) AS s FROM poupanca_clientes WHERE cliente_id=?", [d.cliente_id]))[0].s);
+        if (saldo + 0.005 < Number(d.valor)) return { erro: "Este depósito já foi usado da poupança do cliente. Não pode ser apagado." };
+        return { tipo: "DEPOSITO", alvo: l, poupancaId: Number(d.id), texto: "O depósito também sai da poupança do cliente (menos " + Regras.mt(Number(d.valor)) + ")." };
+      }
+    }
+
+    if (ehPagamento(l.tipo, l.categoria, l.justificativa)) {
+      if (ehUsoNoCredito(l))
+        return { erro: "Este pagamento foi feito com a poupança do cliente ao aprovar o crédito. Não pode ser apagado no caixa." };
+      let prev;
+      try {
+        prev = (await DB.consultar("SELECT kub_anular_pagamento(?::int, ?::int, ?::text, ?::numeric, ?::text, FALSE, '') AS r",
+          [l.id, l.emprestimoId, l.numeros, l.valor, l.justificativa]))[0];
+        prev = prev ? prev.r : "ERRO: sem resposta da base de dados.";
+      } catch (e) { prev = "ERRO: " + e.message; }
+      if (String(prev).startsWith("ERRO:")) return { erro: String(prev).substring(5).trim() };
+      return { tipo: "PAGAMENTO", alvo: l,
+        texto: (l.id !== id ? "Este depósito veio do excedente de um pagamento: o pagamento todo (nº " + l.id + ", " + Regras.mt(l.valor) + ") é anulado.\n\n" : "") +
+          "O pagamento é anulado no empréstimo nº " + l.emprestimoId + ":\n" + String(prev).trim() };
+    }
+
+    // Levantamento da poupança → o dinheiro volta ao cofre
+    if (l.categoria === "POUPANCA" && l.tipo === "SAIDA") {
+      const u = (await DB.consultar("SELECT id, valor FROM poupanca_clientes WHERE origem_caixa_id=? AND tipo='USO' LIMIT 1", [l.id]))[0];
+      return { tipo: "LEVANTAMENTO", alvo: l, poupancaId: u ? Number(u.id) : null,
+        texto: u ? "O levantamento é anulado: " + Regras.mt(Number(u.valor)) + " voltam à poupança do cliente." : "Só sai do caixa (não está ligado a nenhum cofre)." };
+    }
+
+    // Desembolso → anula o empréstimo, se ainda não tiver pagamentos
+    if (ehDesembolso(l) && l.emprestimoId) {
+      const e = (await DB.consultar(
+        "SELECT e.id, (SELECT COALESCE(SUM(valor_pago),0) FROM prestacoes WHERE emprestimo_id=e.id) AS pago " +
+        "FROM emprestimos e WHERE e.id=?", [l.emprestimoId]))[0];
+      if (e) {
+        if (Number(e.pago) > 0.005)
+          return { erro: "O empréstimo nº " + l.emprestimoId + " já tem pagamentos registados. Apague primeiro os pagamentos (ficam anulados nas prestações) e depois o desembolso." };
+        return { tipo: "DESEMBOLSO", alvo: l, emprestimoId: l.emprestimoId,
+          texto: "O empréstimo nº " + l.emprestimoId + " é anulado: as suas prestações são apagadas e o empréstimo sai da lista." };
+      }
+    }
+    return { tipo: "SIMPLES", alvo: l, texto: "" };
+  }
+
+  async function caixaPreverApagar(id) {
+    try { return await planoApagarCaixa(id); } catch (e) { return { erro: e.message }; }
+  }
+
   async function caixaApagar(id, quem) {
+    const p = await planoApagarCaixa(id);
+    if (p.erro) return { ok: false, msg: p.erro };
     const agora = Regras.agoraLocal();
-    await DB.lote([
-      { sql: "INSERT INTO caixa_eliminados (caixa_id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, eliminado_por, eliminado_em, pagamento_anulado) " +
-             "SELECT id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, ?, ?, FALSE FROM caixa WHERE id=?", params: [quem, agora, id] },
-      { sql: "DELETE FROM caixa WHERE id=?", params: [id] },
-    ]);
-    return { ok: true, msg: "Lançamento nº " + id + " enviado para o Lixo do Caixa. O saldo foi atualizado." };
+    const l = p.alvo;
+    const desfeito = p.tipo !== "SIMPLES";
+    const cmds = [];
+    if (p.tipo === "PAGAMENTO")
+      cmds.push({ sql: "SELECT kub_anular_pagamento(?::int, ?::int, ?::text, ?::numeric, ?::text, TRUE, ?::text)",
+        params: [l.id, l.emprestimoId, l.numeros, l.valor, l.justificativa, quem] });
+    cmds.push({ sql: "INSERT INTO caixa_eliminados (caixa_id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, eliminado_por, eliminado_em, pagamento_anulado) " +
+             "SELECT id, tipo, valor, justificativa, categoria, emprestimo_id, prestacao_numero, data_movimento, registado_por, ?, ?, ? FROM caixa WHERE id=?",
+      params: [quem, agora, desfeito, l.id] });
+    cmds.push({ sql: "DELETE FROM caixa WHERE id=?", params: [l.id] });
+    if ((p.tipo === "DEPOSITO" || p.tipo === "LEVANTAMENTO") && p.poupancaId)
+      cmds.push({ sql: "DELETE FROM poupanca_clientes WHERE id=?", params: [p.poupancaId] });
+    if (p.tipo === "DESEMBOLSO") {
+      cmds.push({ sql: "DELETE FROM pagamentos_aplicados WHERE prestacao_id IN (SELECT id FROM prestacoes WHERE emprestimo_id=?)", params: [p.emprestimoId] });
+      cmds.push({ sql: "DELETE FROM prestacoes WHERE emprestimo_id=?", params: [p.emprestimoId] });
+      cmds.push({ sql: "UPDATE caixa SET emprestimo_id=NULL WHERE emprestimo_id=?", params: [p.emprestimoId] });
+      cmds.push({ sql: "UPDATE poupanca_clientes SET emprestimo_id=NULL WHERE emprestimo_id=?", params: [p.emprestimoId] });
+      cmds.push({ sql: "DELETE FROM emprestimos WHERE id=?", params: [p.emprestimoId] });
+    }
+    try { await DB.lote(cmds); }
+    catch (e) { return { ok: false, msg: "Nada foi apagado: " + e.message }; }
+    DB.limparCache();
+    const fim = "Lançamento nº " + l.id + " enviado para o Lixo do Caixa. O saldo foi atualizado.";
+    return { ok: true, msg: p.texto ? fim + "\n\n" + p.texto : fim };
   }
 
   // Movimentos incluindo os ocultos (para gerir no caixa)
@@ -1659,7 +1810,7 @@ const Dados = (() => {
     balancoEmprestimosPeriodo, caixaPeriodo, graficoEntradasSaidasPeriodo, graficoEvolucaoCaixaPeriodo, topClientesPeriodo, ultimosMovimentosPeriodo,
     rejeitadosListar, rejeitadoRestaurar, rejeitadoEliminar,
     acessosListar, acessosApagar, movimentosDoDia, smsEnviadosListar,
-    alterarMulta, reporMulta, caixaEditar, caixaOcultar, caixaApagar, movimentosCaixa,
+    alterarMulta, reporMulta, caixaEditar, caixaOcultar, caixaApagar, caixaPreverApagar, caixaPreverEditar, movimentosCaixa,
     alterarVencimento, alterarDataDesembolso, reconciliar, iaPerguntar,
     porPagarDoCliente, emprestimosDoCliente,
     fotoPerfil, guardarFoto, removerFoto,
