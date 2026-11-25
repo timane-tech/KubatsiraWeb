@@ -333,6 +333,7 @@
   // ---------- Diálogo (folha deslizante) ----------
   function abrirFolha(html) {
     $("folha").innerHTML = '<div class="pega"></div>' + html;
+    $("folha").scrollTop = 0;
     $("fundo-escuro").classList.add("aberto");
   }
   function fecharFolha() { $("fundo-escuro").classList.remove("aberto"); }

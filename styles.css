@@ -348,13 +348,19 @@ textarea { resize: vertical; min-height: 44px; }
 .fundo-escuro.aberto { display: flex; }
 .folha {
   background: var(--cartao); border-radius: 20px 20px 0 0; width: 100%; max-width: 560px;
-  padding: 8px 20px calc(env(safe-area-inset-bottom) + 24px); max-height: 92dvh; overflow-y: auto; overscroll-behavior: contain;
+  padding: 8px 16px calc(env(safe-area-inset-bottom) + 20px); max-height: 80vh; max-height: 80dvh; overflow-y: auto; overscroll-behavior: contain;
   animation: subir .32s var(--curva);
 }
 @keyframes subir { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
 .folha .pega { width: 36px; height: 4px; background: var(--borda-forte); border-radius: 2px; margin: 4px auto 16px; }
 .folha h3 { margin: 0 0 4px; font-size: 1.15rem; font-weight: 600; }
 .folha .sub { color: var(--texto-suave); font-size: .875rem; margin-bottom: 16px; }
+/* Telemóvel: a folha não ocupa o ecrã todo (vê-se o fundo por cima e desloca-se o conteúdo) */
+@media (max-width: 1023px) {
+  .folha .pega { margin: 4px auto 12px; }
+  .folha .sub { margin-bottom: 12px; }
+  .folha .cartao { padding: 12px 14px; }
+}
 
 .linha-dados { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--borda); font-size: .9rem; }
 .linha-dados:last-child { border-bottom: 0; }
